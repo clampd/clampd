@@ -1,0 +1,265 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clampd-postgres
+    environment:
+      POSTGRES_USER: clampd
+      POSTGRES_PASSWORD: clampd_dev
+      POSTGRES_DB: clampd
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./dashboard/api/drizzle/0000_great_the_enforcers.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./demo/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clampd"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: clampd-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  nats:
+    image: nats:2-alpine
+    container_name: clampd-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--jetstream", "--store_dir", "/data", "-m", "8222"]
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: clampd-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ch_data:/var/lib/clickhouse
+      - ./demo/clickhouse-init.sql:/docker-entrypoint-initdb.d/01-shadow-logs.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  mock-tool:
+    build:
+      context: ./demo/mock-tool
+      dockerfile: Dockerfile
+    container_name: clampd-mock-tool
+    ports:
+      - "5555:5555"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5555/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  dashboard-api:
+    build:
+      context: ./dashboard/api
+      dockerfile: Dockerfile
+    container_name: clampd-dashboard-api
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+    volumes:
+      - ./dashboard/api/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: on-failure
+
+  dashboard-web:
+    build:
+      context: ./dashboard/web
+      dockerfile: Dockerfile
+    container_name: clampd-dashboard-web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    volumes:
+      - ./dashboard/web/src:/app/src
+      - ./dashboard/web/app:/app/app
+    depends_on:
+      - dashboard-api
+    restart: on-failure
+
+  # --- Rust Runtime Services ---
+
+  ag-registry:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-registry
+    container_name: clampd-ag-registry
+    ports:
+      - "50051:50051"
+    environment:
+      AG_REGISTRY_PORT: "50051"
+      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: "info,ag_registry=debug"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  ag-intent:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-intent
+    container_name: clampd-ag-intent
+    ports:
+      - "50052:50051"
+    environment:
+      AG_INTENT_PORT: "50051"
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      RUST_LOG: "info,ag_intent=debug"
+    depends_on:
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: on-failure
+
+  ag-policy:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-policy
+    container_name: clampd-ag-policy
+    ports:
+      - "50053:50051"
+    environment:
+      AG_POLICY_PORT: "50051"
+      OPA_URL: http://localhost:8181
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: "info,ag_policy=debug"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  ag-token:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-token
+    container_name: clampd-ag-token
+    ports:
+      - "50054:50051"
+    environment:
+      AG_TOKEN_PORT: "50051"
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
+      RUST_LOG: "info,ag_token=debug"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  ag-gateway:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-gateway
+    container_name: clampd-ag-gateway
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      AG_GATEWAY_PORT: "8080"
+      AG_GATEWAY_METRICS_PORT: "9090"
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      REGISTRY_URL: http://ag-registry:50051
+      INTENT_URL: http://ag-intent:50051
+      POLICY_URL: http://ag-policy:50051
+      TOKEN_URL: http://ag-token:50051
+      JWT_SECRET: dev-secret-change-me
+      RUST_LOG: "info,ag_gateway=debug"
+    depends_on:
+      ag-registry:
+        condition: service_started
+      ag-intent:
+        condition: service_started
+      ag-policy:
+        condition: service_started
+      ag-token:
+        condition: service_started
+      ag-shadow:
+        condition: service_started
+      mock-tool:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: on-failure
+
+  ag-shadow:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-shadow
+    container_name: clampd-ag-shadow
+    environment:
+      NATS_URL: nats://nats:4222
+      CLICKHOUSE_URL: http://clickhouse:8123
+      RUST_LOG: "info,ag_shadow=debug"
+    depends_on:
+      nats:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  pg_data:
+  redis_data:
+  nats_data:
+  ch_data:

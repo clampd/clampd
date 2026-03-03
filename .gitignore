@@ -1,0 +1,23 @@
+# Sub-repos (each has its own GitHub repo)
+clampd-site/
+dashboard/
+demo/
+deploy/
+documents/
+docs/
+proto/
+requirement_documents/
+sdk/
+services/
+
+# OS / editor
+.DS_Store
+*.log
+.env
+
+# Rust build artifacts
+target/
+
+# Node
+node_modules/
+.idea/
