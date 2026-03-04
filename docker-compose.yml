@@ -81,6 +81,7 @@ services:
       context: ./dashboard/api
       dockerfile: Dockerfile
     container_name: clampd-dashboard-api
+    profiles: ["dashboard", "full"]
     ports:
       - "3001:3001"
     environment:
@@ -106,6 +107,7 @@ services:
       context: ./dashboard/web
       dockerfile: Dockerfile.dev
     container_name: clampd-dashboard-web
+    profiles: ["dashboard", "full"]
     ports:
       - "3000:3000"
     environment:
@@ -113,6 +115,33 @@ services:
     depends_on:
       - dashboard-api
     restart: on-failure
+
+  # --- Clampd CLI (optional, for Docker-based usage) ---
+
+  clampd-cli:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.cli
+    container_name: clampd-cli
+    profiles: ["cli"]
+    environment:
+      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      CLICKHOUSE_URL: http://clickhouse:8123
+      REGISTRY_URL: http://ag-registry:50051
+      TOKEN_URL: http://ag-token:50051
+      KILL_URL: http://ag-kill:50055
+      RISK_URL: http://ag-risk:50056
+      CONTROL_URL: http://ag-control:50057
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: "no"
 
   # --- Rust Runtime Services ---
 
@@ -123,6 +152,13 @@ services:
       args:
         SERVICE_NAME: ag-registry
     container_name: clampd-ag-registry
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "50051:50051"
     environment:
@@ -147,6 +183,13 @@ services:
       args:
         SERVICE_NAME: ag-intent
     container_name: clampd-ag-intent
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "50052:50051"
     environment:
@@ -168,6 +211,13 @@ services:
       args:
         SERVICE_NAME: ag-policy
     container_name: clampd-ag-policy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "50053:50051"
     environment:
@@ -190,6 +240,13 @@ services:
       args:
         SERVICE_NAME: ag-token
     container_name: clampd-ag-token
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "50054:50051"
     environment:
@@ -197,10 +254,16 @@ services:
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       NATS_URL: nats://nats:4222
+      IDP_PROVIDER: "none"                    # Options: none, keycloak, okta, azure_ad
+      # IDP_CONFIG_SOURCE: "env"              # "env" or "database"
+      # --- Uncomment below to enable Keycloak ---
+      # IDP_PROVIDER: "keycloak"
+      # KEYCLOAK_URL: "http://keycloak:8080"
+      # KEYCLOAK_REALM: "clampd"
+      # KEYCLOAK_CLIENT_ID: "ag-token"
+      # KEYCLOAK_CLIENT_SECRET: "change-me"
       RUST_LOG: "info,ag_token=debug"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       nats:
@@ -214,6 +277,13 @@ services:
       args:
         SERVICE_NAME: ag-gateway
     container_name: clampd-ag-gateway
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -257,9 +327,21 @@ services:
       args:
         SERVICE_NAME: ag-shadow
     container_name: clampd-ag-shadow
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     environment:
       NATS_URL: nats://nats:4222
       CLICKHOUSE_URL: http://clickhouse:8123
+      PII_NER_ENABLED: "true"
+      PII_TOKENIZATION_ENABLED: "false"       # Set "true" + PII_ENCRYPTION_KEY to enable vault
+      # PII_ENCRYPTION_KEY: "<64-hex-chars>"  # Required when PII_TOKENIZATION_ENABLED=true
+      # PII_TOKEN_TTL_DAYS: "30"
+      # REDIS_URL: redis://redis:6379         # Required when PII_TOKENIZATION_ENABLED=true
       RUST_LOG: "info,ag_shadow=debug"
     depends_on:
       nats:
@@ -275,6 +357,13 @@ services:
       args:
         SERVICE_NAME: ag-kill
     container_name: clampd-ag-kill
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "50055:50055"
     environment:
@@ -305,6 +394,13 @@ services:
       args:
         SERVICE_NAME: ag-risk
     container_name: clampd-ag-risk
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "50056:50056"
       - "8081:8081"
@@ -331,26 +427,48 @@ services:
       args:
         SERVICE_NAME: ag-control
     container_name: clampd-ag-control
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
     ports:
       - "50057:50057"
     environment:
       AG_CONTROL_PORT: "50057"
+      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
       REGISTRY_URL: http://ag-registry:50051
       KILL_URL: http://ag-kill:50055
-      CLAMPD_SAAS_URL: http://dashboard-api:3001
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLAMPD_SAAS_URL: https://api.clampd.dev
       CLAMPD_LICENSE_TOKEN: dev-license-token
       CLAMPD_POLL_INTERVAL: "5"
       RUST_LOG: "info,ag_control=debug"
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       nats:
         condition: service_healthy
-      dashboard-api:
+      ag-registry:
         condition: service_started
     restart: on-failure
+
+  # --- Uncomment to add Keycloak service ---
+#   keycloak:
+#     image: quay.io/keycloak/keycloak:24.0
+#     container_name: clampd-keycloak
+#     command: start-dev
+#     environment:
+#       KEYCLOAK_ADMIN: admin
+#       KEYCLOAK_ADMIN_PASSWORD: admin
+#     ports:
+#       - "8180:8080"
 
 volumes:
   pg_data:

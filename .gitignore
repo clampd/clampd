@@ -18,6 +18,9 @@ services/
 # Rust build artifacts
 target/
 
+# CLI binary export
+dist/
+
 # Node
 node_modules/
 .idea/

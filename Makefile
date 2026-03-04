@@ -40,5 +40,17 @@ release: dev-image
 proto: dev-image
 	$(DOCKER_RUST) cargo build -p ag-proto
 
+cli:
+	docker build -f services/deploy/Dockerfile.cli -t clampd-cli .
+	@mkdir -p dist
+	@docker create --name clampd-extract clampd-cli 2>/dev/null || true
+	@docker cp clampd-extract:/usr/local/bin/clampd ./dist/clampd
+	@docker rm clampd-extract
+	@chmod +x ./dist/clampd
+	@echo "Binary exported to ./dist/clampd (Linux $$(uname -m))"
+
+cli-install: cli
+	sudo cp ./dist/clampd /usr/local/bin/clampd
+
 clean:
 	docker volume rm -f clampd-cargo-target
