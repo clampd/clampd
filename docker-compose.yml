@@ -89,6 +89,7 @@ services:
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
+      JWT_SECRET: dev-secret-change-me
     volumes:
       - ./dashboard/api/src:/app/src
     depends_on:
@@ -103,15 +104,12 @@ services:
   dashboard-web:
     build:
       context: ./dashboard/web
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: clampd-dashboard-web
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:3001
-    volumes:
-      - ./dashboard/web/src:/app/src
-      - ./dashboard/web/app:/app/app
     depends_on:
       - dashboard-api
     restart: on-failure
@@ -131,11 +129,14 @@ services:
       AG_REGISTRY_PORT: "50051"
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
       RUST_LOG: "info,ag_registry=debug"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     restart: on-failure
 
@@ -173,9 +174,12 @@ services:
       AG_POLICY_PORT: "50051"
       OPA_URL: http://localhost:8181
       REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
       RUST_LOG: "info,ag_policy=debug"
     depends_on:
       redis:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     restart: on-failure
 
@@ -192,11 +196,14 @@ services:
       AG_TOKEN_PORT: "50051"
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
+      NATS_URL: nats://nats:4222
       RUST_LOG: "info,ag_token=debug"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     restart: on-failure
 
@@ -219,6 +226,7 @@ services:
       INTENT_URL: http://ag-intent:50051
       POLICY_URL: http://ag-policy:50051
       TOKEN_URL: http://ag-token:50051
+      KILL_URL: http://ag-kill:50055
       JWT_SECRET: dev-secret-change-me
       RUST_LOG: "info,ag_gateway=debug"
     depends_on:
@@ -231,6 +239,8 @@ services:
       ag-token:
         condition: service_started
       ag-shadow:
+        condition: service_started
+      ag-kill:
         condition: service_started
       mock-tool:
         condition: service_healthy
@@ -256,6 +266,90 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+    restart: on-failure
+
+  ag-kill:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-kill
+    container_name: clampd-ag-kill
+    ports:
+      - "50055:50055"
+    environment:
+      AG_KILL_PORT: "50055"
+      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      TOKEN_URL: http://ag-token:50051
+      REGISTRY_URL: http://ag-registry:50051
+      RUST_LOG: "info,ag_kill=debug"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      ag-token:
+        condition: service_started
+      ag-registry:
+        condition: service_started
+    restart: on-failure
+
+  ag-risk:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-risk
+    container_name: clampd-ag-risk
+    ports:
+      - "50056:50056"
+      - "8081:8081"
+    environment:
+      AG_RISK_PORT: "50056"
+      AG_RISK_WS_PORT: "8081"
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      KILL_URL: http://ag-kill:50055
+      RUST_LOG: "info,ag_risk=debug"
+    depends_on:
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      ag-kill:
+        condition: service_started
+    restart: on-failure
+
+  ag-control:
+    build:
+      context: .
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-control
+    container_name: clampd-ag-control
+    ports:
+      - "50057:50057"
+    environment:
+      AG_CONTROL_PORT: "50057"
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      REGISTRY_URL: http://ag-registry:50051
+      KILL_URL: http://ag-kill:50055
+      CLAMPD_SAAS_URL: http://dashboard-api:3001
+      CLAMPD_LICENSE_TOKEN: dev-license-token
+      CLAMPD_POLL_INTERVAL: "5"
+      RUST_LOG: "info,ag_control=debug"
+    depends_on:
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      dashboard-api:
+        condition: service_started
     restart: on-failure
 
 volumes:
