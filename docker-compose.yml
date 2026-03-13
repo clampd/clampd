@@ -1,3 +1,7 @@
+x-license: &license
+  # Generate with: ./generate-license.sh design_partner <org-id>
+  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required — set it in .env}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,8 +14,8 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./dashboard/api/drizzle/0000_great_the_enforcers.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./demo/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ../demo/seed.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../demo/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U clampd"]
       interval: 5s
@@ -47,6 +51,13 @@ services:
       retries: 5
       start_period: 5s
 
+  opa:
+    image: openpolicyagent/opa:0.70.0-static
+    container_name: clampd-opa
+    command: ["run", "--server", "--addr", ":8181", "--log-level", "info"]
+    ports:
+      - "8181:8181"
+
   clickhouse:
     image: clickhouse/clickhouse-server:24-alpine
     container_name: clampd-clickhouse
@@ -55,7 +66,14 @@ services:
       - "9000:9000"
     volumes:
       - ch_data:/var/lib/clickhouse
-      - ./demo/clickhouse-init.sql:/docker-entrypoint-initdb.d/01-shadow-logs.sql:ro
+      - ../demo/clickhouse-init.sql:/docker-entrypoint-initdb.d/01-shadow-logs.sql:ro
+    environment:
+      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE: "805306368"
+      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE_FOR_USER: "402653184"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
       interval: 5s
@@ -65,7 +83,7 @@ services:
 
   mock-tool:
     build:
-      context: ./demo/mock-tool
+      context: ../demo/mock-tool
       dockerfile: Dockerfile
     container_name: clampd-mock-tool
     ports:
@@ -78,7 +96,7 @@ services:
 
   dashboard-api:
     build:
-      context: ./dashboard/api
+      context: ../dashboard/api
       dockerfile: Dockerfile
     container_name: clampd-dashboard-api
     profiles: ["dashboard", "full"]
@@ -90,9 +108,11 @@ services:
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
-      JWT_SECRET: dev-secret-change-me
+      JWT_SECRET: ${JWT_SECRET:-clampd-dev-secret-change-me-in-production-32ch}
+      CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY}
+      CLICKHOUSE_URL: http://clickhouse:8123
     volumes:
-      - ./dashboard/api/src:/app/src
+      - ../dashboard/api/src:/app/src
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,11 +120,13 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     restart: on-failure
 
   dashboard-web:
     build:
-      context: ./dashboard/web
+      context: ../dashboard/web
       dockerfile: Dockerfile.dev
     container_name: clampd-dashboard-web
     profiles: ["dashboard", "full"]
@@ -116,42 +138,14 @@ services:
       - dashboard-api
     restart: on-failure
 
-  # --- Clampd CLI (optional, for Docker-based usage) ---
-
-  clampd-cli:
-    build:
-      context: .
-      dockerfile: services/deploy/Dockerfile.cli
-    container_name: clampd-cli
-    profiles: ["cli"]
-    environment:
-      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
-      CLICKHOUSE_URL: http://clickhouse:8123
-      REGISTRY_URL: http://ag-registry:50051
-      TOKEN_URL: http://ag-token:50051
-      KILL_URL: http://ag-kill:50055
-      RISK_URL: http://ag-risk:50056
-      CONTROL_URL: http://ag-control:50057
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-    restart: "no"
-
   # --- Rust Runtime Services ---
 
   ag-registry:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-registry
-    container_name: clampd-ag-registry
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -159,9 +153,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
-    ports:
-      - "50051:50051"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 32M
     environment:
+      <<: *license
       AG_REGISTRY_PORT: "50051"
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       REDIS_URL: redis://redis:6379
@@ -178,11 +177,10 @@ services:
 
   ag-intent:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-intent
-    container_name: clampd-ag-intent
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -190,9 +188,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
-    ports:
-      - "50052:50051"
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "0.20"
+          memory: 64M
     environment:
+      <<: *license
       AG_INTENT_PORT: "50051"
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
@@ -206,11 +209,10 @@ services:
 
   ag-policy:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-policy
-    container_name: clampd-ag-policy
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -218,15 +220,22 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
-    ports:
-      - "50053:50051"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
     environment:
+      <<: *license
       AG_POLICY_PORT: "50051"
-      OPA_URL: http://localhost:8181
+      OPA_URL: http://opa:8181
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
       RUST_LOG: "info,ag_policy=debug"
     depends_on:
+      opa:
+        condition: service_started
       redis:
         condition: service_healthy
       nats:
@@ -235,11 +244,10 @@ services:
 
   ag-token:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-token
-    container_name: clampd-ag-token
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -247,9 +255,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
-    ports:
-      - "50054:50051"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 32M
     environment:
+      <<: *license
       AG_TOKEN_PORT: "50051"
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
@@ -272,11 +285,10 @@ services:
 
   ag-gateway:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-gateway
-    container_name: clampd-ag-gateway
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -287,7 +299,14 @@ services:
     ports:
       - "8080:8080"
       - "9090:9090"
+    deploy:
+      replicas: 1                          # K8s HPA: 3-50; local: 1 (host port)
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 32M
     environment:
+      <<: *license
       AG_GATEWAY_PORT: "8080"
       AG_GATEWAY_METRICS_PORT: "9090"
       REDIS_URL: redis://redis:6379
@@ -297,7 +316,7 @@ services:
       POLICY_URL: http://ag-policy:50051
       TOKEN_URL: http://ag-token:50051
       KILL_URL: http://ag-kill:50055
-      JWT_SECRET: dev-secret-change-me
+      JWT_SECRET: ${JWT_SECRET:-clampd-dev-secret-change-me-in-production-32ch}
       RUST_LOG: "info,ag_gateway=debug"
     depends_on:
       ag-registry:
@@ -322,11 +341,10 @@ services:
 
   ag-shadow:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-shadow
-    container_name: clampd-ag-shadow
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -334,7 +352,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
     environment:
+      <<: *license
       NATS_URL: nats://nats:4222
       CLICKHOUSE_URL: http://clickhouse:8123
       PII_NER_ENABLED: "true"
@@ -352,11 +377,10 @@ services:
 
   ag-kill:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-kill
-    container_name: clampd-ag-kill
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -364,9 +388,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
-    ports:
-      - "50055:50055"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.05"
+          memory: 16M
     environment:
+      <<: *license
       AG_KILL_PORT: "50055"
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       REDIS_URL: redis://redis:6379
@@ -389,11 +418,10 @@ services:
 
   ag-risk:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-risk
-    container_name: clampd-ag-risk
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -401,16 +429,22 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
-    ports:
-      - "50056:50056"
-      - "8081:8081"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
     environment:
+      <<: *license
       AG_RISK_PORT: "50056"
       AG_RISK_WS_PORT: "8081"
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
       KILL_URL: http://ag-kill:50055
+      REGISTRY_URL: http://ag-registry:50051
       RUST_LOG: "info,ag_risk=debug"
+      AG_RISK_LEADER_FOLLOWER: true
     depends_on:
       redis:
         condition: service_healthy
@@ -422,11 +456,12 @@ services:
 
   ag-control:
     build:
-      context: .
+      context: ..
       dockerfile: services/deploy/Dockerfile.service
       args:
         SERVICE_NAME: ag-control
-    container_name: clampd-ag-control
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -434,9 +469,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
-    ports:
-      - "50057:50057"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
     environment:
+      <<: *license
       AG_CONTROL_PORT: "50057"
       DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
       REDIS_URL: redis://redis:6379
@@ -444,8 +484,9 @@ services:
       REGISTRY_URL: http://ag-registry:50051
       KILL_URL: http://ag-kill:50055
       CLICKHOUSE_URL: http://clickhouse:8123
-      CLAMPD_SAAS_URL: https://api.clampd.dev
-      CLAMPD_LICENSE_TOKEN: dev-license-token
+      CLAMPD_SAAS_URL: ${CLAMPD_SAAS_URL:-http://host.docker.internal:3001}
+      CLAMPD_LICENSE_TOKEN: ${CLAMPD_LICENSE_TOKEN:-dev-license-token}
+      CLAMPD_STANDALONE: ${CLAMPD_STANDALONE:-false}
       CLAMPD_POLL_INTERVAL: "5"
       RUST_LOG: "info,ag_control=debug"
     depends_on:

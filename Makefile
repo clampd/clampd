@@ -1,56 +1,45 @@
-.PHONY: dev-image build test check fmt clippy release proto clean
+.PHONY: build test check fmt clippy release proto clean check-license
 
-DOCKER_RUST = docker run --rm \
-  -v $(PWD):/app \
-  -v clampd-cargo-registry:/usr/local/cargo/registry \
-  -v clampd-cargo-target:/app/services/target \
-  -w /app/services \
-  clampd-rust-dev
+SERVICES_DIR = $(PWD)/../services
 
-dev-image:
-	docker build -t clampd-rust-dev -f Dockerfile.dev .
+build:
+	cd $(SERVICES_DIR) && cargo build --workspace
 
-build: dev-image
-	$(DOCKER_RUST) cargo build --workspace
+build-%:
+	cd $(SERVICES_DIR) && cargo build -p $*
 
-build-%: dev-image
-	$(DOCKER_RUST) cargo build -p $*
+test:
+	cd $(SERVICES_DIR) && cargo test --workspace
 
-test: dev-image
-	$(DOCKER_RUST) cargo test --workspace
+test-%:
+	cd $(SERVICES_DIR) && cargo test -p $*
 
-test-%: dev-image
-	$(DOCKER_RUST) cargo test -p $*
+check:
+	cd $(SERVICES_DIR) && cargo check --workspace
 
-check: dev-image
-	$(DOCKER_RUST) cargo check --workspace
+fmt:
+	cd $(SERVICES_DIR) && cargo fmt --all -- --check
 
-fmt: dev-image
-	$(DOCKER_RUST) cargo fmt --all -- --check
+fmt-fix:
+	cd $(SERVICES_DIR) && cargo fmt --all
 
-fmt-fix: dev-image
-	$(DOCKER_RUST) cargo fmt --all
+clippy:
+	cd $(SERVICES_DIR) && cargo clippy --workspace -- -D warnings
 
-clippy: dev-image
-	$(DOCKER_RUST) cargo clippy --workspace -- -D warnings
+release:
+	cd $(SERVICES_DIR) && cargo build --release --workspace
 
-release: dev-image
-	$(DOCKER_RUST) cargo build --release --workspace
-
-proto: dev-image
-	$(DOCKER_RUST) cargo build -p ag-proto
-
-cli:
-	docker build -f services/deploy/Dockerfile.cli -t clampd-cli .
-	@mkdir -p dist
-	@docker create --name clampd-extract clampd-cli 2>/dev/null || true
-	@docker cp clampd-extract:/usr/local/bin/clampd ./dist/clampd
-	@docker rm clampd-extract
-	@chmod +x ./dist/clampd
-	@echo "Binary exported to ./dist/clampd (Linux $$(uname -m))"
-
-cli-install: cli
-	sudo cp ./dist/clampd /usr/local/bin/clampd
+proto:
+	cd $(SERVICES_DIR) && cargo build -p ag-proto
 
 clean:
-	docker volume rm -f clampd-cargo-target
+	cd $(SERVICES_DIR) && cargo clean
+
+check-license:
+	@if [ -z "$$CLAMPD_LICENSE_KEY" ] && ! grep -q '^CLAMPD_LICENSE_KEY=.' .env 2>/dev/null; then \
+		echo "ERROR: CLAMPD_LICENSE_KEY is not set."; \
+		echo "  Generate with: ./generate-license.sh design_partner <org-id>"; \
+		echo "  Then add to .env: CLAMPD_LICENSE_KEY=<your-key>"; \
+		exit 1; \
+	fi
+	@echo "License key is set."

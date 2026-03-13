@@ -24,3 +24,8 @@ dist/
 # Node
 node_modules/
 .idea/
+# License keys — NEVER commit private keys
+.license-keys/
+.licenses/
+*.pem
+!*_pub.pem
