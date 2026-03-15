@@ -1,0 +1,209 @@
+# Production deployment — pulls pre-built images from GHCR
+# Usage: docker compose -f docker-compose.deploy.yml up -d
+#
+# Prerequisites:
+# 1. Copy .env.example to .env and fill in ALL secrets
+# 2. Login to GHCR: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+# 3. Set external service URLs in .env:
+#    - DATABASE_URL (Neon.tech)
+#    - REDIS_URL (Upstash)
+#    - CLICKHOUSE_URL (ClickHouse Cloud)
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-rust-service: &rust-service
+  <<: *common
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  # ── NATS (must self-host — no free managed tier) ──────────────
+  nats:
+    <<: *common
+    image: nats:2-alpine
+    command: >
+      --jetstream
+      --store_dir /data
+      --auth ${NATS_TOKEN:?NATS_TOKEN is required}
+      -m 8222
+    ports:
+      - "127.0.0.1:4222:4222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8222/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ── OPA (lightweight sidecar) ─────────────────────────────────
+  opa:
+    <<: *common
+    image: openpolicyagent/opa:0.70.0-static
+    command: run --server --addr 0.0.0.0:8181
+    ports:
+      - "127.0.0.1:8181:8181"
+
+  # ── Rust Services ─────────────────────────────────────────────
+  ag-gateway:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-gateway:latest
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY:?Required}
+      - JWT_SECRET=${JWT_SECRET:?Required}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET:?Required}
+      - REDIS_URL=${REDIS_URL:?Required}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - REGISTRY_URL=http://ag-registry:50051
+      - INTENT_URL=http://ag-intent:50052
+      - POLICY_URL=http://ag-policy:50053
+      - TOKEN_URL=http://ag-token:50054
+      - RUST_LOG=info
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  ag-registry:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-registry:latest
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
+      - DATABASE_URL=${DATABASE_URL:?Required}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - RUST_LOG=info
+
+  ag-intent:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-intent:latest
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - RUST_LOG=info
+
+  ag-policy:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-policy:latest
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - OPA_URL=http://opa:8181
+      - RUST_LOG=info
+    depends_on:
+      - opa
+
+  ag-token:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-token:latest
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - RUST_LOG=info
+
+  ag-risk:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-risk:latest
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - KILL_URL=http://ag-kill:50056
+      - REGISTRY_URL=http://ag-registry:50051
+      - RUST_LOG=info
+
+  ag-kill:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-kill:latest
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - TOKEN_URL=http://ag-token:50054
+      - REGISTRY_URL=http://ag-registry:50051
+      - RUST_LOG=info
+
+  ag-control:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-control:latest
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - OPA_URL=http://opa:8181
+      - SAAS_URL=${DASHBOARD_API_URL:-http://dashboard-api:3001}
+      - RUST_LOG=info
+
+  ag-shadow:
+    <<: *rust-service
+    image: ghcr.io/clampd/clampd/ag-shadow:latest
+    environment:
+      - CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://localhost:8123}
+      - RUST_LOG=info
+
+  # ── Dashboard API ─────────────────────────────────────────────
+  dashboard-api:
+    <<: *common
+    image: ghcr.io/clampd/clampd/dashboard-api:latest
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      - DATABASE_URL=${DASHBOARD_DATABASE_URL:?Required}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://${NATS_TOKEN}@nats:4222
+      - JWT_SECRET=${JWT_SECRET}
+      - PORT=3001
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://localhost:8123}
+
+  # ── Dashboard Web ──────────────────────────────────────────────
+  dashboard-web:
+    <<: *common
+    image: ghcr.io/clampd/clampd/dashboard-web:latest
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=https://api.clampd.dev
+
+  # ── Caddy (reverse proxy + auto SSL) ─────────────────────────
+  caddy:
+    <<: *common
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  nats_data:
+  caddy_data:
+  caddy_config:

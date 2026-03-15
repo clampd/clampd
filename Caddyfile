@@ -1,0 +1,13 @@
+# Caddy reverse proxy — auto SSL via Let's Encrypt
+
+gateway.clampd.dev {
+    reverse_proxy ag-gateway:8080
+}
+
+api.clampd.dev {
+    reverse_proxy dashboard-api:3001
+}
+
+app.clampd.dev {
+    reverse_proxy dashboard-web:3000
+}

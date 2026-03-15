@@ -8,7 +8,7 @@ services:
     container_name: clampd-postgres
     environment:
       POSTGRES_USER: clampd
-      POSTGRES_PASSWORD: clampd_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set it in .env}
       POSTGRES_DB: clampd
     ports:
       - "5432:5432"
@@ -25,12 +25,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: clampd-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required — set it in .env}
     ports:
       - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -41,7 +42,9 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
-    command: ["--jetstream", "--store_dir", "/data", "-m", "8222"]
+    command: >
+      --auth ${NATS_TOKEN:?NATS_TOKEN is required — set it in .env}
+      --jetstream --store_dir /data -m 8222
     volumes:
       - nats_data:/data
     healthcheck:
@@ -54,7 +57,9 @@ services:
   opa:
     image: openpolicyagent/opa:0.70.0-static
     container_name: clampd-opa
-    command: ["run", "--server", "--addr", ":8181", "--log-level", "info"]
+    command: ["run", "--server", "--addr", ":8181", "--log-level", "info", "/policies"]
+    volumes:
+      - ../policies:/policies:ro
     ports:
       - "8181:8181"
 
@@ -105,10 +110,10 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3001
-      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
-      JWT_SECRET: ${JWT_SECRET:-clampd-dev-secret-change-me-in-production-32ch}
+      DATABASE_URL: postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
       CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY}
       CLICKHOUSE_URL: http://clickhouse:8123
     volumes:
@@ -162,9 +167,9 @@ services:
     environment:
       <<: *license
       AG_REGISTRY_PORT: "50051"
-      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
+      DATABASE_URL: postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_registry=debug"
     depends_on:
       postgres:
@@ -197,8 +202,8 @@ services:
     environment:
       <<: *license
       AG_INTENT_PORT: "50051"
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_intent=debug"
     depends_on:
       redis:
@@ -230,8 +235,8 @@ services:
       <<: *license
       AG_POLICY_PORT: "50051"
       OPA_URL: http://opa:8181
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_policy=debug"
     depends_on:
       opa:
@@ -264,9 +269,9 @@ services:
     environment:
       <<: *license
       AG_TOKEN_PORT: "50051"
-      REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
-      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      DATABASE_URL: postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       IDP_PROVIDER: "none"                    # Options: none, keycloak, okta, azure_ad
       # IDP_CONFIG_SOURCE: "env"              # "env" or "database"
       # --- Uncomment below to enable Keycloak ---
@@ -309,14 +314,14 @@ services:
       <<: *license
       AG_GATEWAY_PORT: "8080"
       AG_GATEWAY_METRICS_PORT: "9090"
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       REGISTRY_URL: http://ag-registry:50051
       INTENT_URL: http://ag-intent:50051
       POLICY_URL: http://ag-policy:50051
       TOKEN_URL: http://ag-token:50051
       KILL_URL: http://ag-kill:50055
-      JWT_SECRET: ${JWT_SECRET:-clampd-dev-secret-change-me-in-production-32ch}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
       RUST_LOG: "info,ag_gateway=debug"
     depends_on:
       ag-registry:
@@ -360,13 +365,13 @@ services:
           memory: 48M
     environment:
       <<: *license
-      NATS_URL: nats://nats:4222
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       CLICKHOUSE_URL: http://clickhouse:8123
       PII_NER_ENABLED: "true"
       PII_TOKENIZATION_ENABLED: "false"       # Set "true" + PII_ENCRYPTION_KEY to enable vault
       # PII_ENCRYPTION_KEY: "<64-hex-chars>"  # Required when PII_TOKENIZATION_ENABLED=true
       # PII_TOKEN_TTL_DAYS: "30"
-      # REDIS_URL: redis://redis:6379         # Required when PII_TOKENIZATION_ENABLED=true
+      # REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379         # Required when PII_TOKENIZATION_ENABLED=true
       RUST_LOG: "info,ag_shadow=debug"
     depends_on:
       nats:
@@ -397,9 +402,9 @@ services:
     environment:
       <<: *license
       AG_KILL_PORT: "50055"
-      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
+      DATABASE_URL: postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       TOKEN_URL: http://ag-token:50051
       REGISTRY_URL: http://ag-registry:50051
       RUST_LOG: "info,ag_kill=debug"
@@ -439,8 +444,8 @@ services:
       <<: *license
       AG_RISK_PORT: "50056"
       AG_RISK_WS_PORT: "8081"
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       KILL_URL: http://ag-kill:50055
       REGISTRY_URL: http://ag-registry:50051
       RUST_LOG: "info,ag_risk=debug"
@@ -478,9 +483,9 @@ services:
     environment:
       <<: *license
       AG_CONTROL_PORT: "50057"
-      DATABASE_URL: postgres://clampd:clampd_dev@postgres:5432/clampd
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
+      DATABASE_URL: postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
       REGISTRY_URL: http://ag-registry:50051
       KILL_URL: http://ag-kill:50055
       CLICKHOUSE_URL: http://clickhouse:8123
