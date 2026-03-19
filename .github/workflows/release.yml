@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
 
 jobs:
   build-cli:
@@ -16,18 +16,22 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-musl
             arch: amd64
-          - target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-musl
             arch: arm64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build CLI via Docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build CLI via Dockerfile.service
         run: |
           docker buildx build \
             --platform linux/${{ matrix.arch }} \
-            -f services/deploy/Dockerfile.cli \
+            -f services/deploy/Dockerfile.service \
+            --build-arg SERVICE_NAME=clampd-cli \
             -t clampd-cli:${{ matrix.arch }} \
             --load .
 
@@ -35,7 +39,7 @@ jobs:
         run: |
           mkdir -p dist
           docker create --name extract clampd-cli:${{ matrix.arch }}
-          docker cp extract:/usr/local/bin/clampd ./dist/clampd-linux-${{ matrix.arch }}
+          docker cp extract:/app ./dist/clampd-linux-${{ matrix.arch }}
           docker rm extract
           chmod +x ./dist/clampd-linux-${{ matrix.arch }}
 
@@ -82,22 +86,30 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            -f services/deploy/Dockerfile.cli \
+            -f services/deploy/Dockerfile.service \
+            --build-arg SERVICE_NAME=clampd-cli \
             -t ${{ env.IMAGE_PREFIX }}/clampd-cli:${TAG} \
             -t ${{ env.IMAGE_PREFIX }}/clampd-cli:latest \
             --push .
 
   release:
     name: Create GitHub Release
-    needs: [build-cli]
+    needs: [build-cli, docker-images]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      - name: Copy deployment files to dist
+        run: |
+          cp docker-compose.deploy.yml dist/docker-compose.yml
+          cp .env.example dist/.env.example
 
       - name: Create release
         uses: softprops/action-gh-release@v2

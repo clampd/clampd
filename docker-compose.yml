@@ -1,3 +1,5 @@
+# Dev only — for local development. Production uses docker-compose.proxy.yml + docker-compose.control.yml
+
 x-license: &license
   # Generate with: ./generate-license.sh design_partner <org-id>
   CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required — set it in .env}
@@ -99,6 +101,20 @@ services:
       timeout: 3s
       retries: 3
 
+  dashboard-migrate:
+    build:
+      context: ../dashboard/api
+      dockerfile: Dockerfile
+    container_name: clampd-dashboard-migrate
+    profiles: ["dashboard", "full"]
+    command: ["node", "dist/db/migrate.js"]
+    environment:
+      DATABASE_URL: postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   dashboard-api:
     build:
       context: ../dashboard/api
@@ -119,8 +135,8 @@ services:
     volumes:
       - ../dashboard/api/src:/app/src
     depends_on:
-      postgres:
-        condition: service_healthy
+      dashboard-migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       nats:
@@ -322,6 +338,7 @@ services:
       TOKEN_URL: http://ag-token:50051
       KILL_URL: http://ag-kill:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
       RUST_LOG: "info,ag_gateway=debug"
     depends_on:
       ag-registry:
@@ -490,8 +507,8 @@ services:
       KILL_URL: http://ag-kill:50055
       CLICKHOUSE_URL: http://clickhouse:8123
       CLAMPD_SAAS_URL: ${CLAMPD_SAAS_URL:-http://host.docker.internal:3001}
-      CLAMPD_LICENSE_TOKEN: ${CLAMPD_LICENSE_TOKEN:-dev-license-token}
-      CLAMPD_STANDALONE: ${CLAMPD_STANDALONE:-false}
+      CLAMPD_LICENSE_TOKEN: ${CLAMPD_LICENSE_TOKEN:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
       CLAMPD_POLL_INTERVAL: "5"
       RUST_LOG: "info,ag_control=debug"
     depends_on:
@@ -516,8 +533,77 @@ services:
 #     ports:
 #       - "8180:8080"
 
+  # --- Red Team Testing (optional profile) ---
+  ag-redteam:
+    build:
+      context: ..
+      dockerfile: services/deploy/Dockerfile.service
+      args:
+        SERVICE_NAME: ag-redteam
+    container_name: clampd-ag-redteam
+    profiles: ["redteam"]
+    ports:
+      - "3002:3002"
+    environment:
+      AG_REDTEAM_PORT: "3002"
+      INTENT_URL: http://ag-intent:50051
+      AG_INTERNAL_SECRET: ${AG_INTERNAL_SECRET:-}
+      RUST_LOG: "info,ag_redteam=debug"
+    depends_on:
+      ag-intent:
+        condition: service_started
+    restart: on-failure
+
+  # --- Observability (optional profile) ---
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
+    container_name: clampd-jaeger
+    profiles: ["observability"]
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: clampd-prometheus
+    profiles: ["observability"]
+    volumes:
+      - ../services/deploy/grafana/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    depends_on:
+      ag-gateway:
+        condition: service_started
+    restart: on-failure
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: clampd-grafana
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: clampd
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/clampd-dashboard.json
+    volumes:
+      - ../services/deploy/grafana/clampd-dashboard.json:/var/lib/grafana/dashboards/clampd-dashboard.json:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+    restart: on-failure
+
 volumes:
   pg_data:
   redis_data:
   nats_data:
   ch_data:
+  prometheus_data:
+  grafana_data:

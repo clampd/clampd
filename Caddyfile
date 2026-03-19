@@ -11,3 +11,7 @@ api.clampd.dev {
 app.clampd.dev {
     reverse_proxy dashboard-web:3000
 }
+
+# NOTE: Use container names (ag-gateway, dashboard-api, dashboard-web)
+# NOT localhost — Caddy runs in its own container and can't reach
+# other containers via localhost. Docker DNS resolves container names.
