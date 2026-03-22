@@ -1,8 +1,8 @@
 # Clampd — Runtime Security for AI Agents
 
-Clampd is a security proxy that sits between AI agents and their tools. Every tool call passes through a 9-stage pipeline — authenticate, identify, extract, session, classify, evaluate, token exchange, forward, audit — in under 15ms.
+Clampd is a security proxy that sits between AI agents and their tools. Every tool call passes through a 9-stage pipeline — authenticate, identify, extract, session, classify, evaluate, token exchange, forward, audit — in under 6ms.
 
-Built in Rust. 9 microservices. 36 built-in detection rules. Works with OpenAI, Anthropic, LangChain, Google ADK, MCP, and any custom framework.
+Built in Rust. Works with OpenAI, Anthropic, LangChain, Google ADK, MCP, and any custom framework.
 
 ## Why
 
@@ -96,13 +96,13 @@ Supporting: PostgreSQL · Redis · NATS JetStream · ClickHouse
 |---------|------|----------|---------|
 | ag-gateway | 8080 | HTTP/REST | API gateway, 9-stage pipeline |
 | ag-registry | 50051 | gRPC | Agent registration, credentials, Redis cache |
-| ag-intent | 50052 | gRPC | Intent classification, 36 rules, encoding detection |
+| ag-intent | 50051 | gRPC | Intent classification, rule engine |
 | ag-policy | 50053 | gRPC | Policy evaluation, OPA sidecar integration |
 | ag-token | 50054 | gRPC | Micro-token minting (Ed25519), IDP integration |
 | ag-kill | 50055 | gRPC | Emergency kill switch, 8-layer cascade |
 | ag-risk | 50056 | gRPC+WS | EMA risk scoring, anomaly detection, WebSocket feed |
 | ag-shadow | 50057 | NATS consumer | Event logging to ClickHouse, PII tokenization |
-| ag-control | 50058 | gRPC | License management, feature gating |
+| ag-control | 50057 | gRPC | Control plane, sync |
 
 ### Supporting Services
 
