@@ -201,7 +201,7 @@ const guarded = clampd.guard(myFn, {
 | API key | `api_key="..."` | `apiKey: "..."` | `clmpd_demo_key` |
 | Fail open | `fail_open=True` | `failOpen: true` | `False` |
 | Response check | `check_response=True` | `checkResponse: true` | `False` |
-| JWT secret | `secret="..."` | via env `CLAMPD_JWT_SECRET` | None (unsigned) |
+| JWT secret | `secret="..."` | via env `JWT_SECRET` | — |
 
 ### Environment Variables
 
@@ -210,7 +210,7 @@ const guarded = clampd.guard(myFn, {
 | `CLAMPD_AGENT_ID` | Default agent ID | — |
 | `CLAMPD_GATEWAY_URL` | Gateway URL | `http://localhost:8080` |
 | `CLAMPD_API_KEY` | API key | `clmpd_demo_key` |
-| `CLAMPD_JWT_SECRET` | HMAC-SHA256 secret for JWT signing | None (unsigned) |
+| `JWT_SECRET` | HMAC-SHA256 secret for JWT signing | — |
 
 ---
 
@@ -410,7 +410,6 @@ clampd license show                      # License tier & limits
 ### Production Checklist
 
 - [ ] Set `JWT_SECRET` to a strong random value (32+ chars)
-- [ ] Set `CLAMPD_JWT_SECRET` in SDK for signed JWTs (HS256)
 - [ ] Change default PostgreSQL password
 - [ ] Enable TLS on all service ports
 - [ ] Restrict Redis access (bind, requirepass)

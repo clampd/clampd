@@ -12,6 +12,36 @@ app.clampd.dev {
     reverse_proxy dashboard-web:3000
 }
 
+# Red Team demo
+redteam.clampd.dev {
+    reverse_proxy ag-redteam:3002
+}
+
+# MCP Proxy — single agent (default)
+mcp.clampd.dev {
+    reverse_proxy mcp-proxy:3003
+}
+
+# MCP Fleet — each agent gets its own subdomain
+# Claude.ai connectors: https://analyst.clampd.dev/sse, devops.clampd.dev/sse, dbadmin.clampd.dev/sse
+analyst.clampd.dev {
+    reverse_proxy mcp-analyst:3006
+}
+
+devops.clampd.dev {
+    reverse_proxy mcp-devops:3007
+}
+
+dbadmin.clampd.dev {
+    reverse_proxy mcp-dbadmin:3008
+}
+
+# Fleet unified dashboard — proxies to analyst dashboard for now
+# TODO: add dedicated mcp-fleet container for aggregated view
+fleet.clampd.dev {
+    reverse_proxy mcp-analyst:3006
+}
+
 # NOTE: Use container names (ag-gateway, dashboard-api, dashboard-web)
 # NOT localhost — Caddy runs in its own container and can't reach
 # other containers via localhost. Docker DNS resolves container names.
