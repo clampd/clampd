@@ -1,0 +1,495 @@
+# Clampd Proxy Runtime — Customer Infrastructure
+#
+# Runs the full 9-service security pipeline + infrastructure.
+# NO Dashboard services — the control plane runs separately (docker-compose.control.yml).
+#
+# Usage:
+#   cp .env.example .env   # fill in secrets
+#   docker compose -f docker-compose.proxy.yml up -d
+#
+# ag-control connects to the SaaS control plane via CLAMPD_SAAS_URL.
+# Leave CLAMPD_SAAS_URL empty for standalone mode (no cloud connection).
+
+x-license: &license
+  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required — set it in .env}
+  AG_INTERNAL_SECRET: ${AG_INTERNAL_SECRET:-}
+
+x-rust-defaults: &rust-defaults
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:noexec,nosuid,size=64m
+  restart: on-failure
+
+services:
+  # ── Infrastructure ─────────────────────────────────────────────
+
+  # Local Postgres/Redis — skip when using Neon/Upstash (set DATABASE_URL + REDIS_URL in .env)
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["local-infra"]
+    environment:
+      POSTGRES_USER: clampd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clampd}
+      POSTGRES_DB: clampd
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clampd"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["local-infra"]
+    command: redis-server --requirepass ${REDIS_PASSWORD:-clampd}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  nats:
+    image: nats:2-alpine
+    command: >
+      --auth ${NATS_TOKEN:?NATS_TOKEN is required — set it in .env}
+      --jetstream --store_dir /data -m 8222
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  opa:
+    image: openpolicyagent/opa:0.70.0-static
+    command: ["run", "--server", "--addr", ":8181", "--log-level", "info"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8181/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  clickhouse:
+    profiles: ["local-infra"]
+    image: clickhouse/clickhouse-server:24-alpine
+    volumes:
+      - ch_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE: "805306368"
+      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE_FOR_USER: "402653184"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # ── Runtime Security Layer ─────────────────────────────────────
+
+  ag-registry:
+    image: ghcr.io/clampd/clampd/ag-registry:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 32M
+    environment:
+      <<: *license
+      AG_REGISTRY_PORT: "50051"
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      RUST_LOG: "info,ag_registry=debug"
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  ag-intent:
+    image: ghcr.io/clampd/clampd/ag-intent:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "0.20"
+          memory: 64M
+    environment:
+      <<: *license
+      AG_INTENT_PORT: "50051"
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      RUST_LOG: "info,ag_intent=debug"
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  ag-policy:
+    image: ghcr.io/clampd/clampd/ag-policy:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
+    environment:
+      <<: *license
+      AG_POLICY_PORT: "50051"
+      OPA_URL: http://opa:8181
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      RUST_LOG: "info,ag_policy=debug"
+    depends_on:
+      opa:
+        condition: service_started
+      nats:
+        condition: service_healthy
+
+  ag-token:
+    image: ghcr.io/clampd/clampd/ag-token:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 32M
+    environment:
+      <<: *license
+      AG_TOKEN_PORT: "50051"
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      IDP_PROVIDER: "none"
+      RUST_LOG: "info,ag_token=debug"
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  ag-gateway:
+    image: ghcr.io/clampd/clampd/ag-gateway:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 32M
+    environment:
+      <<: *license
+      AG_GATEWAY_PORT: "8080"
+      AG_GATEWAY_METRICS_PORT: "9090"
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      REGISTRY_URL: http://ag-registry:50051
+      INTENT_URL: http://ag-intent:50051
+      POLICY_URL: http://ag-policy:50051
+      TOKEN_URL: http://ag-token:50051
+      KILL_URL: http://ag-kill:50055
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      RUST_LOG: "info,ag_gateway=debug"
+    depends_on:
+      ag-registry:
+        condition: service_started
+      ag-intent:
+        condition: service_started
+      ag-policy:
+        condition: service_started
+      ag-token:
+        condition: service_started
+      ag-shadow:
+        condition: service_started
+      ag-kill:
+        condition: service_started
+      nats:
+        condition: service_healthy
+
+  ag-shadow:
+    image: ghcr.io/clampd/clampd/ag-shadow:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
+    environment:
+      <<: *license
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://clickhouse:8123}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      PII_NER_ENABLED: "true"
+      PII_TOKENIZATION_ENABLED: "false"
+      RUST_LOG: "info,ag_shadow=debug"
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  ag-kill:
+    image: ghcr.io/clampd/clampd/ag-kill:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.05"
+          memory: 16M
+    environment:
+      <<: *license
+      AG_KILL_PORT: "50055"
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      TOKEN_URL: http://ag-token:50051
+      REGISTRY_URL: http://ag-registry:50051
+      RUST_LOG: "info,ag_kill=debug"
+    depends_on:
+      nats:
+        condition: service_healthy
+      ag-token:
+        condition: service_started
+      ag-registry:
+        condition: service_started
+
+  ag-risk:
+    image: ghcr.io/clampd/clampd/ag-risk:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
+    environment:
+      <<: *license
+      AG_RISK_PORT: "50056"
+      AG_RISK_WS_PORT: "8081"
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      KILL_URL: http://ag-kill:50055
+      REGISTRY_URL: http://ag-registry:50051
+      RUST_LOG: "info,ag_risk=debug"
+      AG_RISK_LEADER_FOLLOWER: true
+    depends_on:
+      nats:
+        condition: service_healthy
+      ag-kill:
+        condition: service_started
+
+  ag-control:
+    image: ghcr.io/clampd/clampd/ag-control:${CLAMPD_VERSION:-latest}
+    <<: *rust-defaults
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 48M
+    environment:
+      <<: *license
+      AG_CONTROL_PORT: "50057"
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      REGISTRY_URL: http://ag-registry:50051
+      KILL_URL: http://ag-kill:50055
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://clickhouse:8123}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLAMPD_SAAS_URL: ${CLAMPD_SAAS_URL:-}
+      CLAMPD_LICENSE_TOKEN: ${CLAMPD_LICENSE_TOKEN:-}
+      CLAMPD_SHARED_DB: ${CLAMPD_SHARED_DB:-true}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      CLAMPD_POLL_INTERVAL: "5"
+      RUST_LOG: "info,ag_control=debug"
+    depends_on:
+      nats:
+        condition: service_healthy
+      ag-registry:
+        condition: service_started
+
+  # ── Red Team Testing (internal only — not shipped to customers) ──
+  ag-redteam:
+    image: ghcr.io/clampd/clampd/ag-redteam:${CLAMPD_VERSION:-latest}
+    profiles: ["redteam"]
+    <<: *rust-defaults
+    ports:
+      - "3002:3002"
+    environment:
+      <<: *license
+      AG_REDTEAM_PORT: "3002"
+      INTENT_URL: http://ag-intent:50051
+      POLICY_URL: http://ag-policy:50051
+      KILL_URL: http://ag-kill:50055
+      TOKEN_URL: http://ag-token:50051
+      GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_demo_2026}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      AG_INTERNAL_SECRET: ${AG_INTERNAL_SECRET:-}
+      RUST_LOG: "info,ag_redteam=debug"
+    depends_on:
+      ag-intent:
+        condition: service_started
+      ag-policy:
+        condition: service_started
+      ag-kill:
+        condition: service_started
+      ag-token:
+        condition: service_started
+
+  # ── MCP Proxy (wraps any MCP server with Clampd security) ─────
+  mcp-proxy:
+    build:
+      context: sdk/typescript/mcp-proxy
+      dockerfile: Dockerfile
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-latest}
+    profiles: ["mcp"]
+    ports:
+      - "3003:3003"
+    environment:
+      UPSTREAM_MCP: ${UPSTREAM_MCP:-npx -y @modelcontextprotocol/server-filesystem /tmp}
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_demo_2026}
+      AG_AGENT_ID: ${AG_AGENT_ID:-b0000001-0000-0000-0000-000000000001}
+      CLAMPD_AGENT_SECRET: ${CLAMPD_AGENT_SECRET:?CLAMPD_AGENT_SECRET is required - the ags_ secret for this agent}
+      CLAMPD_SCAN_INPUT: ${CLAMPD_SCAN_INPUT:-true}
+      CLAMPD_SCAN_OUTPUT: ${CLAMPD_SCAN_OUTPUT:-true}
+      CLAMPD_CHECK_RESPONSE: ${CLAMPD_CHECK_RESPONSE:-false}
+      CLAMPD_DEMO_PANEL: "true"
+      PORT: "3003"
+    networks:
+      - default
+      - clampd-shared
+    depends_on:
+      ag-gateway:
+        condition: service_started
+    restart: on-failure
+
+  # ── MCP Fleet (multi-agent demo) ──────────────────────────────
+  mcp-analyst:
+    build:
+      context: sdk/typescript/mcp-proxy
+      dockerfile: Dockerfile
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-latest}
+    profiles: ["fleet"]
+    ports:
+      - "3006:3006"
+    environment:
+      UPSTREAM_MCP: "npx -y @modelcontextprotocol/server-filesystem /data"
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_demo_2026}
+      AG_AGENT_ID: ${FLEET_ANALYST_AGENT_ID:-ff04dba7-5571-4f02-8275-3d29f29c49be}
+      CLAMPD_AGENT_SECRET: ${FLEET_ANALYST_SECRET:?FLEET_ANALYST_SECRET is required for fleet mode}
+      CLAMPD_SCAN_INPUT: "true"
+      CLAMPD_SCAN_OUTPUT: "true"
+      CLAMPD_DEMO_PANEL: "true"
+      PORT: "3006"
+    volumes:
+      - /tmp/clampd-demo-data:/data:ro
+    networks:
+      - default
+      - clampd-shared
+    depends_on:
+      ag-gateway:
+        condition: service_started
+    restart: on-failure
+
+  mcp-devops:
+    build:
+      context: sdk/typescript/mcp-proxy
+      dockerfile: Dockerfile
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-latest}
+    profiles: ["fleet"]
+    ports:
+      - "3007:3007"
+    environment:
+      UPSTREAM_MCP: "npx -y @modelcontextprotocol/server-filesystem /tmp"
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_demo_2026}
+      AG_AGENT_ID: ${FLEET_DEVOPS_AGENT_ID:-3f78873e-a0d3-452e-95ea-73a03988427c}
+      CLAMPD_AGENT_SECRET: ${FLEET_DEVOPS_SECRET:?FLEET_DEVOPS_SECRET is required for fleet mode}
+      CLAMPD_SCAN_INPUT: "true"
+      CLAMPD_SCAN_OUTPUT: "true"
+      CLAMPD_DEMO_PANEL: "true"
+      PORT: "3007"
+    networks:
+      - default
+      - clampd-shared
+    depends_on:
+      ag-gateway:
+        condition: service_started
+    restart: on-failure
+
+  mcp-dbadmin:
+    build:
+      context: sdk/typescript/mcp-proxy
+      dockerfile: Dockerfile
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-latest}
+    profiles: ["fleet"]
+    ports:
+      - "3008:3008"
+    environment:
+      UPSTREAM_MCP: "npx -y @modelcontextprotocol/server-filesystem /var/db"
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_demo_2026}
+      AG_AGENT_ID: ${FLEET_DBADMIN_AGENT_ID:-b0000001-0000-0000-0000-000000000001}
+      CLAMPD_AGENT_SECRET: ${FLEET_DBADMIN_SECRET:-${CLAMPD_AGENT_SECRET:?CLAMPD_AGENT_SECRET is required}}
+      CLAMPD_SCAN_INPUT: "true"
+      CLAMPD_SCAN_OUTPUT: "true"
+      CLAMPD_DEMO_PANEL: "true"
+      PORT: "3008"
+    volumes:
+      - /tmp/clampd-demo-db:/var/db:ro
+    networks:
+      - default
+      - clampd-shared
+    depends_on:
+      ag-gateway:
+        condition: service_started
+    restart: on-failure
+
+  # ── Reverse Proxy ─────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - default
+      - clampd-shared
+    restart: on-failure
+
+networks:
+  clampd-shared:
+    name: clampd-shared
+
+volumes:
+  pg_data:
+  redis_data:
+  nats_data:
+  ch_data:
+  caddy_data:
+  caddy_config:

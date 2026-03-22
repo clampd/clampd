@@ -10,8 +10,56 @@ env:
   IMAGE_PREFIX: ghcr.io/${{ github.repository }}
 
 jobs:
+  build-services:
+    name: Build and push service images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout services repo
+        uses: actions/checkout@v4
+        with:
+          repository: clampd/services
+          path: services
+          token: ${{ secrets.SERVICES_PAT }}
+
+      - name: Checkout proto repo
+        uses: actions/checkout@v4
+        with:
+          repository: clampd/proto
+          path: proto
+          token: ${{ secrets.SERVICES_PAT }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push all service images
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          SERVICES="ag-gateway ag-registry ag-intent ag-policy ag-token ag-shadow ag-kill ag-risk ag-control ag-redteam"
+          for svc in $SERVICES; do
+            echo "Building $svc..."
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f services/deploy/Dockerfile.service \
+              --build-arg SERVICE_NAME=$svc \
+              -t ${{ env.IMAGE_PREFIX }}/$svc:${TAG} \
+              -t ${{ env.IMAGE_PREFIX }}/$svc:latest \
+              --push .
+          done
+
   build-cli:
-    name: Build CLI binary
+    name: Build CLI binaries
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -22,6 +70,20 @@ jobs:
             arch: arm64
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout services repo
+        uses: actions/checkout@v4
+        with:
+          repository: clampd/services
+          path: services
+          token: ${{ secrets.SERVICES_PAT }}
+
+      - name: Checkout proto repo
+        uses: actions/checkout@v4
+        with:
+          repository: clampd/proto
+          path: proto
+          token: ${{ secrets.SERVICES_PAT }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -48,14 +110,29 @@ jobs:
           name: clampd-linux-${{ matrix.arch }}
           path: dist/clampd-linux-${{ matrix.arch }}
 
-  docker-images:
-    name: Push Docker images
+  build-cli-image:
+    name: Push CLI Docker image
+    needs: [build-services]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout services repo
+        uses: actions/checkout@v4
+        with:
+          repository: clampd/services
+          path: services
+          token: ${{ secrets.SERVICES_PAT }}
+
+      - name: Checkout proto repo
+        uses: actions/checkout@v4
+        with:
+          repository: clampd/proto
+          path: proto
+          token: ${{ secrets.SERVICES_PAT }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -66,20 +143,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Build and push service images
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          SERVICES="ag-gateway ag-registry ag-intent ag-policy ag-token ag-shadow ag-kill ag-risk ag-control"
-          for svc in $SERVICES; do
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f services/deploy/Dockerfile.service \
-              --build-arg SERVICE_NAME=$svc \
-              -t ${{ env.IMAGE_PREFIX }}/$svc:${TAG} \
-              -t ${{ env.IMAGE_PREFIX }}/$svc:latest \
-              --push .
-          done
 
       - name: Build and push CLI image
         run: |
@@ -94,7 +157,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build-cli, docker-images]
+    needs: [build-cli, build-services, build-cli-image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -110,9 +173,37 @@ jobs:
         run: |
           cp docker-compose.deploy.yml dist/docker-compose.yml
           cp .env.example dist/.env.example
+          cp install.sh dist/install.sh
+          cp generate-tls.sh dist/generate-tls.sh
+          cp generate-license.sh dist/generate-license.sh
+          cp Caddyfile dist/Caddyfile
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
+          body: |
+            ## Clampd ${{ github.ref_name }}
+
+            ### Quick Start
+            ```bash
+            # Install CLI
+            curl -fsSL https://clampd.dev/install | sh
+
+            # Or use Docker
+            docker run --rm ghcr.io/clampd/clampd/clampd-cli:${{ github.ref_name }} --help
+            ```
+
+            ### Deploy
+            ```bash
+            # Download compose file
+            curl -LO https://github.com/clampd/clampd/releases/download/${{ github.ref_name }}/docker-compose.yml
+            curl -LO https://github.com/clampd/clampd/releases/download/${{ github.ref_name }}/.env.example
+            cp .env.example .env
+            # Fill in CLAMPD_LICENSE_KEY, JWT_SECRET, passwords
+            docker compose up -d
+            ```
+
+            ### Docker Images
+            All images available at `ghcr.io/clampd/clampd/<service>:${{ github.ref_name }}`
