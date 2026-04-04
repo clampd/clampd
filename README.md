@@ -179,12 +179,12 @@ docker run -e UPSTREAM_MCP="npx -y @modelcontextprotocol/server-filesystem /tmp"
 
 Clampd maps detection rules to regulatory frameworks:
 
-- **HIPAA** - PHI detection (18 Safe Harbor identifiers), audit trail
-- **PCI-DSS** - Credit card detection (Luhn-validated), secrets scanning
-- **GDPR** - PII masking in audit logs, data classification
-- **SOC 2** - Session monitoring, anomaly detection, kill switch
-- **EU AI Act** - Explainable decisions, risk scoring transparency
-- **NIST AI RMF** - Multi-layer defense, continuous monitoring
+- **HIPAA** - PHI detection (18 Safe Harbor identifiers), audit trail via ClickHouse
+- **PCI-DSS** - Credit card detection (Luhn-validated), secrets scanning (6 pattern types)
+- **GDPR** - PII masking in audit logs (regex + NER), 4-level data classification
+- **SOC 2** - Session monitoring with fingerprinting, 7-type anomaly detection, 8-layer kill switch
+- **EU AI Act** - Anomaly reasoning descriptions, risk scoring (component-level transparency in progress)
+- **NIST AI RMF** - 5-layer policy engine + 9-stage pipeline, real-time monitoring via WebSocket + NATS
 
 ## License
 
