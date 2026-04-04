@@ -1,0 +1,45 @@
+[package]
+name = "ag-policy"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ag_policy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ag-policy"
+path = "src/main.rs"
+
+[dependencies]
+ag-common = { path = "../ag-common" }
+ag-license = { path = "../ag-license" }
+ag-proto = { path = "../ag-proto" }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+bb8 = { workspace = true }
+bb8-redis = { workspace = true }
+redis = { workspace = true }
+dashmap = { workspace = true }
+async-nats = { workspace = true }
+futures-util = { workspace = true }
+regex = { workspace = true }
+cedar-policy = "4"
+arc-swap = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "evaluate"
+harness = false

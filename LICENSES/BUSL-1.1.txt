@@ -1,0 +1,24 @@
+Business Source License 1.1
+
+License text available at: https://spdx.org/licenses/BUSL-1.1.html
+
+Parameters:
+
+Licensor:             Clampd Inc.
+Licensed Work:        Clampd Engine, Gateway, Policy, Risk, and CLI
+                      (services/crates/ag-gateway, ag-engine, ag-policy,
+                       ag-risk, ag-shadow, ag-control, ag-intent, clampd-cli)
+Additional Use Grant: You may use the Licensed Work in production, provided
+                      that you do not offer the Licensed Work as a managed
+                      security-guardrail service to third parties.
+Change Date:          2029-04-04 (3 years from initial release)
+Change License:       Apache License, Version 2.0
+
+For the full BSL 1.1 template, see:
+https://mariadb.com/bsl11/
+
+Summary:
+- You CAN read, audit, fork, and self-host for your own use.
+- You CAN build products that use Clampd as a dependency.
+- You CANNOT offer a competing managed guardrail service using this code.
+- After the Change Date, this code becomes Apache 2.0 automatically.

@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package agentguard.policy;
+
+import "agentguard/common.proto";
+
+service PolicyService {
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+}
+
+enum PolicyAction {
+  ALLOW = 0;
+  DOWNSCOPE = 1;
+  DENY = 2;
+  DEFER = 3;  // defer to intent risk threshold (no explicit exemption)
+}
+
+message EvaluateRequest {
+  string agent_id = 1;
+  string tool_name = 2;
+  repeated string requested_scopes = 3;
+  repeated string agent_allowed_scopes = 4;
+  double agent_risk_score = 5;
+  string intent_classification = 6;
+  repeated string labels = 7;
+  repeated string session_flags = 8;
+  agentguard.common.BoundaryConfig agent_boundaries = 9;
+  string target_url = 10;
+  uint32 calls_in_last_minute = 11;
+  string agent_timezone = 12;
+  string agent_state = 13;
+  repeated string matched_rules = 14;  // rule IDs from intent (e.g. ["R001", "R020"])
+  string params_json = 15;             // raw tool call params for scope constraint matching
+  bool has_non_exemptable_block = 16;  // true if any matched Block rule is not exemptable
+  optional string caller_agent_id = 17;
+  repeated string delegation_chain = 18;
+  optional string delegation_trace_id = 19;
+  optional string delegation_confidence = 20; // "verified", "inferred", "declared"
+  string org_id = 21;                        // agent's org (for multi-org enforcement lookup)
+}
+
+message EvaluateResponse {
+  PolicyAction action = 1;
+  repeated string required_scopes = 2;
+  repeated string denied_scopes = 3;
+  string reason = 4;
+  repeated string matched_policies = 5;
+  optional string boundary_violation = 6;
+  // Per-call scope token TTL in seconds (from scope exemption config)
+  uint32 token_ttl_seconds = 8;
+}

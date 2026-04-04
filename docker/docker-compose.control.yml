@@ -1,0 +1,111 @@
+# Clampd Control Plane - Our Cloud
+#
+# Runs the Dashboard (API + Web + Migrations) with its own PostgreSQL and Redis.
+# NO ag-* runtime services, NO ClickHouse, NO OPA.
+# NATS is optional - set NATS_URL to connect to the proxy cluster's NATS for
+# real-time risk events. The dashboard degrades gracefully if NATS is unavailable.
+#
+# Usage (with local infra):
+#   docker compose -f docker-compose.control.yml --profile local-infra up -d
+#
+# Usage (with managed databases - Neon + Upstash):
+#   Set DATABASE_URL and REDIS_URL in .env, then:
+#   docker compose -f docker-compose.control.yml up -d
+
+services:
+  # ── Infrastructure ─────────────────────────────────────────────
+  # These only start with --profile local-infra.
+  # For managed databases (Neon, Upstash), set DATABASE_URL / REDIS_URL in .env.
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    profiles: ["local-infra"]
+    environment:
+      POSTGRES_USER: clampd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clampd_dev}
+      POSTGRES_DB: clampd
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clampd"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles: ["local-infra"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Migrations (runs once, then exits) ─────────────────────────
+
+  dashboard-migrate:
+    image: ghcr.io/clampd/clampd/dashboard-api:${CLAMPD_VERSION:-v0.8.0}
+    command: ["node", "dist/db/migrate.js"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd_dev}@postgres:5432/clampd}
+    restart: "no"
+
+  # ── Application ────────────────────────────────────────────────
+
+  dashboard-api:
+    image: ghcr.io/clampd/clampd/dashboard-api:${CLAMPD_VERSION:-v0.8.0}
+    restart: on-failure
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd_dev}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NATS_URL: ${NATS_URL:-nats://${NATS_TOKEN}@clampd-nats-1:4222}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
+      CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3000}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Clampd <noreply@clampd.dev>}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    networks:
+      - default
+      - clampd-shared
+    depends_on:
+      dashboard-migrate:
+        condition: service_completed_successfully
+
+  dashboard-web:
+    image: ghcr.io/clampd/clampd/dashboard-web:${CLAMPD_VERSION:-v0.8.0}
+    restart: on-failure
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.clampd.dev}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    networks:
+      - default
+      - clampd-shared
+    depends_on:
+      - dashboard-api
+
+networks:
+  clampd-shared:
+    external: true
+    name: clampd-shared
+
+volumes:
+  pg_data:
+  redis_data:

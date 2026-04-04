@@ -1,0 +1,131 @@
+# Clampd Demo & Development Services
+#
+# Optional services for demos, testing, and development.
+# Use alongside docker-compose.proxy.yml:
+#
+#   docker compose -f docker-compose.proxy.yml -f docker-compose.demo.yml up -d
+#
+# Or selectively with profiles:
+#   docker compose -f docker-compose.proxy.yml -f docker-compose.demo.yml --profile mcp up -d
+#   docker compose -f docker-compose.proxy.yml -f docker-compose.demo.yml --profile fleet up -d
+#   docker compose -f docker-compose.proxy.yml -f docker-compose.demo.yml --profile redteam up -d
+
+services:
+  # ── Red Team Testing ──────────────────────────────────────────
+  # Automated adversarial testing against your Clampd deployment.
+  # Runs attack simulations to verify detection coverage.
+  ag-redteam:
+    image: ghcr.io/clampd/clampd/ag-redteam:${CLAMPD_VERSION:-v0.8.0}
+    profiles: ["redteam"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
+    ports:
+      - "3002:3002"
+    environment:
+      AG_REDTEAM_PORT: "3002"
+      CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required}
+      INTENT_URL: http://ag-intent:50051
+      POLICY_URL: http://ag-policy:50051
+      KILL_URL: http://ag-kill:50055
+      TOKEN_URL: http://ag-token:50051
+      GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_2026}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      AG_INTERNAL_SECRET: ${AG_INTERNAL_SECRET:-}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      NATS_URL: nats://${NATS_TOKEN}@nats:4222
+      REGISTRY_URL: http://ag-registry:50051
+      RUST_LOG: "info,ag_redteam=debug"
+    restart: on-failure
+
+  # ── MCP Proxy (wraps any MCP server with Clampd security) ─────
+  mcp-proxy:
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    profiles: ["mcp"]
+    ports:
+      - "3003:3003"
+    environment:
+      UPSTREAM_MCP: ${UPSTREAM_MCP:-npx -y @modelcontextprotocol/server-filesystem /tmp}
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_2026}
+      AG_AGENT_ID: ${AG_AGENT_ID:-b0000001-0004-0000-0000-000000000001}
+      CLAMPD_AGENT_SECRET: ${CLAMPD_AGENT_SECRET:-}
+      CLAMPD_SCAN_INPUT: ${CLAMPD_SCAN_INPUT:-true}
+      CLAMPD_SCAN_OUTPUT: ${CLAMPD_SCAN_OUTPUT:-true}
+      CLAMPD_CHECK_RESPONSE: ${CLAMPD_CHECK_RESPONSE:-false}
+      PORT: "3003"
+    networks:
+      - default
+      - clampd-shared
+    restart: on-failure
+
+  # ── MCP Fleet (multi-agent demo) ──────────────────────────────
+  mcp-analyst:
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    profiles: ["fleet"]
+    ports:
+      - "3006:3006"
+    environment:
+      UPSTREAM_MCP: "npx -y @modelcontextprotocol/server-filesystem /data"
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_2026}
+      AG_AGENT_ID: ${FLEET_ANALYST_AGENT_ID:-b0000001-0002-0000-0000-000000000001}
+      CLAMPD_AGENT_SECRET: ${FLEET_ANALYST_SECRET:-}
+      CLAMPD_SCAN_INPUT: "true"
+      CLAMPD_SCAN_OUTPUT: "true"
+      PORT: "3006"
+    volumes:
+      - /tmp/clampd-demo-data:/data:ro
+    networks:
+      - default
+      - clampd-shared
+    restart: on-failure
+
+  mcp-devops:
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    profiles: ["fleet"]
+    ports:
+      - "3007:3007"
+    environment:
+      UPSTREAM_MCP: "npx -y @modelcontextprotocol/server-filesystem /tmp"
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_2026}
+      AG_AGENT_ID: ${FLEET_DEVOPS_AGENT_ID:-b0000001-0003-0000-0000-000000000001}
+      CLAMPD_AGENT_SECRET: ${FLEET_DEVOPS_SECRET:-}
+      CLAMPD_SCAN_INPUT: "true"
+      CLAMPD_SCAN_OUTPUT: "true"
+      PORT: "3007"
+    networks:
+      - default
+      - clampd-shared
+    restart: on-failure
+
+  mcp-dbadmin:
+    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    profiles: ["fleet"]
+    ports:
+      - "3008:3008"
+    environment:
+      UPSTREAM_MCP: "npx -y @modelcontextprotocol/server-filesystem /var/db"
+      AG_GATEWAY_URL: http://ag-gateway:8080
+      AG_API_KEY: ${AG_API_KEY:-ag_test_acme_2026}
+      AG_AGENT_ID: ${FLEET_DBADMIN_AGENT_ID:-b0000001-0004-0000-0000-000000000001}
+      CLAMPD_AGENT_SECRET: ${FLEET_DBADMIN_SECRET:-}
+      CLAMPD_SCAN_INPUT: "true"
+      CLAMPD_SCAN_OUTPUT: "true"
+      PORT: "3008"
+    volumes:
+      - /tmp/clampd-demo-db:/var/db:ro
+    networks:
+      - default
+      - clampd-shared
+    restart: on-failure
+
+networks:
+  clampd-shared:
+    name: clampd-shared

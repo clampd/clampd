@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package agentguard.registry;
+
+import "agentguard/common.proto";
+
+service RegistryService {
+  rpc GetAgent(GetAgentRequest) returns (GetAgentResponse);
+  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
+  rpc UpdateAgentState(UpdateAgentStateRequest) returns (UpdateAgentStateResponse);
+  rpc UpdateRiskScore(UpdateRiskScoreRequest) returns (UpdateRiskScoreResponse);
+  rpc TouchAgent(TouchAgentRequest) returns (TouchAgentResponse);
+  rpc RecordDelegation(RecordDelegationRequest) returns (RecordDelegationResponse);
+  rpc GetAgentRelationships(GetAgentRelationshipsRequest) returns (GetAgentRelationshipsResponse);
+  rpc GetRelationshipGraph(GetRelationshipGraphRequest) returns (GetRelationshipGraphResponse);
+  rpc GetChildAgents(GetChildAgentsRequest) returns (GetChildAgentsResponse);
+}
+
+message GetAgentRequest {
+  string agent_id = 1;
+}
+
+message GetAgentResponse {
+  agentguard.common.AgentProfile agent = 1;
+}
+
+message UpdateAgentStateRequest {
+  string agent_id = 1;
+  string new_state = 2;
+  string reason = 3;
+  string reason_code = 4;
+}
+
+message UpdateAgentStateResponse {
+  agentguard.common.AgentProfile agent = 1;
+}
+
+message UpdateRiskScoreRequest {
+  string agent_id = 1;
+  double risk_score = 2;
+}
+
+message UpdateRiskScoreResponse {
+  agentguard.common.AgentProfile agent = 1;
+}
+
+message TouchAgentRequest {
+  string agent_id = 1;
+}
+
+message TouchAgentResponse {}
+
+message RegisterAgentRequest {
+  string org_id = 1;
+  string name = 2;
+  string declared_purpose = 3;
+  repeated string allowed_tools = 4;
+  repeated string allowed_scopes = 5;
+  string credential_hash = 6;
+  string enforcement_mode = 7;
+  string framework = 8;
+  string auth_mode = 9;
+}
+
+message RegisterAgentResponse {
+  agentguard.common.AgentProfile agent = 1;
+}
+
+// ── A2A Delegation Relationships ──
+
+message AgentRelationship {
+  string id = 1;
+  string parent_agent_id = 2;
+  string child_agent_id = 3;
+  string relationship_type = 4;
+  string confidence = 5;          // verified | inferred | declared
+  repeated string allowed_tools = 6;
+  int32 max_delegation_depth = 7;
+  string first_observed_at = 8;
+  string last_observed_at = 9;
+  int32 observation_count = 10;
+  string status = 11;             // observed | approved | blocked
+  string tool_descriptor_hash = 12;
+}
+
+message RecordDelegationRequest {
+  string parent_agent_id = 1;
+  string child_agent_id = 2;
+  string confidence = 3;
+  repeated string tools_observed = 4;
+}
+
+message RecordDelegationResponse {
+  AgentRelationship relationship = 1;
+}
+
+message GetAgentRelationshipsRequest {
+  string agent_id = 1;
+}
+
+message GetAgentRelationshipsResponse {
+  repeated AgentRelationship relationships = 1;
+}
+
+message GetRelationshipGraphRequest {
+  int32 limit = 1;  // max relationships to return (default 100)
+  string org_id = 2; // required: org_id for tenant isolation
+}
+
+message GetRelationshipGraphResponse {
+  repeated AgentRelationship relationships = 1;
+}
+
+message GetChildAgentsRequest {
+  string parent_agent_id = 1;
+}
+
+message GetChildAgentsResponse {
+  repeated string child_agent_ids = 1;
+}

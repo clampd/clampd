@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package agentguard.intent;
+
+service IntentService {
+  rpc ClassifyIntent(ClassifyRequest) returns (ClassifyResponse);
+}
+
+enum Action {
+  PASS = 0;
+  FLAG = 1;
+  BLOCK = 2;
+}
+
+message ClassifyRequest {
+  string tool_name = 1;
+  string action = 2;
+  string params_json = 3;
+  string params_normalized_json = 4;
+  repeated string encodings_detected = 5;
+  string agent_purpose = 6;
+  string agent_id = 7;
+  double agent_risk_score = 8;
+  repeated string session_flags = 9;
+  double session_risk_factor = 10;
+  int32 session_total_calls = 11;
+  int32 session_context_window = 12;
+  string session_context_json = 13;
+  // field 14 removed (was agent_scopes — scope exemptions moved to policy layer)
+  optional string caller_agent_id = 15;
+  repeated string delegation_chain = 16;
+  optional string delegation_trace_id = 17;
+  optional string delegation_confidence = 18; // "verified", "inferred", "declared"
+  string tool_descriptor_hash = 19; // SHA-256 hex from SDK (64 chars), empty if not provided
+}
+
+message ClassifyResponse {
+  double intent_risk = 1;
+  double encoding_bonus = 2;
+  double session_factor = 3;
+  double assessed_risk = 4;
+  string classification = 5;
+  repeated string labels = 6;
+  string reasoning = 7;
+  repeated string matched_rules = 8;
+  repeated string session_flags = 9;
+  Action action = 10;
+  uint64 latency_us = 11;
+  bool has_non_exemptable_block = 12;  // true if any matched Block rule is not exemptable
+  bool schema_injection_detected = 13;   // true if R068/R069/R070 matched
+  string schema_injection_type = 14;     // "xml_injection", "json_injection", "tool_steering", "constraint_weakening", or ""
+  string category = 15;                  // tool category name from ag-common::categories (e.g. "Shell / Process Execution")
+  string defense_tier = 16;              // "rules", "policy", or "hybrid" — which enforcement layer handles this tool
+}

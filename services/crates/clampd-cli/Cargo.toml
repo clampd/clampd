@@ -1,0 +1,50 @@
+[package]
+name = "clampd-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "clampd"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace deps
+tokio = { workspace = true }
+tonic = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sqlx = { workspace = true }
+futures = { workspace = true }
+tokio-tungstenite = { version = "0.24", optional = true }
+reqwest = { workspace = true }
+base64 = { workspace = true }
+regex = { workspace = true }
+sha2 = { workspace = true }
+hmac = "0.12"
+hex = { workspace = true }
+
+# Workspace crates
+ag-proto = { path = "../ag-proto" }
+ag-common = { path = "../ag-common", features = ["db", "telemetry"] }
+ag-license = { path = "../ag-license" }
+
+# CLI-specific
+clap = { version = "4", features = ["derive", "env"] }
+tabled = "0.17"
+toml = "0.8"
+dirs = "6"
+clickhouse = { version = "0.13", features = ["inserter"] }
+ratatui = { version = "0.30", optional = true }
+crossterm = { version = "0.28", optional = true }
+csv = "1"
+
+[features]
+default = []
+tui = ["ratatui", "crossterm", "tokio-tungstenite"]

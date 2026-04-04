@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package agentguard.kill;
+
+service KillService {
+  // Single agent emergency revocation — 8-layer cascade.
+  rpc KillAgent(KillRequest) returns (KillResponse);
+  // Org-wide emergency — kill all agents in an org (bounded concurrency).
+  rpc KillAll(KillAllRequest) returns (KillAllResponse);
+  // Query kill state for an agent.
+  rpc GetKillStatus(GetKillStatusRequest) returns (GetKillStatusResponse);
+  // Audit query with pagination.
+  rpc GetKillHistory(GetKillHistoryRequest) returns (GetKillHistoryResponse);
+}
+
+message KillRequest {
+  string agent_id = 1;
+  string reason = 2;
+  string initiated_by = 3;
+  // If true, set agent state to Killed (permanent). Otherwise, Suspended.
+  bool revoke_permanently = 4;
+  // If true, also terminate all sessions for this agent.
+  bool kill_sessions = 5;
+  // If true (default), walk the delegation tree and kill all descendants.
+  bool cascade_descendants = 6;
+}
+
+message KillResponse {
+  bool success = 1;
+  repeated LayerResult layer_results = 2;
+  uint32 total_latency_ms = 3;
+  // Number of descendant agents killed via tree-walk cascade.
+  uint32 descendants_killed = 4;
+  // Layer results for each descendant kill cascade.
+  repeated LayerResult descendant_results = 5;
+}
+
+message LayerResult {
+  string layer_name = 1;
+  uint32 layer_number = 2;
+  bool success = 3;
+  string error = 4;
+  uint32 latency_ms = 5;
+}
+
+message KillAllRequest {
+  string org_id = 1;
+  string reason = 2;
+  string initiated_by = 3;
+}
+
+message KillAllResponse {
+  uint32 agents_killed = 1;
+  uint32 agents_failed = 2;
+  uint32 total_latency_ms = 3;
+}
+
+message GetKillStatusRequest {
+  string agent_id = 1;
+}
+
+message GetKillStatusResponse {
+  bool is_killed = 1;
+  bool is_on_deny_list = 2;
+  string agent_state = 3;
+  string killed_at = 4;
+  string kill_reason = 5;
+}
+
+message GetKillHistoryRequest {
+  // Optional agent_id filter. Empty = all history.
+  string agent_id = 1;
+  uint32 limit = 2;
+  uint32 offset = 3;
+}
+
+message GetKillHistoryResponse {
+  repeated KillAuditEntry entries = 1;
+  uint32 total_count = 2;
+}
+
+message KillAuditEntry {
+  string id = 1;
+  string agent_id = 2;
+  string reason = 3;
+  string initiated_by = 4;
+  bool success = 5;
+  uint32 layers_succeeded = 6;
+  uint32 layers_failed = 7;
+  uint32 total_latency_ms = 8;
+  string created_at = 9;
+}

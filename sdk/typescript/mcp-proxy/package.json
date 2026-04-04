@@ -1,0 +1,44 @@
+{
+  "name": "@clampd/mcp-proxy",
+  "version": "0.2.0",
+  "description": "Standalone MCP proxy that wraps any MCP server with Clampd's 9-stage security pipeline",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "clampd-mcp-proxy": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "BUSL-1.1",
+  "homepage": "https://clampd.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clampd/clampd"
+  },
+  "author": "Clampd <mehul.soni89@gmail.com>",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "agents",
+    "security",
+    "proxy",
+    "clampd"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}

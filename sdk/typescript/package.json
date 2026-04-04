@@ -1,0 +1,70 @@
+{
+  "name": "@clampd/sdk",
+  "version": "0.8.0",
+  "description": "Runtime security SDK for AI agents — guard tool calls in 1 line",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./langchain": {
+      "types": "./dist/langchain.d.ts",
+      "import": "./dist/langchain.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://clampd.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clampd/clampd"
+  },
+  "author": "Clampd <mehul.soni89@gmail.com>",
+  "keywords": [
+    "ai",
+    "agents",
+    "security",
+    "proxy",
+    "openai",
+    "anthropic",
+    "langchain",
+    "function-calling"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^1.1.35",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@langchain/core": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/core": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "openai": "^6.33.0"
+  }
+}

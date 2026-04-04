@@ -1,0 +1,45 @@
+[package]
+name = "ag-shadow"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ag_shadow"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ag-shadow"
+path = "src/main.rs"
+
+[dependencies]
+ag-common = { path = "../ag-common" }
+ag-license = { path = "../ag-license" }
+ag-proto = { path = "../ag-proto" }
+tokio = { workspace = true }
+async-nats = { workspace = true }
+clickhouse = { version = "0.12", features = ["uuid", "native-tls"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+futures = "0.3"
+# PII tokenization vault dependencies
+bb8 = { workspace = true }
+bb8-redis = { workspace = true }
+redis = { workspace = true }
+aes-gcm = "0.10"
+rand = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "pipeline"
+harness = false

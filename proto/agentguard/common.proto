@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package agentguard.common;
+
+message AgentProfile {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  string owner_user_id = 4;
+  string idp_realm = 5;
+  string declared_purpose = 6;
+  repeated string allowed_tools = 7;
+  repeated string allowed_scopes = 8;
+  string state = 9;
+  double risk_score = 10;
+  string credential_hash = 11;
+  string enforcement_mode = 12;
+  string created_at = 13;
+  string last_active_at = 14;
+  BoundaryConfig boundaries = 15;
+}
+
+message BoundaryConfig {
+  uint32 max_records_per_query = 1;
+  uint32 max_calls_per_minute = 2;
+  double max_data_volume_mb_per_hour = 3;
+  repeated string blocked_external_domains = 4;
+  uint32 allowed_hours_start = 5;
+  uint32 allowed_hours_end = 6;
+  string allowed_hours_timezone = 7;
+  uint32 allowed_days = 8;
+  double auto_suspend_threshold = 9;
+  repeated string allowed_external_domains = 10;
+  uint32 max_calls_per_session = 11;
+  // AP2 Payment guardrails
+  uint64 max_payment_per_tx_cents = 12;
+  uint64 max_payment_per_hour_cents = 13;
+  repeated string approved_vendors = 14;
+}
+
+message ShadowEvent {
+  string request_id = 1;
+  string trace_id = 2;
+  string org_id = 3;
+  string agent_id = 4;
+  string agent_name = 5;
+  string user_id = 6;
+  string tool_name = 7;
+  string tool_action = 8;
+  string params_hash = 9;
+  string prompt_hash = 10;
+  repeated string encodings_detected = 11;
+  double encoding_risk_bonus = 12;
+  double assessed_risk = 13;
+  double session_risk_factor = 14;
+  string intent_classification = 15;
+  repeated string intent_labels = 16;
+  repeated string matched_rules = 17;
+  string policy_action = 18;
+  string policy_reason = 19;
+  string boundary_violation = 20;
+  string scope_requested = 21;
+  string scope_granted = 22;
+  bool blocked = 23;
+  string denial_reason = 24;
+  string session_id = 25;
+  repeated string session_flags = 26;
+  ResponseMetadata response_metadata = 27;
+  repeated string degraded_stages = 28;
+  uint32 latency_ms = 29;
+  string timestamp = 30;
+}
+
+message ResponseMetadata {
+  uint32 status_code = 1;
+  uint64 body_size_bytes = 2;
+  uint32 records_count = 3;
+  bool contains_pii_patterns = 4;
+  bool truncated = 5;
+}
