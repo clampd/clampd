@@ -134,6 +134,7 @@ echo "[7/8] Supporting services (shells)"
 copy_dir "$SVC/ag-common" "$PUB_SVC/ag-common"
 
 $DRY_RUN || rm -f "$PUB_SVC/ag-common/src/license_guard.rs" "$PUB_SVC/ag-common/src/license.rs"
+$DRY_RUN || rm -f "$PUB_SVC/ag-common/keys/license_priv.pem"
 
 # ag-proto
 if ! $DRY_RUN; then
@@ -229,6 +230,14 @@ done
 [[ -f "$PUB_SVC/ag-common/src/license_guard.rs" ]] && echo "  WARN: license_guard.rs leaked!" && LEAKED=true
 [[ -f "$PUB_SVC/ag-common/src/license.rs" ]] && echo "  WARN: license.rs leaked!" && LEAKED=true
 [[ -f "$PUB_SVC/clampd-cli/src/commands/demo.rs" ]] && echo "  WARN: demo.rs leaked!" && LEAKED=true
+
+# RSA private key - CRITICAL
+PRIV_KEYS=$(find "$PUBLIC_ROOT" -name "*priv*" -o -name "private*.pem" 2>/dev/null || true)
+if [[ -n "$PRIV_KEYS" ]]; then
+    echo "  CRITICAL: RSA private key found in public repo!"
+    echo "  $PRIV_KEYS"
+    LEAKED=true
+fi
 
 # .env files (except .env.example)
 ENV_FILES=$(find "$PUBLIC_ROOT" -name '.env' -not -name '.env.example' 2>/dev/null || true)
