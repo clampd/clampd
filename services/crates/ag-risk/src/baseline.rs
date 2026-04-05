@@ -1,4 +1,4 @@
-//! Behavioral baseline accumulator — tracks agent behavior for anomaly detection.
+//! Behavioral baseline accumulator - tracks agent behavior for anomaly detection.
 //!
 //! Accumulates scope usage, active hours, per-tool record counts, and tool pairs
 //! from shadow events. Produces enriched `Baselines` that feed into anomaly detection.
@@ -142,7 +142,7 @@ impl BaselineAccumulator {
                     known_tool_pairs: d.tool_pairs.iter().cloned().collect(),
                 };
 
-                // P1-7: Baseline reasonableness caps — prevent poisoned baselines.
+                // P1-7: Baseline reasonableness caps - prevent poisoned baselines.
                 // An attacker who controls an agent for 7+ days could normalize
                 // malicious behavior. Cap baseline values to reasonable maximums.
                 const MAX_KNOWN_SCOPES: usize = 20;
@@ -153,7 +153,7 @@ impl BaselineAccumulator {
                     warn!(
                         agent_id = %agent_id,
                         scopes = baselines.known_scopes.len(),
-                        "Baseline scope count exceeds cap — possible baseline poisoning"
+                        "Baseline scope count exceeds cap - possible baseline poisoning"
                     );
                     // Retain only the first MAX_KNOWN_SCOPES scopes (deterministic truncation)
                     let kept: HashSet<String> = baselines.known_scopes.iter()

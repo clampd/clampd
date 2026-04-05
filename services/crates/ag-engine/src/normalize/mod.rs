@@ -89,7 +89,7 @@ static RE_SQL_LINE_COMMENT: LazyLock<Regex> =
 /// Normalize a single pass: URL-decode → HTML entities → hex/unicode escapes
 /// → strip zero-width → NFKC → strip tag chars.
 pub fn normalize(text: &str) -> String {
-    // Phase A: Regex-based decoders (5 allocations — unavoidable)
+    // Phase A: Regex-based decoders (5 allocations - unavoidable)
     let mut out = decode_url_encoding(text);
     out = decode_html_entities(&out);
     out = decode_hex_escapes(&out);
@@ -210,18 +210,18 @@ fn strip_dominant_separator(text: &str) -> Option<String> {
 /// Combined char-level normalization: strip + map in a single pass.
 /// Fuses strip_zero_width_chars, strip_bidi_chars, strip_unicode_spaces,
 /// normalize_nfkc, normalize_homoglyphs, and strip_unicode_tags into one
-/// `.chars().filter_map().collect()` — 1 allocation instead of 6.
+/// `.chars().filter_map().collect()` - 1 allocation instead of 6.
 /// Output is byte-for-byte identical to the sequential 6-function chain.
 fn char_level_normalize(text: &str) -> String {
     text.chars()
         .filter_map(|c| {
-            // Step 1: Filter — strip zero-width chars
+            // Step 1: Filter - strip zero-width chars
             if matches!(c,
                 '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{FEFF}' | '\u{2060}' | '\u{00AD}'
             ) {
                 return None;
             }
-            // Step 2: Filter — strip BIDI overrides
+            // Step 2: Filter - strip BIDI overrides
             if matches!(c,
                 '\u{202A}' | '\u{202B}' | '\u{202C}' | '\u{202D}' | '\u{202E}'
                 | '\u{200E}' | '\u{200F}'
@@ -229,26 +229,26 @@ fn char_level_normalize(text: &str) -> String {
             ) {
                 return None;
             }
-            // Step 3: Filter — strip Unicode tag chars (U+E0001–U+E007F)
+            // Step 3: Filter - strip Unicode tag chars (U+E0001–U+E007F)
             let cp = c as u32;
             if (0xE0001..=0xE007F).contains(&cp) {
                 return None;
             }
-            // Step 4: Map — normalize Unicode spaces to ASCII space
+            // Step 4: Map - normalize Unicode spaces to ASCII space
             let c = match c {
                 '\u{00A0}' | '\u{2000}' | '\u{2001}' | '\u{2002}' | '\u{2003}'
                 | '\u{2004}' | '\u{2005}' | '\u{2006}' | '\u{2007}' | '\u{2008}'
                 | '\u{2009}' | '\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
                 _ => c,
             };
-            // Step 5: Map — NFKC fullwidth ASCII (U+FF01–U+FF5E → U+0021–U+007E)
+            // Step 5: Map - NFKC fullwidth ASCII (U+FF01–U+FF5E → U+0021–U+007E)
             let cp = c as u32;
             let c = if (0xFF01..=0xFF5E).contains(&cp) {
                 char::from_u32(cp - 0xFF01 + 0x0021).unwrap_or(c)
             } else {
                 c
             };
-            // Step 6: Map — homoglyph normalization (Cyrillic/Greek → Latin)
+            // Step 6: Map - homoglyph normalization (Cyrillic/Greek → Latin)
             let c = match c {
                 // Cyrillic uppercase → Latin
                 '\u{0410}' => 'a', '\u{0412}' => 'b', '\u{0421}' => 'c', '\u{0415}' => 'e',
@@ -284,7 +284,7 @@ pub fn normalize_variants(text: &str) -> Vec<String> {
 
     // P2-11: Cap input size to prevent memory exhaustion on large payloads
     if text.len() > MAX_VARIANT_SIZE {
-        warn!("Input exceeds {}KB — truncating for normalization", MAX_VARIANT_SIZE / 1024);
+        warn!("Input exceeds {}KB - truncating for normalization", MAX_VARIANT_SIZE / 1024);
         variants.push(text[..MAX_VARIANT_SIZE].to_string());
         return variants;
     }
@@ -299,7 +299,7 @@ pub fn normalize_variants(text: &str) -> Vec<String> {
         }
         // P2-11: Don't add variant if it exceeds size cap (e.g., base64 expansion)
         if decoded.len() > MAX_VARIANT_SIZE {
-            warn!("Decoded variant exceeds size cap — skipping");
+            warn!("Decoded variant exceeds size cap - skipping");
             break;
         }
         variants.push(decoded.clone());
@@ -314,7 +314,7 @@ pub fn normalize_variants(text: &str) -> Vec<String> {
         }
     }
 
-    // Try ROT13 decode — only add variant if decoded text contains suspicious keywords
+    // Try ROT13 decode - only add variant if decoded text contains suspicious keywords
     if let Some(decoded) = try_rot13_decode(text) {
         variants.push(decoded);
     }
@@ -324,7 +324,7 @@ pub fn normalize_variants(text: &str) -> Vec<String> {
         variants.push(rejoined);
     }
 
-    // Also try full collapse (all whitespace removed) — catches heavily fragmented text
+    // Also try full collapse (all whitespace removed) - catches heavily fragmented text
     // Only if text has many short words (same heuristic as rejoin)
     if let Some(collapsed) = try_full_collapse(text) {
         variants.push(collapsed);
@@ -470,7 +470,7 @@ fn strip_bidi_chars(text: &str) -> String {
 }
 
 /// Strip Unicode space characters that bypass \s regex matching.
-/// Standard ASCII space (U+0020) is preserved — only exotic spaces replaced.
+/// Standard ASCII space (U+0020) is preserved - only exotic spaces replaced.
 fn strip_unicode_spaces(text: &str) -> String {
     text.chars()
         .map(|c| match c {
@@ -651,7 +651,7 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
 }
 
 /// Try ROT13 decode. Only returns Some if the decoded text contains
-/// at least 2 suspicious keywords — prevents false positives since
+/// at least 2 suspicious keywords - prevents false positives since
 /// every ASCII text has a valid ROT13 encoding.
 fn try_rot13_decode(input: &str) -> Option<String> {
     // Only try on mostly-ASCII text with enough length
@@ -699,7 +699,7 @@ fn try_rot13_decode(input: &str) -> Option<String> {
     let lower = decoded.to_lowercase();
     let matches = SUSPICIOUS_WORDS.iter().filter(|w| lower.contains(**w)).count();
 
-    // 1 keyword is enough — if someone ROT13-encodes text containing
+    // 1 keyword is enough - if someone ROT13-encodes text containing
     // "passwd", "rm", "cat", etc., that's already suspicious
     if matches >= MIN_ROT13_KEYWORD_MATCHES {
         Some(decoded)
@@ -731,7 +731,7 @@ fn rejoin_fragmented_words(input: &str) -> Option<String> {
 
     for (i, word) in words.iter().enumerate() {
         if word.len() > SHORT_WORD_MAX_LEN {
-            // Long word — flush buffer, add space, add this word
+            // Long word - flush buffer, add space, add this word
             if !buf.is_empty() {
                 if !result.is_empty() {
                     result.push(' ');
@@ -744,7 +744,7 @@ fn rejoin_fragmented_words(input: &str) -> Option<String> {
             }
             result.push_str(word);
         } else {
-            // Short word — accumulate
+            // Short word - accumulate
             let new_len = buf.len() + word.len();
             // Flush buffer if it's already word-length and this starts a new word boundary
             if buf.len() >= MERGE_FLUSH_MIN_LEN && (new_len > MERGE_FLUSH_MAX_LEN || (i > 0 && word.chars().next().map_or(false, |c| c.is_uppercase()))) {
@@ -772,7 +772,7 @@ fn rejoin_fragmented_words(input: &str) -> Option<String> {
     Some(rejoined)
 }
 
-/// Full space collapse — removes all whitespace when text appears heavily fragmented.
+/// Full space collapse - removes all whitespace when text appears heavily fragmented.
 /// Produces a single blob like "ignorepreviousinstructions" that can match rules
 /// with `\s*` patterns (e.g., DROP\s*TABLE).
 fn try_full_collapse(input: &str) -> Option<String> {

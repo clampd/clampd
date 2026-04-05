@@ -5,12 +5,12 @@
 //!
 //! ## Three-tier prefilter (Suricata MPM-class architecture)
 //!
-//! Tier 1: Scope grouping — rules pre-partitioned by scope_pattern.
-//! Tier 2: Aho-Corasick literal prefilter — O(text_length) MPM scan.
+//! Tier 1: Scope grouping - rules pre-partitioned by scope_pattern.
+//! Tier 2: Aho-Corasick literal prefilter - O(text_length) MPM scan.
 //!         Extracts literal substrings from rule regex patterns at compile time,
 //!         builds a single AC automaton. One scan identifies candidate rules.
 //!         Replaces RegexSet (which scales with pattern count, not text length).
-//! Tier 3: Full closure evaluation — regex + scope/agent/risk checks.
+//! Tier 3: Full closure evaluation - regex + scope/agent/risk checks.
 
 mod conditions;
 
@@ -52,7 +52,7 @@ impl RuleAction {
     }
 }
 
-/// A compiled detection rule — ready for execution.
+/// A compiled detection rule - ready for execution.
 /// The condition is a pre-compiled closure tree.
 pub struct CompiledRule {
     pub id: Arc<str>,
@@ -79,13 +79,13 @@ impl std::fmt::Debug for CompiledRule {
 
 /// A compiled ruleset with three-tier pre-filtering (Suricata MPM-class architecture).
 ///
-/// Tier 1: Scope grouping — rules pre-partitioned by scope_pattern at compile time.
+/// Tier 1: Scope grouping - rules pre-partitioned by scope_pattern at compile time.
 ///         Only rules matching the request's scope are checked. (210 → ~50 rules)
-/// Tier 2: Aho-Corasick literal prefilter — O(text_length) multi-pattern match.
+/// Tier 2: Aho-Corasick literal prefilter - O(text_length) multi-pattern match.
 ///         Extracts literal substrings from rule regex at compile time. One AC scan
 ///         identifies candidate rules. Cost: O(text_length) regardless of rule count.
 ///         At 5000 rules: same ~10μs as at 200 rules. (Replaces RegexSet.)
-/// Tier 3: Full closure evaluation — only candidates get full regex/agent/risk check.
+/// Tier 3: Full closure evaluation - only candidates get full regex/agent/risk check.
 ///
 /// This reduces per-request rule checks from O(N) to O(K) where K << N.
 /// Scales to 30,000+ rules (same architecture as Suricata IDS).
@@ -111,7 +111,7 @@ struct LiteralPrefilter {
     /// Maps AC pattern index → rule indices that contain this literal.
     /// Multiple rules can share the same literal; one rule can have multiple literals.
     pattern_to_rules: Vec<Vec<usize>>,
-    /// Rules with no extractable literals — must always be evaluated (the 8%).
+    /// Rules with no extractable literals - must always be evaluated (the 8%).
     no_literal_rules: Vec<usize>,
 }
 
@@ -125,7 +125,7 @@ impl LiteralPrefilter {
             hits[idx] = true;
         }
 
-        // One AC scan — O(text_length) regardless of pattern count
+        // One AC scan - O(text_length) regardless of pattern count
         for mat in self.automaton.find_overlapping_iter(text) {
             let pat_idx = mat.pattern().as_usize();
             for &rule_idx in &self.pattern_to_rules[pat_idx] {
@@ -136,7 +136,7 @@ impl LiteralPrefilter {
         hits
     }
 
-    /// Union scan across multiple texts — candidate if ANY text contains the literal.
+    /// Union scan across multiple texts - candidate if ANY text contains the literal.
     fn scan_candidates_union(&self, texts: &[Arc<str>], rule_count: usize) -> Vec<bool> {
         let mut hits = vec![false; rule_count];
 
@@ -159,7 +159,7 @@ impl LiteralPrefilter {
 
 /// Check if a scope matches a colon-separated pattern with `*` wildcard.
 ///
-/// Pre-compiled at load time (wirefilter pattern) — the pattern parts are
+/// Pre-compiled at load time (wirefilter pattern) - the pattern parts are
 /// captured into the closure, so evaluation is pure string comparison.
 ///
 /// `db:*`          matches `db:query:read`
@@ -189,7 +189,7 @@ fn scope_pattern_matches(pattern: &str, scope: &str) -> bool {
 fn glob_matches(pattern: &str, text: &str) -> bool {
     let parts: Vec<&str> = pattern.split('*').collect();
     if parts.len() == 1 {
-        // No wildcard — exact match
+        // No wildcard - exact match
         return pattern == text;
     }
     let mut pos = 0;
@@ -247,7 +247,7 @@ impl CompiledRuleset {
                 pattern_fields.push(pat.field.clone());
             }
 
-            // Capture values for the closure — no allocation at eval time
+            // Capture values for the closure - no allocation at eval time
             let tool_pattern = parsed.tool_pattern.clone();
             let scope_patterns = parsed.scope_pattern.clone();
             let exempt_agents: Arc<[Arc<str>]> = parsed
@@ -265,7 +265,7 @@ impl CompiledRuleset {
                     // 1. Scope/tool filter
                     // Tier 1 (scope grouping) owns scope-based rule selection at eval time.
                     // The closure only handles the no-scope fallback to tool_pattern.
-                    // Do NOT re-check scope here — it kills cross-category detection
+                    // Do NOT re-check scope here - it kills cross-category detection
                     // via related_scopes (e.g., R008 fs:* selected for exec:shell:run).
                     if scope_patterns.is_empty() {
                         // Legacy: no scope_pattern declared → use tool_pattern glob
@@ -321,7 +321,7 @@ impl CompiledRuleset {
                             Some(field_name) => {
                                 // Field-specific: extract the named field from JSON params (FieldId 2)
                                 // and match regex ONLY against that field's value.
-                                // No fallback — if field is missing, rule does not match.
+                                // No fallback - if field is missing, rule does not match.
                                 if let crate::scheme::FieldValue::Json(json) = ctx.get(FieldId(2)) {
                                     if let Some(val) = json.get(field_name.as_str()) {
                                         let field_text = match val {
@@ -472,7 +472,7 @@ impl CompiledRuleset {
         self.rules.len()
     }
 
-    /// Related scope prefixes — cross-category attack detection.
+    /// Related scope prefixes - cross-category attack detection.
     /// A shell tool can read files, an HTTP tool can execute commands, etc.
     fn related_scopes(prefix: &str) -> &'static [&'static str] {
         match prefix {
@@ -525,7 +525,7 @@ impl CompiledRuleset {
         let scope = ctx.get_str(FieldId(22));
         let candidate_indices = self.rules_for_scope(scope);
 
-        // Tier 2: AC literal prefilter — O(text_length)
+        // Tier 2: AC literal prefilter - O(text_length)
         let prefilter_hits = self.literal_prefilter.scan_candidates(
             ctx.all_text(), self.rules.len()
         );
@@ -597,8 +597,8 @@ impl CompiledRuleset {
     /// - Collects all text variants upfront (original, extracted, normalized, decoded)
     /// - One Tier 1 scope selection (not N times)
     /// - Union RegexSet pre-filter across all variants (one bitset)
-    /// - One loop over candidates — tries each variant per rule, breaks on first match
-    /// - Zero evaluate() calls — everything inline
+    /// - One loop over candidates - tries each variant per rule, breaks on first match
+    /// - Zero evaluate() calls - everything inline
     pub fn evaluate_full(
         &self,
         ctx: &crate::execute::ExecutionContext,
@@ -681,13 +681,13 @@ impl CompiledRuleset {
         let scope = ctx.get_str(FieldId(22));
         let candidate_indices = self.rules_for_scope(scope);
 
-        // Tier 2: AC literal prefilter — union scan across ALL variants.
+        // Tier 2: AC literal prefilter - union scan across ALL variants.
         // One O(text_length) AC scan per variant, results unioned into one bitset.
         let prefilter_hits = self.literal_prefilter.scan_candidates_union(
             &all_variants, self.rules.len(),
         );
 
-        // Tier 3: Single-pass — one reusable context, try variants per rule.
+        // Tier 3: Single-pass - one reusable context, try variants per rule.
         let mut tctx = crate::execute::ExecutionContext::new(scheme);
         tctx.set(FieldId(0), FieldValue::String(Arc::from(tool_name)));
         tctx.set(FieldId(5), ctx.get(FieldId(5)).clone());
@@ -706,7 +706,7 @@ impl CompiledRuleset {
 
             let rule = &self.rules[idx];
 
-            // Try each variant — break on first match (original texts tried first)
+            // Try each variant - break on first match (original texts tried first)
             for (vi, variant) in all_variants.iter().enumerate() {
                 tctx.set(FieldId(4), FieldValue::String(variant.clone()));
                 tctx.set_all_text(variant.clone());
@@ -737,7 +737,7 @@ impl CompiledRuleset {
                         exemptable: rule.exemptable,
                         taxonomy: rule.taxonomy.clone(),
                     });
-                    break; // First matching variant wins — no duplicate checks
+                    break; // First matching variant wins - no duplicate checks
                 }
             }
         }
@@ -819,7 +819,7 @@ struct LiteralExtractionResult {
     literals: Vec<String>,
     /// True if ALL alternation branches have at least one extractable literal.
     /// If false, the regex can match text without any of the extracted literals
-    /// (e.g., `(1=1|DROP TABLE)` — the `1=1` branch has no 3-char literal).
+    /// (e.g., `(1=1|DROP TABLE)` - the `1=1` branch has no 3-char literal).
     /// Rules with uncovered branches must go to no_literal_rules.
     all_branches_covered: bool,
 }
@@ -891,7 +891,7 @@ fn strip_outer_group(s: &str) -> &str {
             ')' => {
                 depth -= 1;
                 if depth == 0 && i < chars.len() - 1 {
-                    return trimmed; // First ( closes before end — not a wrapper
+                    return trimmed; // First ( closes before end - not a wrapper
                 }
             }
             _ => {}
@@ -1010,7 +1010,7 @@ fn extract_literals_from_branch(branch: &str) -> Vec<String> {
                 flush_literal(&mut current, &mut literals);
             }
             '|' => {
-                // Nested alternation inside parens — flush
+                // Nested alternation inside parens - flush
                 flush_literal(&mut current, &mut literals);
             }
             '*' | '?' => {

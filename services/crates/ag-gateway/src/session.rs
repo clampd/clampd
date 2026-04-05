@@ -227,7 +227,7 @@ pub async fn load_or_create_session(
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Redis pool error for session load: {} — creating ephemeral session", e);
+            warn!("Redis pool error for session load: {} - creating ephemeral session", e);
             return SessionContext::new(*agent_id, session_id.to_string());
         }
     };
@@ -240,7 +240,7 @@ pub async fn load_or_create_session(
     {
         Ok(v) => v,
         Err(e) => {
-            warn!("Redis GET failed for session {}: {} — creating new session", key, e);
+            warn!("Redis GET failed for session {}: {} - creating new session", key, e);
             return SessionContext::new(*agent_id, session_id.to_string());
         }
     };
@@ -252,7 +252,7 @@ pub async fn load_or_create_session(
                 ctx
             }
             Err(e) => {
-                warn!("Failed to deserialize session {}: {} — creating new", key, e);
+                warn!("Failed to deserialize session {}: {} - creating new", key, e);
                 SessionContext::new(*agent_id, session_id.to_string())
             }
         },
@@ -297,7 +297,7 @@ pub async fn save_session(
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Redis pool error for session save: {} — session state lost", e);
+            warn!("Redis pool error for session save: {} - session state lost", e);
             return;
         }
     };
@@ -311,7 +311,7 @@ pub async fn save_session(
         .await;
 
     if let Err(e) = result {
-        warn!("Redis SET failed for session {}: {} — session state lost", key, e);
+        warn!("Redis SET failed for session {}: {} - session state lost", key, e);
     } else {
         debug!(session_id = %session.session_id, "Session saved to Redis");
     }
@@ -820,7 +820,7 @@ mod tests {
     fn test_extract_tables_deduplicates() {
         let params = serde_json::json!({"table": "users", "query": "SELECT * FROM users"});
         let tables = extract_tables_from_params("database.users.query", &params);
-        // "users" appears from table param, SQL FROM, and tool name — should be deduped.
+        // "users" appears from table param, SQL FROM, and tool name - should be deduped.
         let user_count = tables.iter().filter(|t| *t == "users").count();
         assert_eq!(user_count, 1);
     }

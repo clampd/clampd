@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license — refusing to start"),
+        .expect("Invalid or tampered license - refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
@@ -109,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
         if config.license_token.is_empty() && !generated.is_empty() {
             config.license_token = generated;
         } else if !config.license_token.is_empty() && config.license_token != "dev-license-token" {
-            // Manual override — keep as-is.
+            // Manual override - keep as-is.
         } else if config.license_token == "dev-license-token" && !generated.is_empty() {
             // Replace the old magic string with a proper JWT.
             info!("Replacing dev-license-token with signed JWT");
@@ -176,13 +176,13 @@ async fn main() -> anyhow::Result<()> {
     info!("NATS connected");
 
     // Store engine metadata in Redis on startup so the dashboard can read it
-    // immediately.  This is a best-effort operation — startup continues even if
+    // immediately.  This is a best-effort operation - startup continues even if
     // it fails (metadata will be built on-demand via get_engine_metadata).
     match engine_metadata::store_metadata_in_redis(&redis).await {
         Ok(()) => {
             info!("Engine metadata stored in Redis on startup");
         }
-        Err(e) => warn!(error = %e, "Failed to store engine metadata in Redis on startup — will be built on-demand"),
+        Err(e) => warn!(error = %e, "Failed to store engine metadata in Redis on startup - will be built on-demand"),
     }
 
     // Initialize license validator.
@@ -249,12 +249,12 @@ async fn main() -> anyhow::Result<()> {
     // sync loop immediately, eliminating up to 10s of polling latency.
     let rules_sync_notify = Arc::new(tokio::sync::Notify::new());
 
-    // Shared DB mode — SaaS poller, WS client, license heartbeat, policy sync
+    // Shared DB mode - SaaS poller, WS client, license heartbeat, policy sync
     // are not needed (proxy reads the same Postgres).
     {
-        info!("Shared DB mode — SaaS poller, WS client, license heartbeat, and policy sync disabled (not needed)");
+        info!("Shared DB mode - SaaS poller, WS client, license heartbeat, and policy sync disabled (not needed)");
 
-        // Spawn local command poller — reads runtime_commands from shared Postgres directly.
+        // Spawn local command poller - reads runtime_commands from shared Postgres directly.
         // This handles kill/revive/push_policy commands from the Dashboard UI.
         let kill_url = std::env::var("KILL_URL")
             .unwrap_or_else(|_| "http://127.0.0.1:50055".to_string());
@@ -347,7 +347,7 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Postgres→Redis sync loops ──────────────────────────────────────────
 
-    // Delegation Redis sync — syncs approved edges + enforcement mode
+    // Delegation Redis sync - syncs approved edges + enforcement mode
     // from Postgres → Redis so ag-gateway/ag-policy can check them at request time.
     {
         let mut sync = delegation_redis_sync::DelegationRedisSync::new(
@@ -390,7 +390,7 @@ async fn main() -> anyhow::Result<()> {
         info!("Agent credential sync loop started (every 10s)");
     }
 
-    // Agent + org sync — no-op in shared DB mode (proxy reads the same DB).
+    // Agent + org sync - no-op in shared DB mode (proxy reads the same DB).
     {
         let sync = agent_sync::AgentSync::new(
             pg.clone(),
@@ -476,7 +476,7 @@ async fn main() -> anyhow::Result<()> {
         .serve_with_shutdown(addr, shutdown_signal(shutdown_tx))
         .await?;
 
-    info!("ag-control shut down gracefully — background tasks will be cancelled");
+    info!("ag-control shut down gracefully - background tasks will be cancelled");
     Ok(())
 }
 

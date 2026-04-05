@@ -18,7 +18,7 @@ pub enum MatchPattern {
 }
 
 /// A condition in a detection rule.
-/// Compiled to closures at load time — never interpreted at runtime.
+/// Compiled to closures at load time - never interpreted at runtime.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Condition {

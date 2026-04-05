@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// All errors in ag-common are typed — no anyhow in public API.
+/// All errors in ag-common are typed - no anyhow in public API.
 #[derive(Debug, Error)]
 pub enum AgError {
     #[error("JWT validation failed: {0}")]

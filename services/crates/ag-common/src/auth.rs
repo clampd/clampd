@@ -52,7 +52,7 @@ pub fn validate_jwt(token: &str, secret: &str) -> Result<crate::models::AgentJwt
     // RS256 with an HMAC DecodingKey enables algorithm confusion attacks.
     // Use validate_jwt_rsa() for RS256/IdP tokens with a proper RSA public key.
     validation.algorithms = vec![Algorithm::HS256];
-    // Don't require specific aud/iss — gateway is flexible
+    // Don't require specific aud/iss - gateway is flexible
     validation.validate_aud = false;
 
     let token_data = decode::<serde_json::Value>(token, &key, &validation)

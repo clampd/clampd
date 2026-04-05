@@ -34,19 +34,19 @@ static PII_PATTERNS: LazyLock<PatternSet> = LazyLock::new(|| {
             ("phone", Regex::new(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b").unwrap()),
             ("aadhaar", Regex::new(r"\b\d{4}\s?\d{4}\s?\d{4}\b").unwrap()),
             ("pan", Regex::new(r"\b[A-Z]{5}\d{4}[A-Z]\b").unwrap()),
-            // HIPAA PHI: Medical Record Number (MRN) — formats: MRN-2024-8847, MRN#ABC1234567, PAT-12345678
+            // HIPAA PHI: Medical Record Number (MRN) - formats: MRN-2024-8847, MRN#ABC1234567, PAT-12345678
             ("mrn", Regex::new(r"(?i)\b(?:MRN|MR|PAT(?:IENT)?)\s?[#:\s-]*[A-Z]{0,3}[\d][\d\-\.]{4,14}\b").unwrap()),
-            // HIPAA PHI: Date of Birth — with context keywords
+            // HIPAA PHI: Date of Birth - with context keywords
             ("dob", Regex::new(r"(?i)(?:date.of.birth|dob|birth.?date|born)\s*[:=]?\s*\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4}").unwrap()),
             // HIPAA PHI: Health Plan Beneficiary / Medicare / Medicaid numbers
             ("health_plan_id", Regex::new(r"(?i)(?:medicare|medicaid|health.?plan|beneficiary)\s*(?:#|id|number|num|no)?[:\s-]*[A-Z0-9]{6,15}\b").unwrap()),
-            // HIPAA PHI: Vehicle Identification Number (VIN) — exactly 17 alphanumeric, no I/O/Q
+            // HIPAA PHI: Vehicle Identification Number (VIN) - exactly 17 alphanumeric, no I/O/Q
             ("vin", Regex::new(r"\b[A-HJ-NPR-Z0-9]{17}\b").unwrap()),
-            // HIPAA PHI: US ZIP code — 5 or 9 digit (PHI when combined with other data)
+            // HIPAA PHI: US ZIP code - 5 or 9 digit (PHI when combined with other data)
             ("zip_code", Regex::new(r"(?i)(?:zip|postal)\s*(?:code)?[:\s-]*\d{5}(?:-\d{4})?").unwrap()),
-            // HIPAA PHI: Driver's License — with context keyword
+            // HIPAA PHI: Driver's License - with context keyword
             ("drivers_license", Regex::new(r"(?i)(?:driver.?s?\s*(?:license|lic)|DL)\s*(?:#|number|num|no)?[:\s-]*[A-Z0-9]{5,15}\b").unwrap()),
-            // GDPR: IBAN — 2 letter country + 2 check digits + up to 30 alphanumeric
+            // GDPR: IBAN - 2 letter country + 2 check digits + up to 30 alphanumeric
             ("iban", Regex::new(r"\b[A-Z]{2}\d{2}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{0,4}\s?[\dA-Z]{0,4}\s?[\dA-Z]{0,4}\b").unwrap()),
             // GDPR: UK National Insurance Number
             ("uk_nino", Regex::new(r"(?i)\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b").unwrap()),
@@ -54,11 +54,11 @@ static PII_PATTERNS: LazyLock<PatternSet> = LazyLock::new(|| {
             ("eu_vat", Regex::new(r"(?i)(?:VAT|TVA|USt)\s*(?:#|number|no|id)?[:\s-]*[A-Z]{2}\d{8,12}\b").unwrap()),
             // GDPR: German Steuer-ID (11 digits with context)
             ("de_steuer_id", Regex::new(r"(?i)(?:steuer.?id|tax.?id|tin)\s*[:\s-]*\d{11}\b").unwrap()),
-            // GDPR: French INSEE/NIR — 13 digits + 2 check
+            // GDPR: French INSEE/NIR - 13 digits + 2 check
             ("fr_insee", Regex::new(r"\b[12]\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{3}\s?\d{3}\s?\d{2}\b").unwrap()),
             // GDPR: EU passport number with context
             ("eu_passport", Regex::new(r"(?i)passport\s*(?:#|number|no)?[:\s-]*[A-Z0-9]{6,9}\b").unwrap()),
-            // GDPR: NHS Number (UK) — 10 digits
+            // GDPR: NHS Number (UK) - 10 digits
             ("nhs_number", Regex::new(r"(?i)(?:NHS)\s*(?:#|number|no)?[:\s-]*\d{3}\s?\d{3}\s?\d{4}\b").unwrap()),
             // HIPAA PHI: Fax number (phone format with fax context keyword)
             ("fax", Regex::new(r"(?i)fax\s*(?:#|number|no)?[:\s-]*(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})").unwrap()),
@@ -98,7 +98,7 @@ pub struct SchemaInjectionAlert {
     pub risk_score: f64,
 }
 
-/// Schema injection detection patterns — catches tool definition poisoning
+/// Schema injection detection patterns - catches tool definition poisoning
 /// in message content before it reaches the rule engine.
 static SCHEMA_INJECTION_PATTERNS: LazyLock<SchemaInjectionPatterns> = LazyLock::new(|| {
     SchemaInjectionPatterns {
@@ -133,7 +133,7 @@ static SCHEMA_INJECTION_PATTERNS: LazyLock<SchemaInjectionPatterns> = LazyLock::
 });
 
 /// Fast pre-scan for schema injection patterns in message text.
-/// Runs BEFORE the ag-intent rule engine — catches injections at the gateway layer.
+/// Runs BEFORE the ag-intent rule engine - catches injections at the gateway layer.
 /// Returns None if clean, Some(alert) if injection detected.
 pub fn detect_schema_injection(text: &str) -> Option<SchemaInjectionAlert> {
     // Check XML tool definition injection (highest risk)
@@ -166,7 +166,7 @@ pub fn detect_schema_injection(text: &str) -> Option<SchemaInjectionAlert> {
             });
         }
     }
-    // Check tool steering (lower risk — flag only)
+    // Check tool steering (lower risk - flag only)
     for re in &SCHEMA_INJECTION_PATTERNS.steering_patterns {
         if let Some(m) = re.find(text) {
             return Some(SchemaInjectionAlert {
@@ -235,7 +235,7 @@ pub(crate) async fn check_agent_org_membership(
     Ok(())
 }
 
-/// POST /v1/scan-input — Scan a prompt/input for injection, jailbreak, and policy violations.
+/// POST /v1/scan-input - Scan a prompt/input for injection, jailbreak, and policy violations.
 ///
 /// Authenticates via X-AG-Key + Bearer JWT (same pattern as /v1/proxy), then
 /// classifies the input text through the intent service with tool_name="llm.input".
@@ -468,7 +468,7 @@ pub async fn handle_scan_input(
     }))
 }
 
-/// POST /v1/scan-output — Scan an LLM response for PII, secrets, and policy violations.
+/// POST /v1/scan-output - Scan an LLM response for PII, secrets, and policy violations.
 ///
 /// Authenticates, runs local PII/secrets detection, then classifies via ag-intent
 /// with tool_name="llm.output". Returns combined risk score.

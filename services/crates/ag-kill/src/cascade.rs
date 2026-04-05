@@ -1,6 +1,6 @@
 //! 8-layer cascading agent revocation.
 //!
-//! Each layer is independent — one failure doesn't stop others.
+//! Each layer is independent - one failure doesn't stop others.
 //! Layer 6 retries 3x; on total failure extends deny TTL to 24h.
 //! Fully idempotent (kill twice = safe).
 //!
@@ -98,7 +98,7 @@ pub async fn execute_cascade(
     // Layer 4: Session termination
     results.push(layer_4_session_terminate(ctx, &deps.redis).await);
 
-    // Layer 5: IdP session revoke (not yet implemented — placeholder)
+    // Layer 5: IdP session revoke (not yet implemented - placeholder)
     results.push(layer_5_idp_revoke(ctx).await);
 
     // Layer 6: Agent state change (with retries)
@@ -112,7 +112,7 @@ pub async fn execute_cascade(
     // Layer 7: Event broadcast
     results.push(layer_7_event_broadcast(ctx, &deps.nats).await);
 
-    // Layer 8: Audit Log — with 5x retry and file fallback
+    // Layer 8: Audit Log - with 5x retry and file fallback
     let audit_success = {
         let mut success = false;
         let mut last_err = String::new();
@@ -133,7 +133,7 @@ pub async fn execute_cascade(
         }
         if !success {
             // File fallback
-            tracing::error!("All 5 audit write attempts failed: {} — writing to fallback file", last_err);
+            tracing::error!("All 5 audit write attempts failed: {} - writing to fallback file", last_err);
             if let Err(fe) = write_audit_fallback_file(&ctx.agent_id, &ctx.reason, &ctx.initiated_by, &results).await {
                 tracing::error!("Audit fallback file write also failed: {}", fe);
             }
@@ -190,7 +190,7 @@ pub async fn quarantine_traceback(
             warn!(
                 killed_agent = %killed_agent_id,
                 quarantined_so_far = quarantined,
-                "Quarantine trace-back hit {}s timeout — returning partial results",
+                "Quarantine trace-back hit {}s timeout - returning partial results",
                 QUARANTINE_TIMEOUT_SECS
             );
             break;
@@ -323,7 +323,7 @@ pub async fn cascade_tree(
     // Step 1: Kill the root agent.
     let root_results = execute_cascade(ctx, deps).await;
 
-    // Step 1b: Quarantine trace-back — scan for agents recently contacted by
+    // Step 1b: Quarantine trace-back - scan for agents recently contacted by
     // the killed agent and place them under enhanced monitoring.
     let quarantined = quarantine_traceback(&ctx.agent_id, &deps.redis).await;
     if quarantined > 0 {
@@ -359,7 +359,7 @@ pub async fn cascade_tree(
                 agent_id = %current_id,
                 depth = depth,
                 max_depth = ctx.max_tree_depth,
-                "Tree-walk depth limit reached — stopping descent"
+                "Tree-walk depth limit reached - stopping descent"
             );
             continue;
         }
@@ -381,14 +381,14 @@ pub async fn cascade_tree(
                     warn!(
                         agent_id = %current_id,
                         error = %e,
-                        "Failed to get child agents from registry — continuing without descendants"
+                        "Failed to get child agents from registry - continuing without descendants"
                     );
                     Vec::new()
                 }
                 Err(_) => {
                     warn!(
                         agent_id = %current_id,
-                        "GetChildAgents timed out after 5s — continuing without descendants"
+                        "GetChildAgents timed out after 5s - continuing without descendants"
                     );
                     Vec::new()
                 }
@@ -456,21 +456,21 @@ pub async fn cascade_tree(
                 info!(
                     agent_id = %child_id,
                     root_agent_id = %root_agent_id,
-                    "Descendant already killed — skipping cascade"
+                    "Descendant already killed - skipping cascade"
                 );
                 return (child_id, true, Vec::new(), true);
             }
 
             let child_ctx = KillContext {
                 agent_id: child_id.clone(),
-                reason: format!("cascade: parent {} killed — {}", root_agent_id, original_reason),
+                reason: format!("cascade: parent {} killed - {}", root_agent_id, original_reason),
                 initiated_by: format!("cascade::{}", root_agent_id),
                 revoke_permanently,
                 kill_sessions,
                 deny_ttl_secs,
                 deny_extended_ttl_secs,
                 registry_retries,
-                cascade_descendants: false, // Don't recurse — BFS handles the tree
+                cascade_descendants: false, // Don't recurse - BFS handles the tree
                 max_tree_depth: 0,
             };
 
@@ -488,7 +488,7 @@ pub async fn cascade_tree(
         match handle.await {
             Ok((child_id, success, results, was_skipped)) => {
                 if was_skipped {
-                    // Already killed — don't count as newly killed.
+                    // Already killed - don't count as newly killed.
                     continue;
                 }
                 if success {
@@ -620,7 +620,7 @@ async fn layer_3_token_flush(
             }
             Ok(Err(e)) => Err(e.to_string()),
             Err(_) => {
-                warn!(agent_id = %ctx.agent_id, "Token revocation timed out after 5s — continuing cascade");
+                warn!(agent_id = %ctx.agent_id, "Token revocation timed out after 5s - continuing cascade");
                 Err("token revocation timed out after 5s".to_string())
             }
         }
@@ -700,7 +700,7 @@ async fn layer_4_session_terminate(
             warn!(
                 agent_id = %ctx.agent_id,
                 error = %e,
-                "Failed to set session-blocked key — new sessions may still be created"
+                "Failed to set session-blocked key - new sessions may still be created"
             );
         } else {
             info!(
@@ -724,7 +724,7 @@ async fn layer_4_session_terminate(
 /// When ag-kill calls `revoke_agent` on ag-token (Layer 3), ag-token's handler
 /// now also revokes IdP sessions for all configured providers.
 ///
-/// This layer remains a separate tracking entry for observability — it confirms
+/// This layer remains a separate tracking entry for observability - it confirms
 /// that Layer 3 included IdP revocation. If a dedicated gRPC RPC is needed in
 /// the future (e.g., to revoke IdP sessions without revoking tokens), the
 /// following changes would be required:
@@ -738,7 +738,7 @@ async fn layer_4_session_terminate(
 ///    message RevokeIdpSessionsResponse { uint32 sessions_revoked = 1; repeated string errors = 2; }
 ///    ```
 ///
-/// 2. **ag-token handler**: Already implemented in `idp_revoke.rs` — just wire
+/// 2. **ag-token handler**: Already implemented in `idp_revoke.rs` - just wire
 ///    the new RPC to call `try_revoke_idp_sessions()` for each configured IdP.
 ///
 /// 3. **Wire this layer**: Replace the body below with a gRPC call to the new RPC,
@@ -750,10 +750,10 @@ async fn layer_4_session_terminate(
 /// - **Keycloak**: `DELETE /admin/realms/{realm}/users/{userId}/sessions` (Bearer auth)
 ///
 /// ## Environment variables (for ag-token):
-/// - `CLAMPD_IDP_ADMIN_TOKEN` — admin API token (required to enable revocation)
-/// - `CLAMPD_IDP_ADMIN_BASE_URL` — admin API base URL
-/// - `CLAMPD_IDP_REVOKE_TIMEOUT_MS` — HTTP timeout (default: 5000ms)
-/// - `KEYCLOAK_REALM` — Keycloak realm (default: "master")
+/// - `CLAMPD_IDP_ADMIN_TOKEN` - admin API token (required to enable revocation)
+/// - `CLAMPD_IDP_ADMIN_BASE_URL` - admin API base URL
+/// - `CLAMPD_IDP_REVOKE_TIMEOUT_MS` - HTTP timeout (default: 5000ms)
+/// - `KEYCLOAK_REALM` - Keycloak realm (default: "master")
 async fn layer_5_idp_revoke(_ctx: &KillContext) -> LayerResult {
     // IdP session revocation is triggered inside Layer 3 (RevokeAgent → ag-token).
     // This layer exists for cascade result tracking. The actual revocation count
@@ -1165,7 +1165,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_layer_5_idp_revoke_always_succeeds() {
-        // Layer 5 is a tracking entry — actual revocation happens in Layer 3
+        // Layer 5 is a tracking entry - actual revocation happens in Layer 3
         let ctx = KillContext {
             agent_id: "any-agent".to_string(),
             reason: "any reason".to_string(),
@@ -1602,7 +1602,7 @@ mod tests {
 
     #[test]
     fn test_tree_walk_no_children() {
-        // Agent with no children — tree walk finds nothing
+        // Agent with no children - tree walk finds nothing
         let mut queue: VecDeque<(String, u32)> = VecDeque::new();
         let mut visited: HashSet<String> = HashSet::new();
         let mut killed: Vec<String> = Vec::new();
@@ -1635,10 +1635,10 @@ mod tests {
         let original_reason = "security breach";
         let child_id = "child-002";
 
-        let child_reason = format!("cascade: parent {} killed — {}", root_agent_id, original_reason);
+        let child_reason = format!("cascade: parent {} killed - {}", root_agent_id, original_reason);
         let child_initiated_by = format!("cascade::{}", root_agent_id);
 
-        assert_eq!(child_reason, "cascade: parent parent-001 killed — security breach");
+        assert_eq!(child_reason, "cascade: parent parent-001 killed - security breach");
         assert_eq!(child_initiated_by, "cascade::parent-001");
     }
 
@@ -1659,7 +1659,7 @@ mod tests {
     #[test]
     fn test_tree_walk_registry_unreachable_logic() {
         // When registry returns an error, children list is empty.
-        // Root kill still succeeds — only descendants are missed.
+        // Root kill still succeeds - only descendants are missed.
         let children_on_error: Vec<String> = Vec::new();
         assert!(children_on_error.is_empty(), "Registry error should produce empty children list");
     }
@@ -1698,7 +1698,7 @@ mod tests {
 
     #[test]
     fn test_contact_value_caller_extraction() {
-        // Format: "caller_id:risk:ts" — parse caller_id from right-split
+        // Format: "caller_id:risk:ts" - parse caller_id from right-split
         let value = "compromised-agent-123:0.950000:1700000000";
         let mut parts = value.rsplitn(3, ':');
         let _ts = parts.next().unwrap();
@@ -1743,7 +1743,7 @@ mod tests {
 
     #[test]
     fn test_contact_caller_mismatch_does_not_quarantine() {
-        // Simulate: killed agent is "X", contact value has caller "Y" — should not match
+        // Simulate: killed agent is "X", contact value has caller "Y" - should not match
         let killed_agent_id = "agent-X";
         let contact_value = "agent-Y:0.900000:1700000000";
         let mut parts = contact_value.rsplitn(3, ':');
@@ -1755,7 +1755,7 @@ mod tests {
 
     #[test]
     fn test_contact_caller_match_quarantines() {
-        // Simulate: killed agent is "agent-X", contact value has caller "agent-X" — should match
+        // Simulate: killed agent is "agent-X", contact value has caller "agent-X" - should match
         let killed_agent_id = "agent-X";
         let contact_value = "agent-X:0.900000:1700000000";
         let mut parts = contact_value.rsplitn(3, ':');

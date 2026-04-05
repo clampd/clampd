@@ -1,6 +1,6 @@
 # Clampd
 
-Security proxy for AI agent tool calls. Scans requests and responses through a 9-stage Rust pipeline before they reach your databases, APIs, or file systems.
+Runtime security firewall for AI agents. Intercepts, inspects, and enforces policy on every tool call through a 9-stage Rust pipeline - detection, anomaly scoring, scope enforcement, delegation control, and kill switch - before anything reaches your databases, APIs, or file systems.
 
 ```python
 import clampd

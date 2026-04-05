@@ -76,7 +76,7 @@ pub struct CliConfig {
     pub services: ServiceUrls,
 }
 
-/// Legacy core config — migrated to context on load
+/// Legacy core config - migrated to context on load
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LegacyCoreConfig {
     #[serde(default)]
@@ -87,7 +87,7 @@ pub struct LegacyCoreConfig {
     pub compose_file: String,
 }
 
-/// Legacy connections config — migrated to context on load
+/// Legacy connections config - migrated to context on load
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LegacyConnectionsConfig {
     #[serde(default)]

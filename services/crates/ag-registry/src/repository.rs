@@ -68,7 +68,7 @@ impl AgentRepository {
     }
 
     /// Check if an agent with the same name already exists in the org.
-    /// Includes ALL states (even killed) — prevents kill-then-spoof attack
+    /// Includes ALL states (even killed) - prevents kill-then-spoof attack
     /// where attacker kills the real agent and registers a clone.
     pub async fn agent_name_exists(&self, org_id: &str, name: &str) -> Result<bool, AgError> {
         let row: (i64,) = sqlx::query_as(
@@ -194,7 +194,7 @@ impl AgentRepository {
     }
 
     /// Update agent state AND persist audit event in a single transaction.
-    /// Ensures both succeed or both fail — no orphaned state changes without audit trail.
+    /// Ensures both succeed or both fail - no orphaned state changes without audit trail.
     #[instrument(skip(self))]
     pub async fn update_state_with_audit(
         &self,

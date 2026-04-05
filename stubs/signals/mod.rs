@@ -1,4 +1,4 @@
-//! Compound signal scoring — detect weak attack indicators that rules miss.
+//! Compound signal scoring - detect weak attack indicators that rules miss.
 //!
 //! A hacker evading regex rules will:
 //! 1. Obfuscate keywords: DR0P, S%45LECT, SEL/**/ECT
@@ -14,7 +14,7 @@
 //!
 //! This means 5 signals at 0.1 each = 0.41, not 0.5 (diminishing returns).
 //! The result is a real percentage that represents "how suspicious does this
-//! look overall" — even when no single rule matches.
+//! look overall" - even when no single rule matches.
 
 use regex::Regex;
 use std::sync::LazyLock;
@@ -100,7 +100,7 @@ lazy_regex!(SIG_EVASION_ZERO_WIDTH, r"[\x{200B}\x{200C}\x{200D}\x{FEFF}\x{2060}]
 lazy_regex!(SIG_EVASION_FULLWIDTH, r"[\x{FF01}-\x{FF5E}]");
 lazy_regex!(SIG_EVASION_TAG_CHARS, r"[\x{E0001}-\x{E007F}]");
 
-/// All micro-signals. Order doesn't matter — all are evaluated.
+/// All micro-signals. Order doesn't matter - all are evaluated.
 static SIGNALS: LazyLock<Vec<Signal>> = LazyLock::new(|| {
     vec![
         // SQL domain (weight 0.08-0.15 each)
@@ -141,12 +141,12 @@ static SIGNALS: LazyLock<Vec<Signal>> = LazyLock::new(|| {
         Signal { name: "evasion_long_string", weight: 0.08, regex: &SIG_EVASION_LONG_STRING, domain: None },
         Signal { name: "evasion_homoglyph", weight: 0.12, regex: &SIG_EVASION_HOMOGLYPH, domain: None },
 
-        // Exfiltration signals (domain-agnostic) — v2: boosted weights
+        // Exfiltration signals (domain-agnostic) - v2: boosted weights
         Signal { name: "exfil_webhook", weight: 0.24, regex: &SIG_EXFIL_WEBHOOK, domain: None },
         Signal { name: "exfil_base64_blob", weight: 0.14, regex: &SIG_EXFIL_BASE64_BLOB, domain: None },
         Signal { name: "exfil_data_uri", weight: 0.10, regex: &SIG_EXFIL_DATA_URI, domain: None },
 
-        // Privilege escalation (domain-agnostic) — v2: boosted weights
+        // Privilege escalation (domain-agnostic) - v2: boosted weights
         Signal { name: "priv_admin_keyword", weight: 0.12, regex: &SIG_PRIV_ADMIN_KEYWORD, domain: None },
         Signal { name: "priv_token_pattern", weight: 0.08, regex: &SIG_PRIV_TOKEN_PATTERN, domain: None },
 

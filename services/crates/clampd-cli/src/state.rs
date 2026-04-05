@@ -50,7 +50,7 @@ impl AppState {
     /// Note: OnceLock prevents mutation after init; commands pass org_id
     /// directly in path construction instead.
     pub fn set_api_org_id(&self, _org_id: &str) {
-        // No-op — commands use org_id from resolve_org_id() when building paths.
+        // No-op - commands use org_id from resolve_org_id() when building paths.
     }
 
     // ── Direct service connections (analytics, fallback) ─────

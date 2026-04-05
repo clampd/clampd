@@ -54,7 +54,7 @@ impl LeaderElection {
             let mut conn = self.redis.get().await.map_err(|e| e.to_string())?;
 
             if self.is_leader.load(Ordering::Relaxed) {
-                // Already leader — try to renew.
+                // Already leader - try to renew.
                 let current: Option<String> = redis::cmd("GET")
                     .arg(LEADER_KEY)
                     .query_async(&mut *conn)
@@ -62,7 +62,7 @@ impl LeaderElection {
                     .map_err(|e| e.to_string())?;
 
                 if current.as_deref() == Some(&self.pod_id) {
-                    // We are still the leader — extend TTL.
+                    // We are still the leader - extend TTL.
                     redis::cmd("EXPIRE")
                         .arg(LEADER_KEY)
                         .arg(self.ttl_secs)
@@ -81,7 +81,7 @@ impl LeaderElection {
                 }
             }
 
-            // Not currently leader — try to acquire.
+            // Not currently leader - try to acquire.
             let acquired: bool = redis::cmd("SET")
                 .arg(LEADER_KEY)
                 .arg(&self.pod_id)
@@ -107,7 +107,7 @@ impl LeaderElection {
                 is_leader
             }
             Err(e) => {
-                warn!(error = %e, "Leader election failed — assuming not leader");
+                warn!(error = %e, "Leader election failed - assuming not leader");
                 self.is_leader.store(false, Ordering::Relaxed);
                 false
             }

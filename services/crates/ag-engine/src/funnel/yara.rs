@@ -9,7 +9,7 @@ pub struct YaraMatch {
     pub risk_score: f64,
 }
 
-/// YARA scanner — loads and compiles rules, scans binary content.
+/// YARA scanner - loads and compiles rules, scans binary content.
 pub struct YaraScanner {
     rules: yara_x::Rules,
 }

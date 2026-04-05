@@ -105,7 +105,7 @@ impl Default for ModelEscalationConfig {
 /// Configuration for LLM-as-judge secondary review.
 ///
 /// When enabled, the gateway can escalate ambiguous or high-risk requests to an
-/// LLM for a second opinion. Disabled by default — the rules engine and intent
+/// LLM for a second opinion. Disabled by default - the rules engine and intent
 /// classification pipeline handle all decisions without this.
 #[derive(Debug, Clone)]
 pub struct LlmJudgeConfig {
@@ -396,7 +396,7 @@ impl KillConfig {
             ),
             token_url: env_or("TOKEN_URL", "http://127.0.0.1:50054"),
             registry_url: env_or("REGISTRY_URL", "http://127.0.0.1:50051"),
-            deny_ttl_secs: env_or_u64("AG_KILL_DENY_TTL_SECS", 86400), // 24h default — agent stays blocked until explicitly revived
+            deny_ttl_secs: env_or_u64("AG_KILL_DENY_TTL_SECS", 86400), // 24h default - agent stays blocked until explicitly revived
             deny_extended_ttl_secs: env_or_u64("AG_KILL_DENY_EXTENDED_TTL_SECS", 604800), // 7 days extended TTL if registry fails
             registry_retries: 3,
         }
@@ -544,10 +544,10 @@ pub async fn grpc_connect_with_retry(
             }
             Err(e) => {
                 if attempt == max_retries {
-                    tracing::error!(%label, attempt, error = %e, "gRPC connect failed — giving up");
+                    tracing::error!(%label, attempt, error = %e, "gRPC connect failed - giving up");
                     return Err(e);
                 }
-                tracing::warn!(%label, attempt, error = %e, retry_in_secs = delay.as_secs(), "gRPC connect failed — retrying");
+                tracing::warn!(%label, attempt, error = %e, retry_in_secs = delay.as_secs(), "gRPC connect failed - retrying");
                 std::thread::sleep(delay);
                 delay = std::cmp::min(delay * 2, std::time::Duration::from_secs(10));
             }
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn test_control_config_defaults() {
-        // CLAMPD_LICENSE_TOKEN is required — set it for the test.
+        // CLAMPD_LICENSE_TOKEN is required - set it for the test.
         std::env::set_var("CLAMPD_LICENSE_TOKEN", "test-token");
         let cfg = ControlConfig::from_env();
         std::env::remove_var("CLAMPD_LICENSE_TOKEN");

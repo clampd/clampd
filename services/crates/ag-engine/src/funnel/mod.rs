@@ -61,7 +61,7 @@ pub struct FunnelResult {
     pub depth_score: f64,
 }
 
-/// The decode funnel — peels encoding layers iteratively.
+/// The decode funnel - peels encoding layers iteratively.
 pub struct DecodeFunnel {
     config: FunnelConfig,
 }
@@ -91,7 +91,7 @@ impl DecodeFunnel {
 
             // Tier 1: Try standard text decodings on string representation
             if let Ok(text) = std::str::from_utf8(&current) {
-                // Tier 2: Hex string decode — check BEFORE base64 because
+                // Tier 2: Hex string decode - check BEFORE base64 because
                 // pure hex strings are also valid base64 but hex is the intended decode
                 if is_pure_hex_string(text) {
                     if let Some(decoded) = decoders::try_hex_string_decode(text) {
@@ -124,7 +124,7 @@ impl DecodeFunnel {
                     }
                 }
 
-                // URL decode — only if string contains %XX hex sequences
+                // URL decode - only if string contains %XX hex sequences
                 if has_url_encoded_chars(text) {
                     if let Some(decoded) = try_url_decode(text) {
                         if decoded.as_bytes() != current.as_slice() {
@@ -148,7 +148,7 @@ impl DecodeFunnel {
                 continue;
             }
 
-            // Tier 2: XOR single-byte brute force — only on non-text content
+            // Tier 2: XOR single-byte brute force - only on non-text content
             // (text that's already readable shouldn't be XOR-decoded)
             if !is_mostly_printable_text(&current) {
                 if let Some((decoded, key)) = decoders::try_xor_single_byte(&current) {

@@ -384,8 +384,8 @@ pub async fn run(state: &AppState, agent_filter: Option<Uuid>, plan_info: Option
 
             // ── Black + Red theme ─────────────────────────────
             let bg = Color::Black;
-            let bright = Color::Rgb(255, 255, 255);    // pure white — headlines, selected
-            let text = Color::Rgb(220, 220, 220);      // light text — primary content
+            let bright = Color::Rgb(255, 255, 255);    // pure white - headlines, selected
+            let text = Color::Rgb(220, 220, 220);      // light text - primary content
             let muted = Color::Rgb(140, 140, 140);     // dim labels, metadata
             let border_c = Color::Rgb(100, 100, 100);  // borders
             let red = Color::Rgb(255, 60, 60);         // danger, blocked, kill
@@ -407,12 +407,12 @@ pub async fn run(state: &AppState, agent_filter: Option<Uuid>, plan_info: Option
                     Line::from(""),
                     Line::from(Span::styled("  SECURITY FEATURES", Style::default().fg(red).add_modifier(Modifier::BOLD))),
                     Line::from(""),
-                    Line::from(vec![Span::styled("  [PII]  ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("PII detection — email, SSN, credit card, phone regex scan", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [ENC]  ", Style::default().fg(amber).add_modifier(Modifier::BOLD)), Span::styled("Encoding anomaly — base64, URL-encode, hex, unicode obfuscation (+0.15 risk each)", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [SES]  ", Style::default().fg(bright)), Span::styled("Session tracking — cross-request correlation, 15-min windows, risk accumulation", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [ANO]  ", Style::default().fg(bright)), Span::styled("Anomaly detection — velocity, scope, time-of-day, volume baselines", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [POL]  ", Style::default().fg(bright)), Span::styled("Policy engine — DSL + OPA/Rego rules, intent classification", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [KILL] ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("Kill switch — < 50ms agent termination, token revocation, session purge", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [PII]  ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("PII detection - email, SSN, credit card, phone regex scan", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [ENC]  ", Style::default().fg(amber).add_modifier(Modifier::BOLD)), Span::styled("Encoding anomaly - base64, URL-encode, hex, unicode obfuscation (+0.15 risk each)", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [SES]  ", Style::default().fg(bright)), Span::styled("Session tracking - cross-request correlation, 15-min windows, risk accumulation", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [ANO]  ", Style::default().fg(bright)), Span::styled("Anomaly detection - velocity, scope, time-of-day, volume baselines", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [POL]  ", Style::default().fg(bright)), Span::styled("Policy engine - DSL + OPA/Rego rules, intent classification", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [KILL] ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("Kill switch - < 50ms agent termination, token revocation, session purge", Style::default().fg(text))]),
                     Line::from(""),
                     Line::from(Span::styled("  Press ? to close", Style::default().fg(muted))),
                 ];

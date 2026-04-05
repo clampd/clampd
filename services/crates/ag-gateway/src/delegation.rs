@@ -197,7 +197,7 @@ pub async fn is_enforcement_enabled(redis_pool: &Pool<RedisConnectionManager>, o
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Redis unavailable for enforcement check: {e} — defaulting to learning mode");
+            warn!("Redis unavailable for enforcement check: {e} - defaulting to learning mode");
             return false;
         }
     };
@@ -252,7 +252,7 @@ pub async fn check_delegation_approved(
                 (true, vec![]) // can't parse = permissive
             }
         }
-        // No cached entry — in enforcement mode, unknown relationships are blocked
+        // No cached entry - in enforcement mode, unknown relationships are blocked
         None => (false, vec![]),
     }
 }

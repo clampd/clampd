@@ -66,7 +66,7 @@ impl PolicyServiceImpl {
                 delegation_chain.len(),
                 MAX_DELEGATION_DEPTH
             ));
-            // Continue checking for cycles too — report all issues
+            // Continue checking for cycles too - report all issues
         }
 
         // Defense-in-depth: detect cycles in delegation chain
@@ -92,10 +92,10 @@ impl PolicyServiceImpl {
                     error = %e,
                     caller = %caller_agent_id,
                     agent = %agent_id,
-                    "Redis unavailable for delegation check — failing closed"
+                    "Redis unavailable for delegation check - failing closed"
                 );
                 deny_reasons.push(format!(
-                    "delegation_redis_unavailable: cannot verify delegation approval for {} → {} — denying (fail-closed)",
+                    "delegation_redis_unavailable: cannot verify delegation approval for {} → {} - denying (fail-closed)",
                     caller_agent_id, agent_id
                 ));
                 return (deny_reasons, vec![]);
@@ -116,7 +116,7 @@ impl PolicyServiceImpl {
                 warn!(
                     error = %e,
                     key = %enforcement_key,
-                    "Redis GET failed for delegation enforcement — failing open"
+                    "Redis GET failed for delegation enforcement - failing open"
                 );
                 return (deny_reasons, vec![]);
             }
@@ -160,7 +160,7 @@ impl PolicyServiceImpl {
         }
 
         // Cross-boundary detection runs ALWAYS (advisory, not blocking).
-        // It must run even when enforcement is off — learning mode needs to
+        // It must run even when enforcement is off - learning mode needs to
         // observe which delegations cross workflow boundaries.
         let caller_wf: Option<String> = redis::cmd("GET")
             .arg(&format!("ag:agent:workflow:{}", caller_agent_id))
@@ -191,7 +191,7 @@ impl PolicyServiceImpl {
         if !enforcement_on {
             debug!(
                 org_id = %org_id,
-                "Delegation enforcement not enabled — skipping approval check"
+                "Delegation enforcement not enabled - skipping approval check"
             );
             return (deny_reasons, advisory_flags_early);
         }
@@ -211,7 +211,7 @@ impl PolicyServiceImpl {
                 warn!(
                     error = %e,
                     key = %approval_key,
-                    "Redis GET failed for delegation approval — failing closed"
+                    "Redis GET failed for delegation approval - failing closed"
                 );
                 deny_reasons.push(format!(
                     "delegation_redis_error: cannot verify edge {} → {}",
@@ -243,7 +243,7 @@ impl PolicyServiceImpl {
                         warn!(
                             error = %e,
                             key = %approval_key,
-                            "Failed to parse delegation edge JSON — treating as approved (no restrictions)"
+                            "Failed to parse delegation edge JSON - treating as approved (no restrictions)"
                         );
                     }
                 }
@@ -279,7 +279,7 @@ impl PolicyService for PolicyServiceImpl {
 
         // ---- Decision cache: skip full evaluation for identical non-security-critical requests ----
         let cache_key = if req.has_non_exemptable_block || labels_block {
-            // Never cache security-critical requests — always re-evaluate
+            // Never cache security-critical requests - always re-evaluate
             None
         } else {
             let key = DecisionCache::cache_key(
@@ -303,7 +303,7 @@ impl PolicyService for PolicyServiceImpl {
         let mut agg = DecisionAggregator::new();
         let mut scope_token_ttl: u32 = 0;
 
-        // ---- Phase 1: Rust-native boundary checks — short-circuit on violation ----
+        // ---- Phase 1: Rust-native boundary checks - short-circuit on violation ----
         if let Err(violation) = BoundaryEvaluator::evaluate(&req) {
             agg.add_deny(violation.to_string(), violation.rule_id().to_string());
             agg.set_boundary_violation(violation.violation_key());
@@ -332,7 +332,7 @@ impl PolicyService for PolicyServiceImpl {
         // ---- Phase 1b: Delegation context evaluation ----
         // SECURITY: caller_agent_id is set by ag-gateway from the SDK's delegation context.
         // The gRPC HMAC interceptor ensures only authenticated Clampd services can call this RPC.
-        // Gateway validates the delegation chain before forwarding — we trust the gateway's claim.
+        // Gateway validates the delegation chain before forwarding - we trust the gateway's claim.
         // If an attacker bypasses the gateway (direct gRPC), the HMAC interceptor blocks them.
         // TODO: For defense-in-depth, verify caller_agent_id exists in ag-registry.
         let caller_agent_id = req.caller_agent_id.clone();
@@ -341,16 +341,16 @@ impl PolicyService for PolicyServiceImpl {
 
         if let Some(ref caller) = caller_agent_id {
             if !caller.is_empty() {
-                // Basic format validation — reject obviously invalid agent IDs
+                // Basic format validation - reject obviously invalid agent IDs
                 if uuid::Uuid::parse_str(caller).is_err() {
                     warn!(
                         caller_agent_id = %caller,
                         agent_id = %req.agent_id,
-                        "Invalid caller_agent_id format — must be a valid UUID"
+                        "Invalid caller_agent_id format - must be a valid UUID"
                     );
                     return Ok(Response::new(EvaluateResponse {
                         action: ag_proto::agentguard::policy::PolicyAction::Deny.into(),
-                        reason: "invalid caller_agent_id format — must be a valid UUID".to_string(),
+                        reason: "invalid caller_agent_id format - must be a valid UUID".to_string(),
                         required_scopes: vec![],
                         denied_scopes: vec![],
                         matched_policies: vec!["CALLER_VALIDATION".to_string()],
@@ -471,14 +471,14 @@ impl PolicyService for PolicyServiceImpl {
                         agent_id = %req.agent_id,
                         reason = %se.exempt_reason,
                         never_exemptable_labels = ?bad_labels,
-                        "Scope exemption REJECTED — never-exemptable labels present"
+                        "Scope exemption REJECTED - never-exemptable labels present"
                     );
                 } else if req.has_non_exemptable_block {
-                    // ag-intent says non-exemptable block — trust the upstream flag
+                    // ag-intent says non-exemptable block - trust the upstream flag
                     warn!(
                         agent_id = %req.agent_id,
                         reason = %se.exempt_reason,
-                        "Scope exemption REJECTED — has_non_exemptable_block=true from ag-intent"
+                        "Scope exemption REJECTED - has_non_exemptable_block=true from ag-intent"
                     );
                 } else {
                     // Both agree: no never-exemptable labels → grant exemption
@@ -494,7 +494,7 @@ impl PolicyService for PolicyServiceImpl {
             }
         }
 
-        // ---- Phase 2c: Layer 5 — Cedar custom policies ----
+        // ---- Phase 2c: Layer 5 - Cedar custom policies ----
         // Evaluates dashboard-authored Cedar policies in-process.
         // Only runs if custom policies are loaded (zero-cost when empty).
         if self.cedar.policy_count() > 0 {

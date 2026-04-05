@@ -46,7 +46,7 @@ impl KillServiceImpl {
 
 #[tonic::async_trait]
 impl KillService for KillServiceImpl {
-    /// Single agent emergency revocation — runs the full 8-layer cascade.
+    /// Single agent emergency revocation - runs the full 8-layer cascade.
     async fn kill_agent(
         &self,
         request: Request<KillRequest>,
@@ -63,12 +63,12 @@ impl KillService for KillServiceImpl {
         }
 
         // NOTE: org_id authorization is enforced at the gateway layer (JWT claims).
-        // KillRequest intentionally omits org_id — the gateway validates that the
+        // KillRequest intentionally omits org_id - the gateway validates that the
         // caller's org owns the agent before forwarding the kill RPC.
 
         // Fast-path: if agent is already killed (deny key exists), skip cascade and return success.
-        // This prevents DoS via kill flooding — 1000 calls = 1 cascade + 999 instant returns.
-        // NEVER rate-limit kills — the kill switch is an emergency brake.
+        // This prevents DoS via kill flooding - 1000 calls = 1 cascade + 999 instant returns.
+        // NEVER rate-limit kills - the kill switch is an emergency brake.
         {
             let mut conn = self.deps.redis.get().await.map_err(|e| {
                 Status::internal(format!("Redis pool error: {}", e))
@@ -80,7 +80,7 @@ impl KillService for KillServiceImpl {
                 .await
                 .unwrap_or(false);
             if exists {
-                debug!(agent_id = %req.agent_id, "Agent already killed — returning cached result");
+                debug!(agent_id = %req.agent_id, "Agent already killed - returning cached result");
                 return Ok(Response::new(KillResponse {
                     success: true,
                     layer_results: vec![],
@@ -148,7 +148,7 @@ impl KillService for KillServiceImpl {
         }))
     }
 
-    /// Org-wide emergency kill — kill all agents in the org.
+    /// Org-wide emergency kill - kill all agents in the org.
     /// Bounded concurrency: at most 10 concurrent cascades.
     async fn kill_all(
         &self,

@@ -1,4 +1,4 @@
-//! Sigma YAML adapter — converts Sigma rules to Clampd ParsedRule.
+//! Sigma YAML adapter - converts Sigma rules to Clampd ParsedRule.
 //!
 //! Registers `agent_tool_call` as a logsource category.
 //! Supports modifiers: contains, startswith, endswith, re.

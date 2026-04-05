@@ -1,4 +1,4 @@
-//! clampd-cli — command-line interface for Clampd.
+//! clampd-cli - command-line interface for Clampd.
 //!
 //! Architecture boundaries:
 //! - Connects to Dashboard API via HTTP for ALL management operations
@@ -24,7 +24,7 @@ use output::OutputFormat;
 use state::AppState;
 
 #[derive(Parser)]
-#[command(name = "clampd", version, about = "Clampd — Non-Human Identity Governor CLI")]
+#[command(name = "clampd", version, about = "Clampd - Non-Human Identity Governor CLI")]
 struct Cli {
     /// Output format: table, json, plain
     #[arg(long, short = 'o', global = true, default_value = "table")]
@@ -643,7 +643,7 @@ fn decode_license_claims(token: &str) -> Option<serde_json::Value> {
 /// 1. Explicit --org-id flag
 /// 2. License token (extract org_id from JWT claims)
 /// 3. Config file org_id
-/// 4. Fail with a helpful message (no auto-detect from DB — we use HTTP now)
+/// 4. Fail with a helpful message (no auto-detect from DB - we use HTTP now)
 async fn resolve_org_id(cli: &Cli, state: &AppState) -> Result<Uuid> {
     // 1. Explicit CLI flag
     if let Some(id) = cli.org_id {
@@ -1089,7 +1089,7 @@ async fn main() -> Result<()> {
         // ── Activate ──
         Commands::Activate { license } => {
             let claims = decode_license_claims(&license)
-                .ok_or_else(|| anyhow::anyhow!("Invalid license token — could not decode JWT"))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid license token - could not decode JWT"))?;
 
             let org_id_str = claims.get("org_id")
                 .or(claims.get("sub"))

@@ -4,7 +4,7 @@
 // ── Depth score tiers ────────────────────────────────────────────
 // Tuned empirically: 2 layers is common in APIs, 3+ is suspicious.
 
-/// Score for 2 encoding layers (mild — some APIs double-encode legitimately).
+/// Score for 2 encoding layers (mild - some APIs double-encode legitimately).
 const DEPTH_2_SCORE: f64 = 0.1;
 /// Score for 3 encoding layers (suspicious).
 const DEPTH_3_SCORE: f64 = 0.3;

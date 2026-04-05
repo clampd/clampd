@@ -103,7 +103,7 @@ pub struct RiskScorer {
     alpha: f64,
     /// Auto-suspend threshold.
     auto_suspend_threshold: f64,
-    /// Agents that were recently revived (grace period — don't re-block immediately).
+    /// Agents that were recently revived (grace period - don't re-block immediately).
     revived_at: DashMap<String, Instant>,
 }
 
@@ -124,7 +124,7 @@ impl RiskScorer {
             if entry.elapsed().as_secs() < REVIVE_GRACE_PERIOD_SECS {
                 return true;
             }
-            // Grace period expired — remove entry
+            // Grace period expired - remove entry
             drop(entry);
             self.revived_at.remove(agent_id);
         }
@@ -163,7 +163,7 @@ impl RiskScorer {
 
         let ema_before = state.ema_score;
 
-        // P1-6: Minimum event floor — prevent score dilution via benign floods.
+        // P1-6: Minimum event floor - prevent score dilution via benign floods.
         // Events with 0.0 risk still contribute to event count and history,
         // but don't actively pull the EMA toward 0. Only events with actual risk
         // (from intent classification) should influence the EMA.
@@ -521,7 +521,7 @@ mod tests {
         let state = s.get_score("agent-1").unwrap();
         let high_ema = state.ema_score;
 
-        // Send zero-risk events — EMA should NOT decrease (P1-6 floor).
+        // Send zero-risk events - EMA should NOT decrease (P1-6 floor).
         for _ in 0..10 {
             s.process_event("agent-1", 0.0, "tool-a", "test-org");
         }

@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license — refusing to start"),
+        .expect("Invalid or tampered license - refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
 
     // Ensure A2A relationship table exists (idempotent CREATE IF NOT EXISTS)
     if let Err(e) = relationships::ensure_table(&db_pool).await {
-        warn!(error = %e, "Failed to create agent_relationships table — A2A features may be unavailable");
+        warn!(error = %e, "Failed to create agent_relationships table - A2A features may be unavailable");
     } else {
         info!("agent_relationships table ready");
     }
@@ -72,14 +72,14 @@ async fn main() -> Result<()> {
         .await?;
     info!("Connected to Redis");
 
-    // Connect to NATS (optional — audit logging degrades gracefully)
+    // Connect to NATS (optional - audit logging degrades gracefully)
     let audit_logger = match connect_nats(&config.nats_url).await {
         Ok(nats_client) => {
             info!("Connected to NATS for audit logging");
             AuditLogger::new(nats_client)
         }
         Err(e) => {
-            warn!(error = %e, "Failed to connect to NATS — audit logging will use tracing only");
+            warn!(error = %e, "Failed to connect to NATS - audit logging will use tracing only");
             AuditLogger::noop()
         }
     };
@@ -108,7 +108,7 @@ async fn main() -> Result<()> {
             match result {
                 Ok(_) => break, // Normal exit (shouldn't happen with infinite loop)
                 Err(e) => {
-                    tracing::error!("Touch flusher panicked: {} — restarting in 5s", e);
+                    tracing::error!("Touch flusher panicked: {} - restarting in 5s", e);
                     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
             }

@@ -10,9 +10,9 @@
 //! ```text
 //!   Active  -> Suspended  (manual_admin | risk_threshold | policy_violation)
 //!   Active  -> Killed     (credential_compromised | manual_admin)
-//!   Suspended -> Active   (manual_admin — reactivation)
+//!   Suspended -> Active   (manual_admin - reactivation)
 //!   Suspended -> Killed   (credential_compromised | manual_admin)
-//!   Killed  -> Active     (manual_admin — revive flow)
+//!   Killed  -> Active     (manual_admin - revive flow)
 //! ```
 
 /// Valid reason codes for state transitions.

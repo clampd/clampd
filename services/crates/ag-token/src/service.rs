@@ -122,7 +122,7 @@ impl TokenService for TokenServiceImpl {
     ) -> Result<Response<ExchangeResponse>, Status> {
         let req = request.into_inner();
 
-        // P2-15: Global rate limit check — prevent distributed DoS across many agents.
+        // P2-15: Global rate limit check - prevent distributed DoS across many agents.
         // Configurable via AG_TOKEN_GLOBAL_RATE_LIMIT env var (default: 1000 per 60s).
         {
             let max_global: u32 = std::env::var("AG_TOKEN_GLOBAL_RATE_LIMIT")
@@ -157,7 +157,7 @@ impl TokenService for TokenServiceImpl {
             return Err(Status::permission_denied("Agent is on deny list"));
         }
 
-        // Step 3: Cache lookup — if we have a valid downstream token, skip IdP call
+        // Step 3: Cache lookup - if we have a valid downstream token, skip IdP call
         if let Some(cached) = self
             .cache
             .get(&req.agent_id, &req.requested_scopes, &req.call_binding_hash)
@@ -189,7 +189,7 @@ impl TokenService for TokenServiceImpl {
             }
         }
 
-        // No IdP exchange — mint micro-token directly
+        // No IdP exchange - mint micro-token directly
         self.mint_and_respond(&req, None, None).await
     }
 
@@ -318,7 +318,7 @@ impl TokenService for TokenServiceImpl {
         tokens_revoked += self.cache.invalidate_agent(&req.agent_id).await;
 
         // Layer 5 (kill cascade): Revoke IdP sessions if configured.
-        // This is non-fatal — failures are logged but don't block the revocation.
+        // This is non-fatal - failures are logged but don't block the revocation.
         // SSO/IdP revocation is gated by the SSO feature flag.
         let mut sessions_revoked = 0u32;
         if self.plan_guard.is_enabled(FeatureFlags::SSO) {
@@ -342,7 +342,7 @@ impl TokenService for TokenServiceImpl {
                 }
             }
         } else {
-            debug!(agent_id = %req.agent_id, "SSO feature not enabled — skipping IdP session revocation");
+            debug!(agent_id = %req.agent_id, "SSO feature not enabled - skipping IdP session revocation");
         }
 
         warn!(agent_id = %req.agent_id, tokens_revoked, sessions_revoked, "Agent revoked");
@@ -412,7 +412,7 @@ impl TokenServiceImpl {
                     )
                     .await;
 
-                // Mint with the IdP token (normal mode — no trust_level claim)
+                // Mint with the IdP token (normal mode - no trust_level claim)
                 Some(self.mint_and_respond(req, Some(&idp_resp.access_token), None).await)
             }
             Err(e) => {

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Taxonomy mapping for a rule — maps to industry-standard categories.
+/// Taxonomy mapping for a rule - maps to industry-standard categories.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaxonomyMapping {
     /// MITRE ATLAS technique IDs (e.g., "AML.T0051", "AML.T0054")

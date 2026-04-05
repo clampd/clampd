@@ -1,4 +1,4 @@
-//! Command poller — polls SaaS API for pending commands.
+//! Command poller - polls SaaS API for pending commands.
 //!
 //! Flow:
 //! 1. GET {saas_url}/v1/runtime/commands (with license token auth)
@@ -184,7 +184,7 @@ pub fn spawn(cfg: PollerConfig, is_leader: Arc<std::sync::atomic::AtomicBool>) {
         });
     }
 
-    // Risk event relay loop — subscribes to NATS `agentguard.events.masked` and
+    // Risk event relay loop - subscribes to NATS `agentguard.events.masked` and
     // pushes individual risk events to the SaaS API for WebSocket broadcast.
     if let Some(nats) = nats_client {
         let cfg = cfg.clone();
@@ -195,7 +195,7 @@ pub fn spawn(cfg: PollerConfig, is_leader: Arc<std::sync::atomic::AtomicBool>) {
             run_risk_event_relay(cfg, http, nats, is_leader, ws_sender).await;
         });
     } else {
-        warn!("No NATS client provided — risk event relay will not run");
+        warn!("No NATS client provided - risk event relay will not run");
     }
 }
 
@@ -214,21 +214,21 @@ async fn run_command_loop(
         interval.tick().await;
 
         if !is_leader.load(Ordering::Relaxed) {
-            debug!("Not leader — skipping command poll");
+            debug!("Not leader - skipping command poll");
             continue;
         }
 
-        // When the WebSocket command client is connected, skip HTTP polling —
+        // When the WebSocket command client is connected, skip HTTP polling -
         // commands arrive in real time over the WS connection.
         if cfg.ws_connected.load(Ordering::Relaxed) {
-            debug!("WS active — skipping HTTP poll");
+            debug!("WS active - skipping HTTP poll");
             continue;
         }
 
         let commands = match fetch_commands(&cfg, &http).await {
             Ok(cmds) => cmds,
             Err(e) => {
-                warn!(error = %e, "Failed to fetch commands from SaaS — will retry");
+                warn!(error = %e, "Failed to fetch commands from SaaS - will retry");
                 continue;
             }
         };
@@ -338,7 +338,7 @@ async fn run_health_push_loop(
         tokio::time::sleep(tokio::time::Duration::from_secs(current_interval_secs)).await;
 
         if !is_leader.load(Ordering::Relaxed) {
-            debug!("Not leader — skipping health push");
+            debug!("Not leader - skipping health push");
             continue;
         }
 
@@ -364,7 +364,7 @@ async fn run_health_push_loop(
                         continue;
                     }
                     Err(e) => {
-                        debug!(error = %e, "WS send failed — falling back to HTTP");
+                        debug!(error = %e, "WS send failed - falling back to HTTP");
                     }
                 }
             }
@@ -424,7 +424,7 @@ async fn run_risk_push_loop(
         tokio::time::sleep(tokio::time::Duration::from_secs(current_interval_secs)).await;
 
         if !is_leader.load(Ordering::Relaxed) {
-            debug!("Not leader — skipping risk push");
+            debug!("Not leader - skipping risk push");
             continue;
         }
 
@@ -447,7 +447,7 @@ async fn run_risk_push_loop(
                         continue;
                     }
                     Err(e) => {
-                        debug!(error = %e, "WS send failed — falling back to HTTP");
+                        debug!(error = %e, "WS send failed - falling back to HTTP");
                     }
                 }
             }
@@ -512,7 +512,7 @@ fn shadow_to_dashboard_event(ev: &ShadowEvent) -> Option<DashboardRiskEvent> {
             "flagged"
         }
     } else {
-        // Skip allowed events — dashboard owner said they are useless
+        // Skip allowed events - dashboard owner said they are useless
         return None;
     };
 
@@ -534,14 +534,14 @@ fn shadow_to_dashboard_event(ev: &ShadowEvent) -> Option<DashboardRiskEvent> {
         Some(format!("Risk score {:.2}", ev.assessed_risk))
     };
 
-    // Matched rules — only include if non-empty.
+    // Matched rules - only include if non-empty.
     let matched_rules = if ev.matched_rules.is_empty() {
         None
     } else {
         Some(ev.matched_rules.clone())
     };
 
-    // The actual query/payload — params_summary has the SQL, URL, file path, etc.
+    // The actual query/payload - params_summary has the SQL, URL, file path, etc.
     let query = if ev.params_summary.is_empty() {
         None
     } else {
@@ -614,7 +614,7 @@ async fn run_risk_event_relay(
             s
         }
         Err(e) => {
-            error!(error = %e, "Failed to subscribe to agentguard.events.masked — risk relay disabled");
+            error!(error = %e, "Failed to subscribe to agentguard.events.masked - risk relay disabled");
             return;
         }
     };
@@ -629,7 +629,7 @@ async fn run_risk_event_relay(
         tokio::select! {
             msg = sub.next() => {
                 let Some(msg) = msg else {
-                    warn!("NATS subscription closed — risk event relay stopping");
+                    warn!("NATS subscription closed - risk event relay stopping");
                     break;
                 };
 
@@ -671,7 +671,7 @@ async fn run_risk_event_relay(
                         }
                     }
                     Err(e) => {
-                        debug!(error = %e, "Failed to parse ShadowEvent — skipping");
+                        debug!(error = %e, "Failed to parse ShadowEvent - skipping");
                     }
                 }
             }
@@ -767,7 +767,7 @@ async fn flush_risk_events_with_ws(
                 debug!(count = count, "Risk events relayed via WS");
                 return;
             }
-            debug!("WS send failed for risk events — falling back to HTTP");
+            debug!("WS send failed for risk events - falling back to HTTP");
         }
     }
 
@@ -837,7 +837,7 @@ async fn record_blocked_delegation(
                 "tool": tool,
             });
             if let Ok(json_str) = serde_json::to_string(&value) {
-                // Set with 5-minute TTL — delegation_sync runs every 15s so this is plenty
+                // Set with 5-minute TTL - delegation_sync runs every 15s so this is plenty
                 let _: () = redis::cmd("SET")
                     .arg(&key)
                     .arg(&json_str)
@@ -957,7 +957,7 @@ mod tests {
 
     #[test]
     fn test_ws_connected_skips_poll() {
-        // Verify the flag value — the actual poll skip is an `if` in
+        // Verify the flag value - the actual poll skip is an `if` in
         // run_command_loop, but we can at least confirm the AtomicBool wiring.
         let ws_connected = Arc::new(AtomicBool::new(false));
         assert!(!ws_connected.load(Ordering::Relaxed));

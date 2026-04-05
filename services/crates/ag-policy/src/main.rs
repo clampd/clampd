@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license — refusing to start"),
+        .expect("Invalid or tampered license - refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
             Some((nc, decision_cache))
         }
         Err(e) => {
-            warn!("Failed to connect to NATS: {} — config hot-reload disabled", e);
+            warn!("Failed to connect to NATS: {} - config hot-reload disabled", e);
             None
         }
     };
@@ -113,11 +113,11 @@ async fn main() -> Result<()> {
             Ok(entries) if !entries.is_empty() => {
                 match cedar_evaluator.reload_all(&entries) {
                     Ok(()) => info!(count = entries.len(), "Cedar policies loaded from Redis"),
-                    Err(e) => warn!(error = %e, "Failed to load Cedar policies — starting empty"),
+                    Err(e) => warn!(error = %e, "Failed to load Cedar policies - starting empty"),
                 }
             }
-            Ok(_) => info!("No Cedar policies in Redis — starting with empty PolicySet"),
-            Err(e) => warn!(error = %e, "Redis unavailable for Cedar load — starting empty"),
+            Ok(_) => info!("No Cedar policies in Redis - starting with empty PolicySet"),
+            Err(e) => warn!(error = %e, "Redis unavailable for Cedar load - starting empty"),
         }
     }
 
@@ -133,7 +133,7 @@ async fn main() -> Result<()> {
     }
 
     info!(
-        "ag-policy starting — Rust engine L1-L4 + Rust scope exemptions + Cedar L5 (custom policies). \
+        "ag-policy starting - Rust engine L1-L4 + Rust scope exemptions + Cedar L5 (custom policies). \
          No OPA sidecar required."
     );
 
@@ -174,7 +174,7 @@ async fn shutdown_signal() {
     }
 }
 
-/// Handle config change notifications — invalidate decision cache.
+/// Handle config change notifications - invalidate decision cache.
 async fn handle_config_changes(
     mut subscriber: async_nats::Subscriber,
     decision_cache: Arc<DecisionCache>,
@@ -182,7 +182,7 @@ async fn handle_config_changes(
     use futures_util::StreamExt;
     while let Some(msg) = subscriber.next().await {
         let source = std::str::from_utf8(&msg.payload).unwrap_or("unknown");
-        info!(source = %source, "Config changed — invalidating decision cache");
+        info!(source = %source, "Config changed - invalidating decision cache");
         decision_cache.clear();
     }
     warn!("Config change subscriber disconnected");
@@ -253,12 +253,12 @@ async fn handle_cedar_policy_updates(
                         warn!(error = %e, policy_id, "Failed to add/replace Cedar policy");
                     }
                 } else {
-                    warn!(policy_id, "No Cedar source in policy payload — skipping");
+                    warn!(policy_id, "No Cedar source in policy payload - skipping");
                 }
             }
         }
 
-        // Invalidate all cached decisions — policies changed
+        // Invalidate all cached decisions - policies changed
         cache.clear();
     }
     warn!("Cedar policy update subscriber disconnected");

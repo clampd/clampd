@@ -15,7 +15,7 @@ pub mod license;
 /// Hardware fingerprint for license binding (sha2 + stdlib only).
 pub mod fingerprint;
 
-/// License guard — every service validates CLAMPD_LICENSE_KEY on startup.
+/// License guard - every service validates CLAMPD_LICENSE_KEY on startup.
 /// Uses only sha2 + stdlib. No jsonwebtoken/reqwest needed.
 pub mod license_guard;
 
