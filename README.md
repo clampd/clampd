@@ -158,10 +158,11 @@ docker run -e UPSTREAM_MCP="npx -y @modelcontextprotocol/server-filesystem /tmp"
 ## Compliance
 
 - **HIPAA** - 18 Safe Harbor PHI identifiers, 27 PII regex patterns, ClickHouse audit trail
-- **PCI-DSS** - Credit card regex + Luhn validation, 6 secret pattern types (AWS keys, private keys, JWTs, API keys, passwords, connection strings)
 - **GDPR** - PII masking via regex + NER in ag-shadow, 4-level data classification (Restricted/Confidential/Internal/Public)
-- **SOC 2** - Session fingerprinting with sliding TTL, 7 anomaly detectors (velocity, scope, time, volume, post-contact drift, semantic drift, capability drift), 8-layer kill cascade
-- **NIST AI RMF** - 5-layer policy engine, 9-stage gateway pipeline, real-time WebSocket + NATS monitoring
+- **SOC 2** - Session fingerprinting with sliding TTL, 7 anomaly detectors, 8-layer kill cascade
+- **ISO 27001** - Access control, audit logging, encryption in transit
+
+Detection features (Luhn credit card validation, secrets scanning, multi-layer defense) support PCI-DSS and NIST alignment but don't have dedicated compliance report generators yet.
 
 ## License
 
