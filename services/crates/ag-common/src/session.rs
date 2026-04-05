@@ -62,7 +62,7 @@ fn env_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
         .unwrap_or(default)
 }
 
-/// Global configurable thresholds - loaded once at startup from env vars.
+/// Global configurable thresholds — loaded once at startup from env vars.
 pub static SESSION_CONFIG: LazyLock<SessionThresholds> = LazyLock::new(|| {
     SessionThresholds {
         session_ttl_secs: env_parse("CLAMPD_SESSION_TTL_SECS", 1800),
@@ -77,7 +77,7 @@ pub static SESSION_CONFIG: LazyLock<SessionThresholds> = LazyLock::new(|| {
     }
 });
 
-// Legacy const aliases for backward compatibility - code that references these
+// Legacy const aliases for backward compatibility — code that references these
 // will get the configurable values at runtime via Deref.
 // TODO: Migrate all callsites to use SESSION_CONFIG.field directly.
 const SESSION_TTL_SECS: u64 = 1800; // default; actual value from SESSION_CONFIG

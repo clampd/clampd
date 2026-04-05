@@ -6,7 +6,7 @@
 //! The gateway mints tokens after an ALLOW decision. Tools verify them using
 //! the public key from `GET /.well-known/jwks.json`.
 //!
-//! Extracted from proxy.rs for testability - pure crypto, no I/O.
+//! Extracted from proxy.rs for testability — pure crypto, no I/O.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::{Signature, Signer, Verifier, SigningKey, VerifyingKey};
@@ -168,7 +168,7 @@ mod tests {
         let (sk, vk) = test_keypair();
         let input = default_mint_input();
         let token = mint(&sk, &input);
-        // Verify at exactly exp time (300s later) - should still be valid (exp == now, not now > exp)
+        // Verify at exactly exp time (300s later) — should still be valid (exp == now, not now > exp)
         let result = verify(&token, &vk, input.now + 300);
         assert!(result.is_ok(), "Token should be valid at exactly exp time");
     }

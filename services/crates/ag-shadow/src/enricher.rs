@@ -13,7 +13,7 @@ pub fn enrich(event: &ShadowEvent) -> Vec<String> {
         }
     }
 
-    // 2. Off-hours activity - uses agent's configured active hours window.
+    // 2. Off-hours activity — uses agent's configured active hours window.
     //    Both equal (including 0,0) means no restriction (24/7 agent).
     let start = event.active_hours_start;
     let end = event.active_hours_end;

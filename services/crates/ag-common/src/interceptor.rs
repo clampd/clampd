@@ -18,18 +18,18 @@ use tracing::{error, warn};
 
 use crate::auth::{generate_internal_hmac, verify_internal_hmac};
 
-/// Cached shared secret - read once from env on first use.
+/// Cached shared secret — read once from env on first use.
 fn shared_secret() -> &'static Option<String> {
     static SECRET: OnceLock<Option<String>> = OnceLock::new();
     SECRET.get_or_init(|| {
         let val = std::env::var("AG_INTERNAL_SECRET").ok().filter(|s| !s.is_empty());
         match &val {
             None => {
-                error!("AG_INTERNAL_SECRET is not set - internal gRPC auth DISABLED. \
+                error!("AG_INTERNAL_SECRET is not set — internal gRPC auth DISABLED. \
                        Set it in production: openssl rand -hex 64");
             }
             Some(s) if s.len() < 32 => {
-                warn!("AG_INTERNAL_SECRET is shorter than 32 chars - weak internal auth");
+                warn!("AG_INTERNAL_SECRET is shorter than 32 chars — weak internal auth");
             }
             _ => {}
         }

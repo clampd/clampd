@@ -40,6 +40,11 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       REGISTRY_URL: http://ag-registry:50051
+      REDTEAM_AGENT_ID: ${REDTEAM_AGENT_ID:-}
+      CLAMPD_AGENT_SECRET: ${REDTEAM_AGENT_SECRET:-}
+      FLEET_ANALYST_AGENT_ID: ${FLEET_ANALYST_AGENT_ID:-}
+      FLEET_DEVOPS_AGENT_ID: ${FLEET_DEVOPS_AGENT_ID:-}
+      FLEET_DBADMIN_AGENT_ID: ${FLEET_DBADMIN_AGENT_ID:-}
       RUST_LOG: "info,ag_redteam=debug"
     restart: on-failure
 

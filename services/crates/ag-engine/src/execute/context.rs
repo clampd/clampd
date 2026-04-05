@@ -7,7 +7,7 @@ use crate::scheme::{FieldId, FieldValue, Scheme};
 use std::sync::Arc;
 
 /// The execution context for a single tool call evaluation.
-/// Fields are stored in a fixed-size Vec indexed by FieldId - O(1) access.
+/// Fields are stored in a fixed-size Vec indexed by FieldId — O(1) access.
 pub struct ExecutionContext {
     values: Vec<FieldValue>,
     /// Pre-computed: all strings from tool.args joined with spaces.

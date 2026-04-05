@@ -1,6 +1,6 @@
-# @clampd/sdk - TypeScript SDK
+# @clampd/sdk — TypeScript SDK
 
-Runtime security for AI agents. Guard every tool call - OpenAI, Anthropic, LangChain.js - in 1 line. Prompt and response scanning enabled by default.
+Runtime security for AI agents. Guard every tool call — OpenAI, Anthropic, LangChain.js — in 1 line. Prompt and response scanning enabled by default.
 
 ## Installation
 
@@ -22,7 +22,7 @@ clampd.init({
   apiKey: "ag_live_...",
 });
 
-// Wrap your OpenAI client - done
+// Wrap your OpenAI client — done
 const client = clampd.openai(new OpenAI());
 
 // Use it exactly like before. Clampd intercepts every tool call.
@@ -38,10 +38,10 @@ const response = await client.chat.completions.create({
 
 ## What's New in 0.5.0
 
-- **Per-agent JWT identity** - each agent in a multi-agent system authenticates independently. Kill/rate-limit/EMA operate per-agent.
-- **Streaming guard** - opt-in tool call interception for streaming responses (`guardStream: true`)
-- **Circuit breaker & retry** - automatic retry with exponential backoff, circuit breaker for gateway failures
-- **CrewAI, ADK, Vercel AI wrappers** - guard tool calls across all major frameworks
+- **Per-agent JWT identity** — each agent in a multi-agent system authenticates independently. Kill/rate-limit/EMA operate per-agent.
+- **Streaming guard** — opt-in tool call interception for streaming responses (`guardStream: true`)
+- **Circuit breaker & retry** — automatic retry with exponential backoff, circuit breaker for gateway failures
+- **CrewAI, ADK, Vercel AI wrappers** — guard tool calls across all major frameworks
 - **216 detection rules** with Aho-Corasick prefilter (22μs at 10K rules)
 
 ## Configuration

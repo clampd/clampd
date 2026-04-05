@@ -15,9 +15,13 @@ pub mod license;
 /// Hardware fingerprint for license binding (sha2 + stdlib only).
 pub mod fingerprint;
 
-/// License guard - every service validates CLAMPD_LICENSE_KEY on startup.
+/// License guard -- every service validates CLAMPD_LICENSE_KEY on startup.
 /// Uses only sha2 + stdlib. No jsonwebtoken/reqwest needed.
 pub mod license_guard;
+
+/// Activation token validation -- offline validation for self-hosted deployments.
+/// Validates RS256 JWT stored in /var/lib/clampd/activation.json on startup.
+pub mod activation;
 
 #[cfg(feature = "normalizer")]
 pub mod normalizer;

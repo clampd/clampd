@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license - refusing to start"),
+        .expect("Invalid or tampered license — refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
             Some(pool)
         }
         Err(e) => {
-            warn!(error = %e, "Failed to connect to Redis - descriptor lookups disabled");
+            warn!(error = %e, "Failed to connect to Redis — descriptor lookups disabled");
             None
         }
     };
@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
 
         // Initial load from Redis
         if let Err(e) = rules_loader.reload().await {
-            warn!(error = %e, "Initial rules load from Redis failed - using builtins only");
+            warn!(error = %e, "Initial rules load from Redis failed — using builtins only");
         }
         info!(
             rule_count = rules_loader.rule_count(),
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
                     loader_clone.subscribe_and_poll(nats).await;
                 }
                 Err(e) => {
-                    warn!(error = %e, "Failed to connect to NATS - Redis polling active");
+                    warn!(error = %e, "Failed to connect to NATS — Redis polling active");
                 }
             }
         });

@@ -28,7 +28,7 @@ impl Default for DegradationConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DegradationMode {
-    /// 503 - block request (default for all stages).
+    /// 503 — block request (default for all stages).
     FailClosed,
     /// Proceed with risk=0.5 (Suspicious) and alert.
     AllowWithAlert,

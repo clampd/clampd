@@ -1,4 +1,4 @@
-//! clampd-cli - command-line interface for Clampd.
+//! clampd-cli — command-line interface for Clampd.
 //!
 //! Architecture boundaries:
 //! - Connects to Dashboard API via HTTP for ALL management operations
@@ -8,8 +8,6 @@
 
 mod commands;
 mod config;
-#[allow(dead_code)]
-mod db; // Legacy direct-DB queries; kept for local-only mode fallback
 mod http_client;
 mod license_gate;
 mod output;
@@ -24,7 +22,7 @@ use output::OutputFormat;
 use state::AppState;
 
 #[derive(Parser)]
-#[command(name = "clampd", version, about = "Clampd - Non-Human Identity Governor CLI")]
+#[command(name = "clampd", version, about = "Clampd — Non-Human Identity Governor CLI")]
 struct Cli {
     /// Output format: table, json, plain
     #[arg(long, short = 'o', global = true, default_value = "table")]
@@ -333,6 +331,34 @@ enum LicenseAction {
     Status,
     /// List all licenses
     List,
+    /// Print machine fingerprint for activation
+    Fingerprint,
+    /// Activate license on this machine (one-time, requires network)
+    ActivateMachine {
+        /// License JWT key
+        #[arg(long, env = "CLAMPD_LICENSE_KEY")]
+        license: String,
+        /// License service URL
+        #[arg(long, default_value = "https://license.clampd.dev")]
+        server: String,
+    },
+    /// Activate offline with a pre-generated activation token
+    ActivateOffline {
+        /// Activation token JWT
+        #[arg(long)]
+        activation_token: String,
+        /// License JWT key
+        #[arg(long, env = "CLAMPD_LICENSE_KEY")]
+        license: String,
+    },
+    /// Deactivate license from this machine
+    Deactivate {
+        /// License service URL
+        #[arg(long, default_value = "https://license.clampd.dev")]
+        server: String,
+    },
+    /// Show current license and activation status
+    ActivationStatus,
 }
 
 // ── Config ───────────────────────────────────────────────
@@ -362,18 +388,18 @@ enum ContextAction {
     Add {
         /// Context name (e.g. "prod", "staging")
         name: String,
-        /// Endpoint URL (Dashboard API or ag-control)
+        /// Dashboard API endpoint URL
         #[arg(long)]
         endpoint: String,
+        /// Gateway URL for proxy/test operations
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        gateway_url: Option<String>,
         /// Organization ID for this context
         #[arg(long = "set-org-id")]
         ctx_org_id: Option<String>,
         /// API token for authentication
         #[arg(long = "set-api-token")]
         ctx_api_token: Option<String>,
-        /// Transport: http or grpc
-        #[arg(long, default_value = "http")]
-        transport: String,
     },
     /// Remove a context
     Remove {
@@ -384,7 +410,7 @@ enum ContextAction {
     Set {
         /// Context name
         name: String,
-        /// Field to set: endpoint, org_id, api_token, transport, license_token
+        /// Field to set: dashboard_url, gateway_url, org_id, api_token, license_token
         #[arg(long)]
         field: String,
         /// Value to set
@@ -643,7 +669,7 @@ fn decode_license_claims(token: &str) -> Option<serde_json::Value> {
 /// 1. Explicit --org-id flag
 /// 2. License token (extract org_id from JWT claims)
 /// 3. Config file org_id
-/// 4. Fail with a helpful message (no auto-detect from DB - we use HTTP now)
+/// 4. Fail with a helpful message (no auto-detect from DB — we use HTTP now)
 async fn resolve_org_id(cli: &Cli, state: &AppState) -> Result<Uuid> {
     // 1. Explicit CLI flag
     if let Some(id) = cli.org_id {
@@ -702,7 +728,7 @@ async fn main() -> Result<()> {
     // Apply CLI flag overrides (highest priority) on active context
     if let Some(ref url) = cli.dashboard_url {
         if let Some(ctx) = cfg.active_context_mut() {
-            ctx.endpoint = url.clone();
+            ctx.dashboard_url = url.clone();
         }
     }
     if let Some(ref token) = cli.api_token {
@@ -717,9 +743,21 @@ async fn main() -> Result<()> {
     // ── License verification ──
     // Commands that can run without a license (help, version handled by clap,
     // plus config/context/activate for initial setup).
+    #[allow(unused_mut)]
     let mut needs_license = !matches!(
         cli.command,
-        Commands::Config { .. } | Commands::Context { .. } | Commands::Activate { .. } | Commands::Test { .. }
+        Commands::Config { .. }
+            | Commands::Context { .. }
+            | Commands::Activate { .. }
+            | Commands::License {
+                action: LicenseAction::Fingerprint
+                    | LicenseAction::ActivateMachine { .. }
+                    | LicenseAction::ActivateOffline { .. }
+                    | LicenseAction::Deactivate { .. }
+                    | LicenseAction::ActivationStatus,
+                ..
+            }
+            | Commands::Test { .. }
     );
     #[cfg(feature = "tui")]
     if matches!(cli.command, Commands::Demo { .. }) {
@@ -863,6 +901,17 @@ async fn main() -> Result<()> {
         Commands::License { action } => match action {
             LicenseAction::Status => commands::license::status(&state, org_id, fmt).await?,
             LicenseAction::List => commands::license::list(&state, org_id, fmt).await?,
+            LicenseAction::Fingerprint => commands::license::fingerprint().await?,
+            LicenseAction::ActivateMachine { license, server } => {
+                commands::license::activate_machine(&license, &server).await?
+            }
+            LicenseAction::ActivateOffline { activation_token, license } => {
+                commands::license::activate_offline(&activation_token, &license).await?
+            }
+            LicenseAction::Deactivate { server } => {
+                commands::license::deactivate(&server).await?
+            }
+            LicenseAction::ActivationStatus => commands::license::activation_status().await?,
         },
 
         // ── Config ──
@@ -876,8 +925,8 @@ async fn main() -> Result<()> {
             ContextAction::List => commands::context::list(&state.config, fmt).await?,
             ContextAction::Current => commands::context::current(&state.config).await?,
             ContextAction::Use { name } => commands::context::use_ctx(&name).await?,
-            ContextAction::Add { name, endpoint, ctx_org_id, ctx_api_token, transport } => {
-                commands::context::add(&name, &endpoint, ctx_org_id.as_deref(), ctx_api_token.as_deref(), &transport).await?
+            ContextAction::Add { name, endpoint, gateway_url, ctx_org_id, ctx_api_token } => {
+                commands::context::add(&name, &endpoint, gateway_url.as_deref(), ctx_org_id.as_deref(), ctx_api_token.as_deref()).await?
             }
             ContextAction::Remove { name } => commands::context::remove(&name).await?,
             ContextAction::Set { name, field, value } => {
@@ -1049,7 +1098,7 @@ async fn main() -> Result<()> {
             exit_on_fail,
         } => {
             let gw_url = gateway
-                .unwrap_or_else(|| state.config.services.gateway_url.clone());
+                .unwrap_or_else(|| state.config.gateway_url().to_string());
             let categories: Vec<String> = attacks
                 .map(|a| a.split(',').map(|s| s.trim().to_string()).collect())
                 .unwrap_or_default();
@@ -1089,7 +1138,7 @@ async fn main() -> Result<()> {
         // ── Activate ──
         Commands::Activate { license } => {
             let claims = decode_license_claims(&license)
-                .ok_or_else(|| anyhow::anyhow!("Invalid license token - could not decode JWT"))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid license token — could not decode JWT"))?;
 
             let org_id_str = claims.get("org_id")
                 .or(claims.get("sub"))

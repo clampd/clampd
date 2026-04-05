@@ -40,12 +40,12 @@ async fn main() -> anyhow::Result<()> {
     ag_common::license_guard::enforce_or_exit("ag-kill");
 
     // Validate license JWT and extract plan guard.
-    // Kill switch is a core feature available on ALL plans - no feature gating needed.
+    // Kill switch is a core feature available on ALL plans — no feature gating needed.
     let _plan_guard = Arc::new(
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license - refusing to start"),
+        .expect("Invalid or tampered license — refusing to start"),
     );
     info!(plan = %_plan_guard.plan, org_id = %_plan_guard.org_id, "Plan guard initialized (kill switch: all plans)");
 

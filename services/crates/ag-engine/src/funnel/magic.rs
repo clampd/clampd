@@ -1,4 +1,4 @@
-//! Magic byte detection - identify file types from byte content.
+//! Magic byte detection — identify file types from byte content.
 
 /// Detected file type from magic bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]

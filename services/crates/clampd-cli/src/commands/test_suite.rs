@@ -368,7 +368,7 @@ async fn call_proxy(
             reason: parsed.reason,
         })
     } else {
-        // No parseable JSON - infer from status code
+        // No parseable JSON — infer from status code
         Ok(ProxyResponse {
             allowed: status.is_success(),
             risk_score: None,
@@ -498,7 +498,7 @@ fn print_table_results(results: &[TestResult], verbose: bool) {
         if r.error.is_some() {
             errors += 1;
             println!(
-                "   !!  ERROR [{}] {} - {}",
+                "   !!  ERROR [{}] {} — {}",
                 r.category,
                 r.name,
                 r.error.as_deref().unwrap_or("unknown")
@@ -506,7 +506,7 @@ fn print_table_results(results: &[TestResult], verbose: bool) {
         } else if r.correct {
             passed += 1;
             let status = if r.actual_blocked { "BLOCKED" } else { "ALLOWED" };
-            println!("   OK  {} [{}] - {}", status, r.category, r.name);
+            println!("   OK  {} [{}] — {}", status, r.category, r.name);
             if verbose {
                 if let Some(score) = r.risk_score {
                     println!("        Risk score: {:.2}", score);
@@ -520,7 +520,7 @@ fn print_table_results(results: &[TestResult], verbose: bool) {
             let status = if r.actual_blocked { "BLOCKED" } else { "ALLOWED" };
             let expected = if r.expected_blocked { "BLOCKED" } else { "ALLOWED" };
             println!(
-                "   XX  {} [{}] - {} (expected {})",
+                "   XX  {} [{}] — {} (expected {})",
                 status, r.category, r.name, expected
             );
             if verbose {

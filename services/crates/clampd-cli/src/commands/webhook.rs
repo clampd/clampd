@@ -48,7 +48,7 @@ pub async fn create(state: &AppState, org_id: Uuid, url: &str, events: &str) -> 
     print_success(&format!("Webhook created: {id}"));
     if let Some(secret) = resp["secret"].as_str() {
         println!("  Secret: {secret}");
-        println!("  (Save this secret - it won't be shown again)");
+        println!("  (Save this secret — it won't be shown again)");
     }
     Ok(())
 }

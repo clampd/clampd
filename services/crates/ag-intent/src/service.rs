@@ -131,7 +131,7 @@ impl IntentServiceImpl {
             &req.params_normalized_json
         };
 
-        // Set raw params as tool.args_text (FieldId 4) - rules match against this
+        // Set raw params as tool.args_text (FieldId 4) — rules match against this
         ctx.set(FieldId(4), FieldValue::String(Arc::from(params_text.as_str())));
 
         // Set JSON args for field-specific matching
@@ -159,7 +159,7 @@ impl IntentServiceImpl {
         let mut conn = match pool.get().await {
             Ok(c) => c,
             Err(e) => {
-                warn!(error = %e, "Redis pool error for descriptor lookup - fail-open");
+                warn!(error = %e, "Redis pool error for descriptor lookup — fail-open");
                 return None;
             }
         };
@@ -222,7 +222,7 @@ impl IntentService for IntentServiceImpl {
                 category = %category_name,
                 defense_tier = defense_tier_label,
                 latency_us,
-                "Policy-only tool - skipping engine evaluation"
+                "Policy-only tool — skipping engine evaluation"
             );
 
             return Ok(Response::new(ClassifyResponse {
@@ -233,7 +233,7 @@ impl IntentService for IntentServiceImpl {
                 classification: "safe".to_string(),
                 labels: vec![],
                 reasoning: format!(
-                    "Tool category '{}' is policy-enforced only - engine evaluation skipped",
+                    "Tool category '{}' is policy-enforced only — engine evaluation skipped",
                     category_name
                 ),
                 matched_rules: vec![],
@@ -456,7 +456,7 @@ impl IntentService for IntentServiceImpl {
         }
 
         if eval.rule_matches.is_empty() {
-            reasoning.push_str(" - classified as safe");
+            reasoning.push_str(" — classified as safe");
         }
 
         // For Hybrid tier, annotate that policy should also check scope

@@ -18,9 +18,9 @@ pub async fn show(state: &AppState) -> Result<()> {
     // Show active context summary
     if let Some(ctx) = state.config.active_context() {
         println!("# Active context: {}", ctx.name);
-        println!("#   endpoint:  {}", ctx.endpoint);
-        println!("#   org_id:    {}", if ctx.org_id.is_empty() { "(not set)" } else { &ctx.org_id });
-        println!("#   transport: {}", ctx.transport);
+        println!("#   dashboard:   {}", ctx.dashboard_url);
+        println!("#   gateway_url: {}", ctx.gateway_url);
+        println!("#   org_id:      {}", if ctx.org_id.is_empty() { "(not set)" } else { &ctx.org_id });
     }
     Ok(())
 }

@@ -48,7 +48,7 @@ pub async fn create(state: &AppState, org_id: Uuid, name: Option<&str>) -> Resul
     print_success(&format!("API key created: {id}"));
     if let Some(key) = resp["key"].as_str() {
         println!("  Key: {key}");
-        println!("  (Save this key - it won't be shown again)");
+        println!("  (Save this key — it won't be shown again)");
     }
     Ok(())
 }

@@ -46,7 +46,7 @@ pub async fn status(state: &AppState) -> Result<()> {
 }
 
 pub async fn up(state: &AppState, detach: bool) -> Result<()> {
-    let compose_file = &state.config.services.compose_file;
+    let compose_file = &state.config.compose_file;
     let mut cmd = tokio::process::Command::new("docker");
     cmd.arg("compose").arg("-f").arg(compose_file).arg("up");
     if detach {
@@ -60,7 +60,7 @@ pub async fn up(state: &AppState, detach: bool) -> Result<()> {
 }
 
 pub async fn down(state: &AppState) -> Result<()> {
-    let compose_file = &state.config.services.compose_file;
+    let compose_file = &state.config.compose_file;
     let status = tokio::process::Command::new("docker")
         .arg("compose")
         .arg("-f")

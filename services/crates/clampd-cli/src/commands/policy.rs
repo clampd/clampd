@@ -73,7 +73,17 @@ pub async fn delete(state: &AppState, id: Uuid) -> Result<()> {
 pub async fn rules(state: &AppState, org_id: Uuid, fmt: OutputFormat) -> Result<()> {
     let client = state.api_client();
     let path = format!("/v1/orgs/{}/rules", org_id);
-    let rules: Vec<serde_json::Value> = client.get(&path).await?;
+    // API may return {total, items} or a flat array
+    let rules: Vec<serde_json::Value> = match client.get::<serde_json::Value>(&path).await? {
+        serde_json::Value::Array(arr) => arr,
+        serde_json::Value::Object(map) => {
+            map.get("items")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default()
+        }
+        _ => vec![],
+    };
 
     match fmt {
         OutputFormat::Json | OutputFormat::Plain => {

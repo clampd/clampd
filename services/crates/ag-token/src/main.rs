@@ -45,13 +45,13 @@ async fn main() -> Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license - refusing to start"),
+        .expect("Invalid or tampered license — refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
     let config = TokenConfig::from_env();
 
-    // Connect to Redis (required - refuse to start if unreachable)
+    // Connect to Redis (required — refuse to start if unreachable)
     let redis_manager = bb8_redis::RedisConnectionManager::new(config.redis_url.clone())?;
     let redis_pool = bb8::Pool::builder()
         .max_size(std::env::var("REDIS_POOL_MAX_SIZE").ok().and_then(|v| v.parse().ok()).unwrap_or(16))
@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     // Determine IdP mode from config
     let idp_mode = match config.idp_provider.as_str() {
         "none" => {
-            info!("IDP_PROVIDER=none - IdP exchange disabled, micro-token-only mode");
+            info!("IDP_PROVIDER=none — IdP exchange disabled, micro-token-only mode");
             IdpMode::Disabled
         }
         provider @ ("keycloak" | "okta" | "azure_ad") => {
@@ -104,12 +104,12 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Load or generate signing key - persisted to Redis for pod-restart survival.
+    // Load or generate signing key — persisted to Redis for pod-restart survival.
     // Seed is encrypted with AG_TOKEN_ENCRYPTION_KEY before storage (P2-13 fix).
     // If encryption key is not set, stores with PLAIN: prefix and logs a warning.
     let encryption_key = std::env::var("AG_TOKEN_ENCRYPTION_KEY").unwrap_or_default();
     if encryption_key.is_empty() {
-        warn!("AG_TOKEN_ENCRYPTION_KEY not set - signing key stored unencrypted in Redis. \
+        warn!("AG_TOKEN_ENCRYPTION_KEY not set — signing key stored unencrypted in Redis. \
                Set this env var in production for defense-in-depth.");
     }
 
@@ -138,7 +138,7 @@ async fn main() -> Result<()> {
                         manager
                     }
                     Err(e) => {
-                        warn!("Failed to decrypt signing key seed: {} - generating new key", e);
+                        warn!("Failed to decrypt signing key seed: {} — generating new key", e);
                         let manager = signing::SigningKeyManager::generate();
                         let encrypted = manager.encrypt_seed_for_storage(&encryption_key);
                         let _: () = redis::cmd("SET").arg("ag:signing:active_kid").arg(manager.active_kid()).query_async(&mut *conn).await.unwrap_or(());

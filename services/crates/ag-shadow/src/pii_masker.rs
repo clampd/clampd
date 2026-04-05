@@ -212,7 +212,7 @@ impl PiiMasker {
         // Sort by start position descending (for right-to-left replacement)
         all_matches.sort_by(|a, b| b.0.cmp(&a.0));
 
-        // Deduplicate overlapping ranges - keep longer match (same logic as tokenized path)
+        // Deduplicate overlapping ranges — keep longer match (same logic as tokenized path)
         let mut deduped: Vec<&(usize, usize, String)> = Vec::new();
         for find in &all_matches {
             if deduped.iter().all(|d| find.1 <= d.0 || find.0 >= d.1) {

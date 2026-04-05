@@ -1,6 +1,6 @@
 //! Typed field registry (Scheme) for the rule engine.
 //!
-//! Fields resolve to FieldId(u16) at parse time - array index, not hash lookup.
+//! Fields resolve to FieldId(u16) at parse time — array index, not hash lookup.
 //! ExecutionContext uses Vec<FieldValue> indexed by FieldId for O(1) access.
 
 mod types;
@@ -10,7 +10,7 @@ pub use types::{FieldType, FieldValue};
 use indexmap::IndexMap;
 use std::sync::Arc;
 
-/// Array index into ExecutionContext.values - not a string key.
+/// Array index into ExecutionContext.values — not a string key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FieldId(pub u16);
 

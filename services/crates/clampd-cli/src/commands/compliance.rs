@@ -137,40 +137,40 @@ fn checks_soc2(ev: &Evidence) -> Vec<CheckResult> {
         "CC6.1", "RBAC members configured",
         ev.member_count > 0,
         &format!("{} members with role-based access", ev.member_count),
-        "No org members configured - RBAC not enforced",
+        "No org members configured — RBAC not enforced",
     ));
     c.push(CheckResult::check(
         "CC6.1", "Admin audit trail active",
         ev.audit_trail_count > 0,
         &format!("{} audit entries recorded", ev.audit_trail_count),
-        "No audit trail entries - enable audit logging",
+        "No audit trail entries — enable audit logging",
     ));
 
     c.push(CheckResult::check(
         "CC6.2", "Active policies enforced",
         ev.policy_count > 0,
         &format!("{} active policies", ev.policy_count),
-        "No active policies - agent behavior is ungoverned",
+        "No active policies — agent behavior is ungoverned",
     ));
     c.push(CheckResult::check(
         "CC6.2", "Rules engine configured",
         ev.rule_count > 0,
         &format!("{} enabled rules", ev.rule_count),
-        "No rules configured - request filtering disabled",
+        "No rules configured — request filtering disabled",
     ));
 
     c.push(CheckResult::check(
         "CC6.3", "Webhook monitoring configured",
         ev.webhook_count > 0,
         &format!("{} active webhooks for change notifications", ev.webhook_count),
-        "No webhooks - operational changes are unmonitored",
+        "No webhooks — operational changes are unmonitored",
     ));
 
     c.push(CheckResult::check(
         "CC7.2", "Kill switch service available",
         ev.kill_service_reachable,
         "Kill switch service is reachable",
-        "Kill switch service unreachable - incident response degraded",
+        "Kill switch service unreachable — incident response degraded",
     ));
 
     let all_retention_ok = ev.audit_retention_days.iter().all(|d| *d >= 90);
@@ -180,14 +180,14 @@ fn checks_soc2(ev: &Evidence) -> Vec<CheckResult> {
         c.push(CheckResult::pass("CC7.3", "Audit retention >= 90 days", "All orgs meet 90-day retention"));
     } else {
         let min = ev.audit_retention_days.iter().min().unwrap_or(&0);
-        c.push(CheckResult::fail("CC7.3", "Audit retention >= 90 days", &format!("Minimum retention is {min} days - requires 90")));
+        c.push(CheckResult::fail("CC7.3", "Audit retention >= 90 days", &format!("Minimum retention is {min} days — requires 90")));
     }
 
     c.push(CheckResult::check(
         "CC8.1", "License management active",
         ev.active_licenses > 0,
         &format!("{} active license(s)", ev.active_licenses),
-        "No active licenses - deployment unregistered",
+        "No active licenses — deployment unregistered",
     ));
 
     if ev.api_keys_no_expiry > 0 {
@@ -211,35 +211,35 @@ fn checks_hipaa(ev: &Evidence) -> Vec<CheckResult> {
         "164.312(a)(1)", "Unique user identification (RBAC)",
         ev.member_count > 0,
         &format!("{} uniquely identified members", ev.member_count),
-        "No RBAC members - unique identification not enforced",
+        "No RBAC members — unique identification not enforced",
     ));
 
     c.push(CheckResult::check(
         "164.312(a)(2)(i)", "Emergency kill switch procedure",
         ev.kill_service_reachable,
         "Kill switch available for emergency access termination",
-        "Kill switch unreachable - emergency procedures degraded",
+        "Kill switch unreachable — emergency procedures degraded",
     ));
 
     c.push(CheckResult::check(
         "164.312(b)", "Audit controls implemented",
         ev.audit_trail_count > 0,
-        &format!("{} audit records - logging active", ev.audit_trail_count),
-        "No audit records - HIPAA audit control requirement not met",
+        &format!("{} audit records — logging active", ev.audit_trail_count),
+        "No audit records — HIPAA audit control requirement not met",
     ));
 
     c.push(CheckResult::check(
         "164.312(c)(1)", "Policy-based integrity controls",
         ev.policy_count > 0,
         &format!("{} active policies governing agent behavior", ev.policy_count),
-        "No policies - data integrity controls missing",
+        "No policies — data integrity controls missing",
     ));
 
     c.push(CheckResult::check(
         "164.312(d)", "Agent authentication enforced",
         ev.active_licenses > 0,
         "License-based agent authentication active",
-        "No active licenses - agent authentication unverified",
+        "No active licenses — agent authentication unverified",
     ));
 
     c.push(CheckResult::info(
@@ -250,7 +250,7 @@ fn checks_hipaa(ev: &Evidence) -> Vec<CheckResult> {
     if ev.api_keys_no_expiry > 0 {
         c.push(CheckResult::warn(
             "164.308(a)(5)", "Credential lifecycle management",
-            &format!("{} API keys without expiration - rotate or set expiry", ev.api_keys_no_expiry),
+            &format!("{} API keys without expiration — rotate or set expiry", ev.api_keys_no_expiry),
         ));
     } else {
         c.push(CheckResult::pass("164.308(a)(5)", "Credential lifecycle management", "All API keys have expiration"));
@@ -260,7 +260,7 @@ fn checks_hipaa(ev: &Evidence) -> Vec<CheckResult> {
         "164.308(a)(6)", "Incident notification (webhooks)",
         ev.webhook_count > 0,
         &format!("{} webhooks for incident notification", ev.webhook_count),
-        "No webhooks - incident notification not automated",
+        "No webhooks — incident notification not automated",
     ));
 
     c.push(CheckResult::check(
@@ -282,21 +282,21 @@ fn checks_iso27001(ev: &Evidence) -> Vec<CheckResult> {
         "A.5.1", "Security policies defined",
         ev.policy_count > 0,
         &format!("{} active security policies", ev.policy_count),
-        "No security policies - A.5.1 control not satisfied",
+        "No security policies — A.5.1 control not satisfied",
     ));
 
     c.push(CheckResult::check(
         "A.6.1", "Roles and responsibilities (RBAC)",
         ev.member_count > 0,
         &format!("{} members with assigned roles", ev.member_count),
-        "No RBAC - roles and responsibilities undefined",
+        "No RBAC — roles and responsibilities undefined",
     ));
 
     c.push(CheckResult::check(
         "A.8.1", "Agent inventory maintained",
         ev.agent_count > 0,
         &format!("{} agents registered ({} active, {} killed)", ev.agent_count, ev.active_agents, ev.killed_agents),
-        "No agents registered - asset inventory empty",
+        "No agents registered — asset inventory empty",
     ));
     c.push(CheckResult::check(
         "A.8.2", "License asset tracking",
@@ -314,14 +314,14 @@ fn checks_iso27001(ev: &Evidence) -> Vec<CheckResult> {
         "A.9.4", "Agent credential management",
         ev.active_licenses > 0,
         "License-based credential management active",
-        "No license-based auth - credential management gap",
+        "No license-based auth — credential management gap",
     ));
 
     c.push(CheckResult::check(
         "A.12.4", "Event logging (audit trail)",
         ev.audit_trail_count > 0,
         &format!("{} audit trail entries", ev.audit_trail_count),
-        "No audit trail - event logging not implemented",
+        "No audit trail — event logging not implemented",
     ));
     c.push(CheckResult::check(
         "A.12.4", "Rule-based monitoring",
@@ -334,7 +334,7 @@ fn checks_iso27001(ev: &Evidence) -> Vec<CheckResult> {
         "A.16.1", "Incident response capability",
         ev.kill_service_reachable,
         "Kill switch operational for incident response",
-        "Kill switch unreachable - incident response degraded",
+        "Kill switch unreachable — incident response degraded",
     ));
     c.push(CheckResult::check(
         "A.16.1", "Incident notification automation",
@@ -363,7 +363,7 @@ fn checks_gdpr(ev: &Evidence) -> Vec<CheckResult> {
         "Art.5(1)(b)", "Purpose limitation via policies",
         ev.policy_count > 0,
         &format!("{} policies enforcing purpose limitation", ev.policy_count),
-        "No policies - purpose limitation not technically enforced",
+        "No policies — purpose limitation not technically enforced",
     ));
 
     c.push(CheckResult::info(
@@ -380,34 +380,34 @@ fn checks_gdpr(ev: &Evidence) -> Vec<CheckResult> {
         "Art.25", "Data minimization (rule-based filtering)",
         ev.rule_count > 0,
         &format!("{} rules filtering agent data access", ev.rule_count),
-        "No rules - data minimization not enforced at proxy layer",
+        "No rules — data minimization not enforced at proxy layer",
     ));
 
     c.push(CheckResult::check(
         "Art.30", "Processing activity records (audit trail)",
         ev.audit_trail_count > 0,
         &format!("{} audit records of processing activities", ev.audit_trail_count),
-        "No audit records - Art. 30 not satisfied",
+        "No audit records — Art. 30 not satisfied",
     ));
 
     c.push(CheckResult::check(
         "Art.32(1)(b)", "Access control (RBAC)",
         ev.member_count > 0,
         &format!("{} members with role-based access controls", ev.member_count),
-        "No RBAC - access control measures missing",
+        "No RBAC — access control measures missing",
     ));
     c.push(CheckResult::check(
         "Art.32(1)(d)", "Testing and assessment capability",
         ev.kill_service_reachable,
         "Kill switch available for security testing/response",
-        "Kill switch unreachable - security assessment gap",
+        "Kill switch unreachable — security assessment gap",
     ));
 
     c.push(CheckResult::check(
         "Art.33", "Breach notification mechanism",
         ev.webhook_count > 0,
         &format!("{} webhooks for automated breach notification", ev.webhook_count),
-        "No webhooks - breach notification not automated (72h requirement)",
+        "No webhooks — breach notification not automated (72h requirement)",
     ));
 
     c.push(CheckResult::info(
@@ -421,7 +421,7 @@ fn checks_gdpr(ev: &Evidence) -> Vec<CheckResult> {
     if ev.api_keys_no_expiry > 0 {
         c.push(CheckResult::warn(
             "Art.32(1)(a)", "Credential rotation",
-            &format!("{} API keys without expiration - rotation recommended", ev.api_keys_no_expiry),
+            &format!("{} API keys without expiration — rotation recommended", ev.api_keys_no_expiry),
         ));
     } else {
         c.push(CheckResult::pass("Art.32(1)(a)", "Credential rotation", "All API keys have expiration dates"));
@@ -465,7 +465,7 @@ pub async fn run(state: &AppState, framework: &str) -> Result<()> {
             "info" => { info += 1; "INFO" },
             _ => "????",
         };
-        println!("  {icon}  [{:>16}] {} - {}", c.control, c.name, c.details);
+        println!("  {icon}  [{:>16}] {} — {}", c.control, c.name, c.details);
     }
 
     println!("\n{} Compliance Summary:", fw.to_uppercase());

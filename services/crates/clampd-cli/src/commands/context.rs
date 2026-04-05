@@ -13,8 +13,8 @@ pub async fn list(cfg: &CliConfig, fmt: OutputFormat) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&out)?);
         }
         _ => {
-            println!("{:<4} {:<15} {:<40} {:<20} {:<8}",
-                "", "NAME", "ENDPOINT", "ORG_ID", "TRANSPORT");
+            println!("{:<4} {:<15} {:<40} {:<30} {:<20}",
+                "", "NAME", "DASHBOARD", "GATEWAY", "ORG_ID");
             for ctx in &cfg.contexts {
                 let marker = if ctx.name == cfg.current_context { " *" } else { "  " };
                 let org_display = if ctx.org_id.is_empty() {
@@ -24,8 +24,8 @@ pub async fn list(cfg: &CliConfig, fmt: OutputFormat) -> Result<()> {
                 } else {
                     ctx.org_id.clone()
                 };
-                println!("{:<4} {:<15} {:<40} {:<20} {:<8}",
-                    marker, ctx.name, ctx.endpoint, org_display, ctx.transport);
+                println!("{:<4} {:<15} {:<40} {:<30} {:<20}",
+                    marker, ctx.name, ctx.dashboard_url, ctx.gateway_url, org_display);
             }
         }
     }
@@ -52,17 +52,17 @@ pub async fn use_ctx(name: &str) -> Result<()> {
 pub async fn add(
     name: &str,
     endpoint: &str,
+    gateway_url: Option<&str>,
     org_id: Option<&str>,
     api_token: Option<&str>,
-    transport: &str,
 ) -> Result<()> {
     let mut cfg = CliConfig::load()?.with_env_overrides();
     let ctx = ClampdContext {
         name: name.to_string(),
-        endpoint: endpoint.to_string(),
+        dashboard_url: endpoint.to_string(),
+        gateway_url: gateway_url.unwrap_or("http://127.0.0.1:8080").to_string(),
         org_id: org_id.unwrap_or("").to_string(),
         api_token: api_token.unwrap_or("").to_string(),
-        transport: transport.to_string(),
         license_token: String::new(),
     };
     cfg.add_context(ctx)?;

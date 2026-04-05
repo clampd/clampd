@@ -10,12 +10,12 @@
 //! Format: `category:subcategory:action`
 //!
 //! Examples:
-//!   `db:query:read`          - SELECT queries
-//!   `db:mutate:destructive`  - DROP TABLE, TRUNCATE
-//!   `exec:shell:run`         - shell command execution
-//!   `fs:file:read`           - reading files
-//!   `net:http:outbound`      - outbound HTTP requests
-//!   `llm:input:prompt`       - LLM prompt input
+//!   `db:query:read`          — SELECT queries
+//!   `db:mutate:destructive`  — DROP TABLE, TRUNCATE
+//!   `exec:shell:run`         — shell command execution
+//!   `fs:file:read`           — reading files
+//!   `net:http:outbound`      — outbound HTTP requests
+//!   `llm:input:prompt`       — LLM prompt input
 //!
 //! Hierarchy matching:
 //!   `db:*`           matches `db:query:read`, `db:mutate:destructive`, etc.
@@ -91,7 +91,7 @@ impl std::fmt::Display for Scope {
 /// - `*` covers everything
 ///
 /// The rule: iterate over the *requested* scope parts. If all parts match the
-/// corresponding pattern parts, the grant covers the request - even if the
+/// corresponding pattern parts, the grant covers the request — even if the
 /// pattern has additional qualifier levels beyond the request. A more specific
 /// grant (db:query:read:pii) implies less specific access (db:query:read).
 pub fn scope_matches(pattern: &str, scope: &str) -> bool {
@@ -113,7 +113,7 @@ pub fn scope_matches(pattern: &str, scope: &str) -> bool {
     }
 
     // All scope parts matched. Pattern may be longer (more specific grant)
-    // which is fine - a 4-level grant covers a 3-level request.
+    // which is fine — a 4-level grant covers a 3-level request.
     true
 }
 
@@ -405,11 +405,11 @@ fn map_llm_action(action: &str) -> String {
 /// Get the defense tier for a scope category prefix.
 pub fn defense_tier_for_category(category: &str) -> DefenseTier {
     match category {
-        // Rules - payload inspection required
+        // Rules — payload inspection required
         "db" | "exec" | "fs" | "net" | "llm" => DefenseTier::Rules,
-        // Policy - scope enforcement only (no payload rules)
+        // Policy — scope enforcement only (no payload rules)
         "unknown" => DefenseTier::Policy,
-        // Hybrid - payload inspection + scope enforcement
+        // Hybrid — payload inspection + scope enforcement
         "cloud" | "browser" | "agent" | "auth" | "comms" | "scm" | "payment" => DefenseTier::Hybrid,
         // Unknown → Policy (default-deny)
         _ => DefenseTier::Policy,
@@ -486,7 +486,7 @@ pub fn permission_to_scopes(tool_name: &str, permission: &str) -> Vec<String> {
         ("payment", "read_write") => vec!["payment:transaction:read".into(), "payment:transaction:write".into()],
         ("payment", "full") => vec!["payment:*".into()],
 
-        // Unknown category - derive from category name
+        // Unknown category — derive from category name
         (cat, "full") => vec![format!("{cat}:*")],
         (cat, "read_write") => vec![format!("{cat}:*:read"), format!("{cat}:*:write")],
         (cat, _) => vec![format!("{cat}:*:read")],

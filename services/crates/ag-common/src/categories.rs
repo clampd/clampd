@@ -16,7 +16,7 @@ use crate::tool_names::canonicalize;
 pub enum DefenseTier {
     /// Must go through ag-engine for payload inspection.
     Rules,
-    /// Scope enforcement only - default-deny, no payload inspection needed.
+    /// Scope enforcement only — default-deny, no payload inspection needed.
     Policy,
     /// Both: ag-engine for payload + ag-policy for scope.
     Hybrid,
@@ -44,7 +44,7 @@ pub enum Category {
     AgentDelegation,
     LlmInput,
     LlmOutput,
-    /// AP2 payment operations (future - extension point for payment guardrails).
+    /// AP2 payment operations (future — extension point for payment guardrails).
     Payment,
     Unknown,
 }
@@ -78,7 +78,7 @@ impl Category {
     /// Which defense tier handles this category.
     pub fn defense_tier(&self) -> DefenseTier {
         match self {
-            // Rules - payload inspection required
+            // Rules — payload inspection required
             Category::Shell => DefenseTier::Rules,
             Category::FilesystemRead => DefenseTier::Rules,
             Category::FilesystemWrite => DefenseTier::Rules,
@@ -90,21 +90,21 @@ impl Category {
             Category::LlmInput => DefenseTier::Rules,
             Category::LlmOutput => DefenseTier::Rules,
 
-            // Policy - scope enforcement only (no payload rules)
+            // Policy — scope enforcement only (no payload rules)
             Category::HttpInbound => DefenseTier::Policy,
-            // Payment - Hybrid (rules for amount/vendor + Cedar for spend limits)
+            // Payment — Hybrid (rules for amount/vendor + Cedar for spend limits)
             Category::Payment => DefenseTier::Hybrid,
 
-            // Hybrid - payload inspection + scope enforcement
+            // Hybrid — payload inspection + scope enforcement
             // (moved from Policy after adding R178-R182, R188-R192, R074-R086)
             Category::CloudInfra => DefenseTier::Hybrid,
             Category::BrowserScraping => DefenseTier::Hybrid,
             Category::AgentDelegation => DefenseTier::Hybrid,
-            // Unknown tools MUST be scanned - we don't know what they do.
+            // Unknown tools MUST be scanned — we don't know what they do.
             // Default-deny philosophy: if we can't categorize it, inspect it.
             Category::Unknown => DefenseTier::Rules,
 
-            // Hybrid - both payload + scope
+            // Hybrid — both payload + scope
             Category::AuthSecrets => DefenseTier::Hybrid,
             Category::EmailMessaging => DefenseTier::Hybrid,
             Category::GitVcs => DefenseTier::Hybrid,
@@ -145,17 +145,17 @@ fn classify_canonical(name: &str) -> Category {
         return Category::Shell;
     }
 
-    // Filesystem - distinguish read vs write
+    // Filesystem — distinguish read vs write
     if name.starts_with("filesystem.") {
         return classify_filesystem(name);
     }
 
-    // Database - distinguish query vs mutate
+    // Database — distinguish query vs mutate
     if name.starts_with("database.") {
         return classify_database(name);
     }
 
-    // HTTP - distinguish outbound vs inbound
+    // HTTP — distinguish outbound vs inbound
     if name.starts_with("http.") {
         return classify_http(name);
     }
@@ -232,7 +232,7 @@ fn classify_canonical(name: &str) -> Category {
         return Category::AgentDelegation;
     }
 
-    // LLM - distinguish input vs output
+    // LLM — distinguish input vs output
     if name.starts_with("llm.") {
         return classify_llm(name);
     }
@@ -310,7 +310,7 @@ fn classify_canonical(name: &str) -> Category {
         return Category::EmailMessaging;
     }
 
-    // MCP tools - strip `mcp.` prefix and re-classify the inner tool.
+    // MCP tools — strip `mcp.` prefix and re-classify the inner tool.
     // e.g., "mcp.github.push" → "github.push" → GitVcs
     if name.starts_with("mcp.") {
         let inner = &name[4..];
@@ -322,7 +322,7 @@ fn classify_canonical(name: &str) -> Category {
         }
     }
 
-    // Fallback - unknown tools still get scanned (DefenseTier::Rules)
+    // Fallback — unknown tools still get scanned (DefenseTier::Rules)
     Category::Unknown
 }
 
@@ -404,7 +404,7 @@ mod tests {
         for cat in &policy_cats {
             assert_eq!(cat.defense_tier(), DefenseTier::Policy, "{:?} should be Policy", cat);
         }
-        // Unknown is Rules tier - unknown tools must always be scanned
+        // Unknown is Rules tier — unknown tools must always be scanned
         assert_eq!(Category::Unknown.defense_tier(), DefenseTier::Rules);
     }
 

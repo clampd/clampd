@@ -78,7 +78,7 @@ pub async fn register(
     // Show agent secret if returned
     if let Some(secret) = resp["agent_secret"].as_str() {
         println!("  Agent Secret: {secret}");
-        println!("  (Save this secret - it won't be shown again)");
+        println!("  (Save this secret — it won't be shown again)");
     }
     Ok(())
 }

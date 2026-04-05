@@ -3,7 +3,7 @@ use ag_proto::agentguard::policy::PolicyAction;
 /// Decision aggregation: scope_exemption > deny > downscope > default_allow.
 ///
 /// When a scope exemption is granted, it overrides deny from the main OPA
-/// evaluation - the whole point of scope exemptions is to authorize an agent
+/// evaluation — the whole point of scope exemptions is to authorize an agent
 /// for actions that would otherwise be blocked by rules.
 pub struct DecisionAggregator {
     deny_reasons: Vec<String>,

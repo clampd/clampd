@@ -1,4 +1,4 @@
-//! Shadow event publishing - shared between proxy.rs and scan.rs.
+//! Shadow event publishing — shared between proxy.rs and scan.rs.
 //!
 //! Publishes ShadowEvent payloads to NATS for ag-shadow and ag-risk consumption.
 //! Falls back to WAL (write-ahead log) when NATS is unavailable.
@@ -13,7 +13,7 @@ use crate::AppState;
 /// Publish a shadow event to NATS (fire-and-forget), with WAL fallback.
 ///
 /// Callers construct `ShadowEvent` directly using struct update syntax
-/// against `ShadowEvent::default()` - no intermediate param structs needed.
+/// against `ShadowEvent::default()` — no intermediate param structs needed.
 pub async fn publish_event(state: &AppState, event: &ag_common::models::ShadowEvent) {
     publish_to_nats(state, event).await;
 }
@@ -28,11 +28,11 @@ async fn publish_to_nats(state: &AppState, event: &ag_common::models::ShadowEven
                 .publish("agentguard.events", nats_payload)
                 .await
             {
-                tracing::warn!("Failed to publish shadow event to NATS: {} - writing to WAL", e);
+                tracing::warn!("Failed to publish shadow event to NATS: {} — writing to WAL", e);
                 if let Some(ref wal) = state.wal {
                     let wal_result = wal.append(&payload).await;
                     if wal_result != crate::wal_file::WalAppendResult::Ok {
-                        tracing::error!("WAL write also failed: {:?} - shadow event lost", wal_result);
+                        tracing::error!("WAL write also failed: {:?} — shadow event lost", wal_result);
                     }
                 }
             }

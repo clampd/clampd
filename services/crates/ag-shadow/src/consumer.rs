@@ -83,11 +83,11 @@ pub fn verify_event_hmac(payload: &[u8], expected_hmac: &str, secret: &[u8]) -> 
 fn load_hmac_secret() -> Option<Vec<u8>> {
     match std::env::var("AG_HMAC_SECRET") {
         Ok(val) if !val.is_empty() => {
-            info!("AG_HMAC_SECRET configured - HMAC verification enabled for shadow events");
+            info!("AG_HMAC_SECRET configured — HMAC verification enabled for shadow events");
             Some(val.into_bytes())
         }
         _ => {
-            warn!("AG_HMAC_SECRET not set - HMAC verification disabled (backward compatible)");
+            warn!("AG_HMAC_SECRET not set — HMAC verification disabled (backward compatible)");
             None
         }
     }
@@ -156,7 +156,7 @@ async fn run_consumer_inner(
             jetstream::consumer::pull::Config {
                 durable_name: Some(consumer_name.to_string()),
                 ack_policy: jetstream::consumer::AckPolicy::Explicit,
-                max_deliver: 20, // Increased from 5 - more retries before permanent loss
+                max_deliver: 20, // Increased from 5 — more retries before permanent loss
                 ..Default::default()
             },
         )
@@ -235,7 +235,7 @@ async fn run_consumer_inner(
                                 let expected = hmac_value.as_str();
                                 if !verify_event_hmac(&msg.payload, expected, secret) {
                                     warn!(
-                                        "HMAC verification failed for shadow event - quarantining as hmac_verification_failed"
+                                        "HMAC verification failed for shadow event — quarantining as hmac_verification_failed"
                                     );
                                     let reason = QuarantineDecider::malformed_reason(
                                         "hmac_verification_failed",
@@ -247,7 +247,7 @@ async fn run_consumer_inner(
                                                 if attempt == 2 {
                                                     error!("HMAC quarantine write failed after 3 attempts: {}", e);
                                                 } else {
-                                                    warn!("HMAC quarantine write attempt {} failed: {} - retrying", attempt + 1, e);
+                                                    warn!("HMAC quarantine write attempt {} failed: {} — retrying", attempt + 1, e);
                                                     tokio::time::sleep(Duration::from_millis(100 * (1 << attempt))).await;
                                                 }
                                             }
@@ -262,9 +262,9 @@ async fn run_consumer_inner(
 
                     match serde_json::from_slice::<ShadowEvent>(&msg.payload) {
                         Ok(mut event) => {
-                            // 0. Basic event validation - reject obviously forged events
+                            // 0. Basic event validation — reject obviously forged events
                             if event.request_id.is_nil() || event.org_id.is_empty() {
-                                warn!("Rejecting shadow event with missing required fields - possible injection");
+                                warn!("Rejecting shadow event with missing required fields — possible injection");
                                 msg.ack().await.ok();
                                 continue;
                             }
@@ -281,9 +281,9 @@ async fn run_consumer_inner(
                                         Ok(_) => break,
                                         Err(e) => {
                                             if attempt == 2 {
-                                                error!("Quarantine write failed after 3 attempts: {} - event will be processed without quarantine record", e);
+                                                error!("Quarantine write failed after 3 attempts: {} — event will be processed without quarantine record", e);
                                             } else {
-                                                warn!("Quarantine write attempt {} failed: {} - retrying", attempt + 1, e);
+                                                warn!("Quarantine write attempt {} failed: {} — retrying", attempt + 1, e);
                                                 tokio::time::sleep(Duration::from_millis(100 * (1 << attempt))).await;
                                             }
                                         }
@@ -331,9 +331,9 @@ async fn run_consumer_inner(
                                         Ok(_) => break,
                                         Err(e) => {
                                             if attempt == 2 {
-                                                error!("PII quarantine write failed after 3 attempts: {} - proceeding without quarantine record", e);
+                                                error!("PII quarantine write failed after 3 attempts: {} — proceeding without quarantine record", e);
                                             } else {
-                                                warn!("PII quarantine write attempt {} failed: {} - retrying", attempt + 1, e);
+                                                warn!("PII quarantine write attempt {} failed: {} — retrying", attempt + 1, e);
                                                 tokio::time::sleep(Duration::from_millis(100 * (1 << attempt))).await;
                                             }
                                         }
@@ -377,9 +377,9 @@ async fn run_consumer_inner(
                                     Ok(_) => break,
                                     Err(qe) => {
                                         if attempt == 2 {
-                                            error!("Raw quarantine write failed after 3 attempts: {} - malformed event lost", qe);
+                                            error!("Raw quarantine write failed after 3 attempts: {} — malformed event lost", qe);
                                         } else {
-                                            warn!("Raw quarantine write attempt {} failed: {} - retrying", attempt + 1, qe);
+                                            warn!("Raw quarantine write attempt {} failed: {} — retrying", attempt + 1, qe);
                                             tokio::time::sleep(Duration::from_millis(100 * (1 << attempt))).await;
                                         }
                                     }
@@ -431,14 +431,14 @@ async fn run_consumer_inner(
             }
 
             if flush_succeeded {
-                // ClickHouse write confirmed - ACK all messages in this batch
+                // ClickHouse write confirmed — ACK all messages in this batch
                 for msg in &pending_acks {
                     if let Err(e) = msg.ack().await {
                         warn!("Failed to ACK message after successful flush: {}", e);
                     }
                 }
             } else {
-                // ClickHouse write failed - NACK messages for redelivery
+                // ClickHouse write failed — NACK messages for redelivery
                 for msg in &pending_acks {
                     if let Err(e) = msg.ack_with(async_nats::jetstream::AckKind::Nak(None)).await {
                         warn!("Failed to NACK message after flush failure: {}", e);
@@ -499,7 +499,7 @@ pub async fn publish_to_dead_letter(nats: &async_nats::Client, payload: &[u8], r
         error!(
             error = %e,
             reason = %reason,
-            "Failed to publish to dead-letter topic - event permanently lost"
+            "Failed to publish to dead-letter topic — event permanently lost"
         );
     } else {
         warn!(

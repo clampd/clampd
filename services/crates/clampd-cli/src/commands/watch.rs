@@ -12,7 +12,7 @@ pub async fn run(state: &AppState, agent_filter: Option<Uuid>, plan_info: Option
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
         ExecutableCommand,
     };
-    use futures::{SinkExt, StreamExt};
+    use futures::StreamExt;
     use ratatui::prelude::*;
     use ratatui::widgets::*;
     use std::collections::VecDeque;
@@ -183,11 +183,10 @@ pub async fn run(state: &AppState, agent_filter: Option<Uuid>, plan_info: Option
 
     let ws_tx = tx.clone();
     let ws_handle = {
-        let risk_url = state.config.services.risk_url.clone();
+        let dashboard_url = state.config.dashboard_url().to_string();
         tokio::spawn(async move {
-            // Convert gRPC URL to WS URL for ag-risk WebSocket port (8081)
-            // risk_url is typically http://127.0.0.1:50056 (gRPC), WS is on port 8081
-            let ws_host = risk_url
+            // Derive WS host from dashboard URL (same host, risk WS on port 8081)
+            let ws_host = dashboard_url
                 .trim_start_matches("http://")
                 .trim_start_matches("https://")
                 .split(':')
@@ -239,7 +238,7 @@ pub async fn run(state: &AppState, agent_filter: Option<Uuid>, plan_info: Option
     let poll_handle = {
         let dashboard_url = state.config.dashboard_url().to_string();
         let org_id = state.config.org_id().to_string();
-        let gateway_url = state.config.services.gateway_url.clone();
+        let gateway_url = state.config.gateway_url().to_string();
         let api_token = state.config.api_token().to_string();
         let agent_filter_clone = agent_filter;
         tokio::spawn(async move {
@@ -384,8 +383,8 @@ pub async fn run(state: &AppState, agent_filter: Option<Uuid>, plan_info: Option
 
             // ── Black + Red theme ─────────────────────────────
             let bg = Color::Black;
-            let bright = Color::Rgb(255, 255, 255);    // pure white - headlines, selected
-            let text = Color::Rgb(220, 220, 220);      // light text - primary content
+            let bright = Color::Rgb(255, 255, 255);    // pure white — headlines, selected
+            let text = Color::Rgb(220, 220, 220);      // light text — primary content
             let muted = Color::Rgb(140, 140, 140);     // dim labels, metadata
             let border_c = Color::Rgb(100, 100, 100);  // borders
             let red = Color::Rgb(255, 60, 60);         // danger, blocked, kill
@@ -407,12 +406,12 @@ pub async fn run(state: &AppState, agent_filter: Option<Uuid>, plan_info: Option
                     Line::from(""),
                     Line::from(Span::styled("  SECURITY FEATURES", Style::default().fg(red).add_modifier(Modifier::BOLD))),
                     Line::from(""),
-                    Line::from(vec![Span::styled("  [PII]  ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("PII detection - email, SSN, credit card, phone regex scan", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [ENC]  ", Style::default().fg(amber).add_modifier(Modifier::BOLD)), Span::styled("Encoding anomaly - base64, URL-encode, hex, unicode obfuscation (+0.15 risk each)", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [SES]  ", Style::default().fg(bright)), Span::styled("Session tracking - cross-request correlation, 15-min windows, risk accumulation", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [ANO]  ", Style::default().fg(bright)), Span::styled("Anomaly detection - velocity, scope, time-of-day, volume baselines", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [POL]  ", Style::default().fg(bright)), Span::styled("Policy engine - DSL + OPA/Rego rules, intent classification", Style::default().fg(text))]),
-                    Line::from(vec![Span::styled("  [KILL] ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("Kill switch - < 50ms agent termination, token revocation, session purge", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [PII]  ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("PII detection — email, SSN, credit card, phone regex scan", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [ENC]  ", Style::default().fg(amber).add_modifier(Modifier::BOLD)), Span::styled("Encoding anomaly — base64, URL-encode, hex, unicode obfuscation (+0.15 risk each)", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [SES]  ", Style::default().fg(bright)), Span::styled("Session tracking — cross-request correlation, 15-min windows, risk accumulation", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [ANO]  ", Style::default().fg(bright)), Span::styled("Anomaly detection — velocity, scope, time-of-day, volume baselines", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [POL]  ", Style::default().fg(bright)), Span::styled("Policy engine — DSL + OPA/Rego rules, intent classification", Style::default().fg(text))]),
+                    Line::from(vec![Span::styled("  [KILL] ", Style::default().fg(red).add_modifier(Modifier::BOLD)), Span::styled("Kill switch — < 50ms agent termination, token revocation, session purge", Style::default().fg(text))]),
                     Line::from(""),
                     Line::from(Span::styled("  Press ? to close", Style::default().fg(muted))),
                 ];

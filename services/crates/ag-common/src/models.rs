@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Agent identity - maps to `agents` table in PostgreSQL.
+/// Agent identity — maps to `agents` table in PostgreSQL.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub id: Uuid,
@@ -23,7 +23,7 @@ pub struct Agent {
     pub last_active_at: DateTime<Utc>,
 }
 
-/// A tool grant for an agent - stored in Redis by ag-control.
+/// A tool grant for an agent — stored in Redis by ag-control.
 /// Key: ag:agent:tool:{agent_id}:{tool_name}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentToolGrant {
@@ -252,7 +252,7 @@ pub struct MicroTokenClaims {
     pub session_id: Option<String>,
 }
 
-/// Pipeline context - travels through the entire request pipeline.
+/// Pipeline context — travels through the entire request pipeline.
 #[derive(Debug, Clone)]
 pub struct PipelineContext {
     pub request_id: Uuid,
@@ -268,16 +268,16 @@ pub struct PipelineContext {
     pub tool_response: Option<ResponseMetadata>,
 }
 
-/// Why a request was rejected - used by ag-risk to decide whether to feed
+/// Why a request was rejected — used by ag-risk to decide whether to feed
 /// the event into the EMA scorer. Only `Security` events affect suspicion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RejectionType {
-    /// Rule match, intent block, behavioral anomaly - feeds into EMA.
+    /// Rule match, intent block, behavioral anomaly — feeds into EMA.
     Security,
-    /// Scope mismatch, delegation error, license issue - does NOT feed into EMA.
+    /// Scope mismatch, delegation error, license issue — does NOT feed into EMA.
     Config,
-    /// Rate limit, budget exceeded - does NOT feed into EMA.
+    /// Rate limit, budget exceeded — does NOT feed into EMA.
     RateLimit,
     /// Allowed requests or unclassified denials.
     None,
@@ -821,7 +821,7 @@ mod tests {
             "degraded_stages": [],
             "latency_ms": 5,
             "timestamp": "2026-03-20T00:00:00Z"
-            // NOTE: no rejection_type field - must default to None
+            // NOTE: no rejection_type field — must default to None
         });
         let event: ShadowEvent = serde_json::from_value(minimal_json).unwrap();
         assert_eq!(event.rejection_type, RejectionType::None);

@@ -17,7 +17,7 @@
 //! 10. SQL comment strip
 //! 11. Punycode decode (xn-- domains)
 //! 12. Whitespace normalization
-//! 13. Case preservation (no lowercasing - rules handle case-insensitive matching)
+//! 13. Case preservation (no lowercasing — rules handle case-insensitive matching)
 
 use base64::Engine;
 use regex::Regex;
@@ -154,7 +154,7 @@ fn normalize_string(input: &str, encodings: &mut Vec<String>) -> String {
         // Step 12: Whitespace normalization
         current = normalize_whitespace(&current);
 
-        // Step 13: Case preservation - intentionally no lowercasing.
+        // Step 13: Case preservation — intentionally no lowercasing.
 
         // If nothing changed this pass, we're done.
         if current == before {
@@ -375,7 +375,7 @@ fn decode_punycode_label(encoded: &str) -> Option<String> {
     };
 
     // For security purposes, if we detect xn-- we flag it even if
-    // full decoding fails - the label is suspicious regardless
+    // full decoding fails — the label is suspicious regardless
     if basic_part.is_empty() && encoded.len() > 2 {
         // Return a marker that shows this is a decoded IDN
         return Some(format!("[IDN:{}]", encoded));
@@ -656,7 +656,7 @@ mod tests {
 
     #[test]
     fn test_fullwidth_homoglyph() {
-        // Fullwidth "DROP" - these are also caught by NFKC but homoglyph step
+        // Fullwidth "DROP" — these are also caught by NFKC but homoglyph step
         // handles the broader set
         let input = json!({"query": "\u{FF24}\u{FF32}\u{FF2F}\u{FF30} TABLE"});
         let (normalized, encodings) = normalize(&input);

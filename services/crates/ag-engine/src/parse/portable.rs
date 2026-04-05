@@ -44,7 +44,7 @@ struct RulePack {
     provider: String,
     #[serde(default)]
     rules: Vec<PortableRule>,
-    // Keywords are handled separately - not part of RuleParser trait
+    // Keywords are handled separately — not part of RuleParser trait
 }
 
 #[derive(Deserialize)]

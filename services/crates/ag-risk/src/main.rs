@@ -64,16 +64,16 @@ async fn main() -> anyhow::Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license - refusing to start"),
+        .expect("Invalid or tampered license — refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
     // A2A cross-agent correlation is gated by the A2A feature flag.
     let a2a_enabled = plan_guard.is_enabled(FeatureFlags::A2A);
     if a2a_enabled {
-        info!("A2A feature enabled - cross-agent correlation active");
+        info!("A2A feature enabled — cross-agent correlation active");
     } else {
-        info!("A2A feature not enabled - cross-agent correlation will be skipped");
+        info!("A2A feature not enabled — cross-agent correlation will be skipped");
     }
 
     let config = RiskConfig::from_env();
@@ -86,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
     info!(leader_follower = leader_follower_enabled, "Mode selected");
 
     if std::env::var("JWT_SECRET").unwrap_or_default().is_empty() {
-        tracing::warn!("JWT_SECRET not set - WebSocket risk feed will accept unauthenticated connections");
+        tracing::warn!("JWT_SECRET not set — WebSocket risk feed will accept unauthenticated connections");
     }
 
     // Connect Redis.
@@ -103,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize persistence layer.
     let persistence = Arc::new(RiskPersistence::new(redis_pool));
 
-    // Connect NATS (plain subscription - no JetStream needed for risk scoring).
+    // Connect NATS (plain subscription — no JetStream needed for risk scoring).
     let nats = connect_nats(&config.nats_url).await?;
     info!("NATS connected");
 
@@ -222,7 +222,7 @@ async fn main() -> anyhow::Result<()> {
             rm.run_transition_loop().await;
         });
 
-        // Spawn revive listener (runs on ALL pods - broadcast via NATS plain subscribe).
+        // Spawn revive listener (runs on ALL pods — broadcast via NATS plain subscribe).
         spawn_revive_listener(
             &config.nats_url,
             scorer.clone(),
@@ -348,7 +348,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Spawn the NATS revive listener (runs on ALL pods - broadcast via plain subscribe).
+/// Spawn the NATS revive listener (runs on ALL pods — broadcast via plain subscribe).
 async fn spawn_revive_listener(
     nats_url: &str,
     scorer: Arc<RiskScorer>,
@@ -372,7 +372,7 @@ async fn spawn_revive_listener(
             if agent_id.is_empty() {
                 continue;
             }
-            info!(agent_id = %agent_id, "Agent revived - resetting EMA score to 0");
+            info!(agent_id = %agent_id, "Agent revived — resetting EMA score to 0");
             scorer.reset_score(&agent_id);
             persistence.clear_agent_score(&agent_id).await;
             persistence.clear_suspicion_score(&agent_id).await;

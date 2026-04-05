@@ -8,7 +8,7 @@ pub struct InspectRequest {
     pub response_data: serde_json::Value,
     #[serde(default)]
     pub request_id: Option<String>,
-    /// Scope token from proxy() call - used to verify the response
+    /// Scope token from proxy() call — used to verify the response
     /// doesn't violate the granted scope (e.g., read-only scope but mutation evidence).
     #[serde(default)]
     pub scope_token: Option<String>,

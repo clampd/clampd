@@ -1,6 +1,6 @@
 # @clampd/mcp-proxy
 
-Standalone MCP proxy that wraps **any** MCP server with Clampd's 9-stage security pipeline. Connect Claude Desktop, Cursor, or any MCP client to this proxy instead of directly to an MCP server. Every tool call is classified through ag-gateway - dangerous calls are blocked before they reach the tool.
+Standalone MCP proxy that wraps **any** MCP server with Clampd's 9-stage security pipeline. Connect Claude Desktop, Cursor, or any MCP client to this proxy instead of directly to an MCP server. Every tool call is classified through ag-gateway — dangerous calls are blocked before they reach the tool.
 
 ## Quick Start
 

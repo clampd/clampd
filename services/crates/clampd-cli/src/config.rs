@@ -10,40 +10,38 @@ use std::path::PathBuf;
 pub struct ClampdContext {
     /// Unique name for this context (e.g. "local", "staging", "prod")
     pub name: String,
-    /// Endpoint URL for the control plane.
-    /// For now this is the Dashboard API URL (HTTP).
-    /// In future phases, this will be ag-control gRPC endpoint.
-    #[serde(default = "default_endpoint")]
-    pub endpoint: String,
+    /// Dashboard API URL (HTTP).
+    #[serde(default = "default_dashboard_url")]
+    pub dashboard_url: String,
+    /// Gateway URL for proxy/test/demo operations.
+    #[serde(default = "default_gateway_url")]
+    pub gateway_url: String,
     /// Organization ID for this context
     #[serde(default)]
     pub org_id: String,
     /// API token for authentication
     #[serde(default)]
     pub api_token: String,
-    /// Transport protocol: "http" (dashboard API) or "grpc" (ag-control direct)
-    #[serde(default = "default_transport")]
-    pub transport: String,
     /// Optional: license token associated with this context
     #[serde(default)]
     pub license_token: String,
 }
 
-fn default_endpoint() -> String {
+fn default_dashboard_url() -> String {
     "http://127.0.0.1:3001".into()
 }
-fn default_transport() -> String {
-    "http".into()
+fn default_gateway_url() -> String {
+    "http://127.0.0.1:8080".into()
 }
 
 impl Default for ClampdContext {
     fn default() -> Self {
         Self {
             name: "local".into(),
-            endpoint: default_endpoint(),
+            dashboard_url: default_dashboard_url(),
+            gateway_url: default_gateway_url(),
             org_id: String::new(),
             api_token: String::new(),
-            transport: default_transport(),
             license_token: String::new(),
         }
     }
@@ -71,12 +69,12 @@ pub struct CliConfig {
     #[serde(default)]
     pub output: OutputConfig,
 
-    /// Direct service URLs for fallback/TUI/demo modes
-    #[serde(default)]
-    pub services: ServiceUrls,
+    /// Docker compose file path for `cluster up/down`
+    #[serde(default = "default_compose_file")]
+    pub compose_file: String,
 }
 
-/// Legacy core config - migrated to context on load
+/// Legacy core config — migrated to context on load
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LegacyCoreConfig {
     #[serde(default)]
@@ -87,7 +85,7 @@ pub struct LegacyCoreConfig {
     pub compose_file: String,
 }
 
-/// Legacy connections config - migrated to context on load
+/// Legacy connections config — migrated to context on load
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LegacyConnectionsConfig {
     #[serde(default)]
@@ -95,52 +93,7 @@ pub struct LegacyConnectionsConfig {
     #[serde(default)]
     pub api_token: String,
     #[serde(default)]
-    pub database_url: String,
-    #[serde(default)]
-    pub redis_url: String,
-    #[serde(default)]
-    pub nats_url: String,
-    #[serde(default)]
-    pub clickhouse_url: String,
-    #[serde(default)]
     pub gateway_url: String,
-    #[serde(default)]
-    pub registry_url: String,
-    #[serde(default)]
-    pub token_url: String,
-    #[serde(default)]
-    pub kill_url: String,
-    #[serde(default)]
-    pub risk_url: String,
-    #[serde(default)]
-    pub control_url: String,
-}
-
-/// Direct service URLs for local development, TUI, and demo modes.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceUrls {
-    #[serde(default = "default_database_url")]
-    pub database_url: String,
-    #[serde(default = "default_redis_url")]
-    pub redis_url: String,
-    #[serde(default = "default_nats_url")]
-    pub nats_url: String,
-    #[serde(default = "default_clickhouse_url")]
-    pub clickhouse_url: String,
-    #[serde(default = "default_gateway_url")]
-    pub gateway_url: String,
-    #[serde(default = "default_registry_url")]
-    pub registry_url: String,
-    #[serde(default = "default_token_url")]
-    pub token_url: String,
-    #[serde(default = "default_kill_url")]
-    pub kill_url: String,
-    #[serde(default = "default_risk_url")]
-    pub risk_url: String,
-    #[serde(default = "default_control_url")]
-    pub control_url: String,
-    #[serde(default = "default_compose_file")]
-    pub compose_file: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,56 +113,8 @@ fn default_contexts() -> Vec<ClampdContext> {
 fn default_compose_file() -> String {
     "docker-compose.yml".into()
 }
-fn default_database_url() -> String {
-    "postgres://clampd:clampd_dev@127.0.0.1:5432/clampd".into()
-}
-fn default_redis_url() -> String {
-    "redis://127.0.0.1:6380".into()
-}
-fn default_nats_url() -> String {
-    "nats://127.0.0.1:4222".into()
-}
-fn default_clickhouse_url() -> String {
-    "http://127.0.0.1:8123".into()
-}
-fn default_gateway_url() -> String {
-    "http://127.0.0.1:8080".into()
-}
-fn default_registry_url() -> String {
-    "http://127.0.0.1:50051".into()
-}
-fn default_token_url() -> String {
-    "http://127.0.0.1:50054".into()
-}
-fn default_kill_url() -> String {
-    "http://127.0.0.1:50055".into()
-}
-fn default_risk_url() -> String {
-    "http://127.0.0.1:50056".into()
-}
-fn default_control_url() -> String {
-    "http://127.0.0.1:50057".into()
-}
 fn default_format() -> String {
     "table".into()
-}
-
-impl Default for ServiceUrls {
-    fn default() -> Self {
-        Self {
-            database_url: default_database_url(),
-            redis_url: default_redis_url(),
-            nats_url: default_nats_url(),
-            clickhouse_url: default_clickhouse_url(),
-            gateway_url: default_gateway_url(),
-            registry_url: default_registry_url(),
-            token_url: default_token_url(),
-            kill_url: default_kill_url(),
-            risk_url: default_risk_url(),
-            control_url: default_control_url(),
-            compose_file: default_compose_file(),
-        }
-    }
 }
 
 impl Default for OutputConfig {
@@ -229,7 +134,7 @@ impl Default for CliConfig {
             core: None,
             connections: None,
             output: OutputConfig::default(),
-            services: ServiceUrls::default(),
+            compose_file: default_compose_file(),
         }
     }
 }
@@ -276,50 +181,23 @@ impl CliConfig {
         // Build a context from legacy fields
         let legacy_ctx = ClampdContext {
             name: "local".into(),
-            endpoint: if conn.dashboard_url.is_empty() {
-                default_endpoint()
+            dashboard_url: if conn.dashboard_url.is_empty() {
+                default_dashboard_url()
             } else {
                 conn.dashboard_url.clone()
             },
+            gateway_url: if conn.gateway_url.is_empty() {
+                default_gateway_url()
+            } else {
+                conn.gateway_url
+            },
             org_id: core.org_id,
             api_token: conn.api_token,
-            transport: "http".into(),
             license_token: core.license_token,
         };
 
-        // Merge legacy service URLs
-        if !conn.database_url.is_empty() {
-            self.services.database_url = conn.database_url;
-        }
-        if !conn.redis_url.is_empty() {
-            self.services.redis_url = conn.redis_url;
-        }
-        if !conn.nats_url.is_empty() {
-            self.services.nats_url = conn.nats_url;
-        }
-        if !conn.clickhouse_url.is_empty() {
-            self.services.clickhouse_url = conn.clickhouse_url;
-        }
-        if !conn.gateway_url.is_empty() {
-            self.services.gateway_url = conn.gateway_url;
-        }
-        if !conn.registry_url.is_empty() {
-            self.services.registry_url = conn.registry_url;
-        }
-        if !conn.token_url.is_empty() {
-            self.services.token_url = conn.token_url;
-        }
-        if !conn.kill_url.is_empty() {
-            self.services.kill_url = conn.kill_url;
-        }
-        if !conn.risk_url.is_empty() {
-            self.services.risk_url = conn.risk_url;
-        }
-        if !conn.control_url.is_empty() {
-            self.services.control_url = conn.control_url;
-        }
         if !core.compose_file.is_empty() {
-            self.services.compose_file = core.compose_file;
+            self.compose_file = core.compose_file;
         }
 
         // Replace or insert the "local" context
@@ -342,43 +220,14 @@ impl CliConfig {
                 ctx.license_token = v;
             }
             if let Ok(v) = std::env::var("CLAMPD_DASHBOARD_URL") {
-                ctx.endpoint = v;
+                ctx.dashboard_url = v;
             }
             if let Ok(v) = std::env::var("CLAMPD_API_TOKEN") {
                 ctx.api_token = v;
             }
-        }
-
-        // Service URL overrides
-        if let Ok(v) = std::env::var("DATABASE_URL") {
-            self.services.database_url = v;
-        }
-        if let Ok(v) = std::env::var("REDIS_URL") {
-            self.services.redis_url = v;
-        }
-        if let Ok(v) = std::env::var("NATS_URL") {
-            self.services.nats_url = v;
-        }
-        if let Ok(v) = std::env::var("CLICKHOUSE_URL") {
-            self.services.clickhouse_url = v;
-        }
-        if let Ok(v) = std::env::var("GATEWAY_URL") {
-            self.services.gateway_url = v;
-        }
-        if let Ok(v) = std::env::var("REGISTRY_URL") {
-            self.services.registry_url = v;
-        }
-        if let Ok(v) = std::env::var("TOKEN_URL") {
-            self.services.token_url = v;
-        }
-        if let Ok(v) = std::env::var("KILL_URL") {
-            self.services.kill_url = v;
-        }
-        if let Ok(v) = std::env::var("RISK_URL") {
-            self.services.risk_url = v;
-        }
-        if let Ok(v) = std::env::var("CONTROL_URL") {
-            self.services.control_url = v;
+            if let Ok(v) = std::env::var("CLAMPD_GATEWAY_URL") {
+                ctx.gateway_url = v;
+            }
         }
         self
     }
@@ -441,17 +290,12 @@ impl CliConfig {
         let ctx = self.contexts.iter_mut().find(|c| c.name == name)
             .ok_or_else(|| anyhow::anyhow!("Context '{}' not found.", name))?;
         match field {
-            "endpoint" => ctx.endpoint = value.to_string(),
+            "dashboard_url" | "dashboard-url" => ctx.dashboard_url = value.to_string(),
+            "gateway_url" | "gateway-url" => ctx.gateway_url = value.to_string(),
             "org_id" | "org-id" => ctx.org_id = value.to_string(),
             "api_token" | "api-token" => ctx.api_token = value.to_string(),
-            "transport" => {
-                if value != "http" && value != "grpc" {
-                    anyhow::bail!("Transport must be 'http' or 'grpc', got '{}'", value);
-                }
-                ctx.transport = value.to_string();
-            }
             "license_token" | "license-token" => ctx.license_token = value.to_string(),
-            _ => anyhow::bail!("Unknown field '{}'. Valid: endpoint, org_id, api_token, transport, license_token", field),
+            _ => anyhow::bail!("Unknown field '{}'. Valid: dashboard_url, gateway_url, org_id, api_token, license_token", field),
         }
         Ok(())
     }
@@ -466,8 +310,15 @@ impl CliConfig {
     /// Dashboard URL from the active context (or default).
     pub fn dashboard_url(&self) -> &str {
         self.active_context()
-            .map(|c| c.endpoint.as_str())
+            .map(|c| c.dashboard_url.as_str())
             .unwrap_or("http://127.0.0.1:3001")
+    }
+
+    /// Gateway URL from the active context (or default).
+    pub fn gateway_url(&self) -> &str {
+        self.active_context()
+            .map(|c| c.gateway_url.as_str())
+            .unwrap_or("http://127.0.0.1:8080")
     }
 
     /// API token from the active context.
@@ -529,8 +380,8 @@ mod tests {
         assert_eq!(cfg.current_context, "local");
         assert_eq!(cfg.contexts.len(), 1);
         assert_eq!(cfg.contexts[0].name, "local");
-        assert_eq!(cfg.contexts[0].endpoint, "http://127.0.0.1:3001");
-        assert_eq!(cfg.contexts[0].transport, "http");
+        assert_eq!(cfg.contexts[0].dashboard_url, "http://127.0.0.1:3001");
+        assert_eq!(cfg.contexts[0].gateway_url, "http://127.0.0.1:8080");
     }
 
     #[test]
@@ -538,15 +389,16 @@ mod tests {
         let mut cfg = CliConfig::default();
         let ctx = ClampdContext {
             name: "prod".into(),
-            endpoint: "https://api.clampd.dev".into(),
+            dashboard_url: "https://api.clampd.dev".into(),
+            gateway_url: "https://gw.clampd.dev".into(),
             org_id: "abc-123".into(),
             api_token: "token_prod".into(),
-            transport: "grpc".into(),
             license_token: String::new(),
         };
         cfg.add_context(ctx).unwrap();
         assert_eq!(cfg.contexts.len(), 2);
-        assert_eq!(cfg.get_context("prod").unwrap().endpoint, "https://api.clampd.dev");
+        assert_eq!(cfg.get_context("prod").unwrap().dashboard_url, "https://api.clampd.dev");
+        assert_eq!(cfg.get_context("prod").unwrap().gateway_url, "https://gw.clampd.dev");
     }
 
     #[test]
@@ -565,7 +417,7 @@ mod tests {
         let mut cfg = CliConfig::default();
         cfg.add_context(ClampdContext {
             name: "staging".into(),
-            endpoint: "http://staging:3001".into(),
+            dashboard_url: "http://staging:3001".into(),
             ..Default::default()
         }).unwrap();
 
@@ -613,23 +465,16 @@ mod tests {
     #[test]
     fn test_set_context_field() {
         let mut cfg = CliConfig::default();
-        cfg.set_context_field("local", "endpoint", "http://new:3001").unwrap();
+        cfg.set_context_field("local", "dashboard_url", "http://new:3001").unwrap();
+        cfg.set_context_field("local", "gateway_url", "http://new:8080").unwrap();
         cfg.set_context_field("local", "org_id", "my-org-id").unwrap();
         cfg.set_context_field("local", "api_token", "tok123").unwrap();
-        cfg.set_context_field("local", "transport", "grpc").unwrap();
 
         let ctx = cfg.get_context("local").unwrap();
-        assert_eq!(ctx.endpoint, "http://new:3001");
+        assert_eq!(ctx.dashboard_url, "http://new:3001");
+        assert_eq!(ctx.gateway_url, "http://new:8080");
         assert_eq!(ctx.org_id, "my-org-id");
         assert_eq!(ctx.api_token, "tok123");
-        assert_eq!(ctx.transport, "grpc");
-    }
-
-    #[test]
-    fn test_set_context_invalid_transport() {
-        let mut cfg = CliConfig::default();
-        let err = cfg.set_context_field("local", "transport", "websocket").unwrap_err();
-        assert!(err.to_string().contains("must be 'http' or 'grpc'"));
     }
 
     #[test]
@@ -657,6 +502,7 @@ mod tests {
         assert_eq!(cfg.org_id(), "org-abc");
         assert_eq!(cfg.api_token(), "tok-xyz");
         assert_eq!(cfg.dashboard_url(), "http://127.0.0.1:3001");
+        assert_eq!(cfg.gateway_url(), "http://127.0.0.1:8080");
     }
 
     #[test]
@@ -670,8 +516,7 @@ compose_file = "custom-compose.yml"
 [connections]
 dashboard_url = "http://legacy:3001"
 api_token = "legacy_token"
-database_url = "postgres://user:pass@db:5432/mydb"
-nats_url = "nats://nats:4222"
+gateway_url = "http://legacy:8080"
 
 [output]
 format = "json"
@@ -683,14 +528,11 @@ format = "json"
         let ctx = cfg.get_context("local").unwrap();
         assert_eq!(ctx.org_id, "legacy-org-123");
         assert_eq!(ctx.license_token, "jwt_legacy");
-        assert_eq!(ctx.endpoint, "http://legacy:3001");
+        assert_eq!(ctx.dashboard_url, "http://legacy:3001");
+        assert_eq!(ctx.gateway_url, "http://legacy:8080");
         assert_eq!(ctx.api_token, "legacy_token");
-        assert_eq!(ctx.transport, "http");
 
-        // Service URLs migrated
-        assert_eq!(cfg.services.database_url, "postgres://user:pass@db:5432/mydb");
-        assert_eq!(cfg.services.nats_url, "nats://nats:4222");
-        assert_eq!(cfg.services.compose_file, "custom-compose.yml");
+        assert_eq!(cfg.compose_file, "custom-compose.yml");
 
         // Output preserved
         assert_eq!(cfg.output.format, "json");
@@ -707,18 +549,18 @@ current_context = "prod"
 
 [[contexts]]
 name = "local"
-endpoint = "http://127.0.0.1:3001"
+dashboard_url = "http://127.0.0.1:3001"
+gateway_url = "http://127.0.0.1:8080"
 org_id = "local-org"
 api_token = ""
-transport = "http"
 license_token = ""
 
 [[contexts]]
 name = "prod"
-endpoint = "https://api.clampd.dev"
+dashboard_url = "https://api.clampd.dev"
+gateway_url = "https://gw.clampd.dev"
 org_id = "prod-org-uuid"
 api_token = "ag_live_xxx"
-transport = "grpc"
 license_token = "eyJhbGc..."
 
 [output]
@@ -730,12 +572,13 @@ no_color = false
         assert_eq!(cfg.contexts.len(), 2);
 
         let prod = cfg.get_context("prod").unwrap();
-        assert_eq!(prod.endpoint, "https://api.clampd.dev");
+        assert_eq!(prod.dashboard_url, "https://api.clampd.dev");
+        assert_eq!(prod.gateway_url, "https://gw.clampd.dev");
         assert_eq!(prod.org_id, "prod-org-uuid");
-        assert_eq!(prod.transport, "grpc");
 
         // Active context points to prod
         assert_eq!(cfg.dashboard_url(), "https://api.clampd.dev");
+        assert_eq!(cfg.gateway_url(), "https://gw.clampd.dev");
         assert_eq!(cfg.org_id(), "prod-org-uuid");
     }
 
@@ -757,18 +600,20 @@ no_color = false
         let mut cfg = CliConfig::default();
         cfg.add_context(ClampdContext {
             name: "cloud".into(),
-            endpoint: "https://cloud.clampd.dev".into(),
+            dashboard_url: "https://cloud.clampd.dev".into(),
+            gateway_url: "https://gw.cloud.clampd.dev".into(),
             org_id: "cloud-org".into(),
             api_token: "cloud-token".into(),
-            transport: "grpc".into(),
             license_token: String::new(),
         }).unwrap();
 
         assert_eq!(cfg.dashboard_url(), "http://127.0.0.1:3001");
+        assert_eq!(cfg.gateway_url(), "http://127.0.0.1:8080");
         assert_eq!(cfg.org_id(), "");
 
         cfg.use_context("cloud").unwrap();
         assert_eq!(cfg.dashboard_url(), "https://cloud.clampd.dev");
+        assert_eq!(cfg.gateway_url(), "https://gw.cloud.clampd.dev");
         assert_eq!(cfg.org_id(), "cloud-org");
         assert_eq!(cfg.api_token(), "cloud-token");
     }
@@ -780,18 +625,19 @@ no_color = false
         cfg.set_context_field("local", "org-id", "hyphen-org").unwrap();
         cfg.set_context_field("local", "api-token", "hyphen-tok").unwrap();
         cfg.set_context_field("local", "license-token", "hyphen-lic").unwrap();
+        cfg.set_context_field("local", "gateway-url", "http://gw:8080").unwrap();
 
         let ctx = cfg.get_context("local").unwrap();
         assert_eq!(ctx.org_id, "hyphen-org");
         assert_eq!(ctx.api_token, "hyphen-tok");
         assert_eq!(ctx.license_token, "hyphen-lic");
+        assert_eq!(ctx.gateway_url, "http://gw:8080");
     }
 
     // ── Edge cases ──────────────────────────────────────────────────────────
 
     #[test]
     fn test_from_toml_empty_string() {
-        // Empty TOML should still produce a valid config (with defaults)
         let result = CliConfig::from_toml("");
         assert!(result.is_ok());
     }
@@ -803,17 +649,18 @@ current_context = "prod"
 
 [[contexts]]
 name = "prod"
-endpoint = "https://prod.clampd.dev"
+dashboard_url = "https://prod.clampd.dev"
 org_id = "org-prod"
 api_token = "tok-prod"
-transport = "http"
 license_token = ""
 "#;
         let cfg = CliConfig::from_toml(toml).unwrap();
         assert_eq!(cfg.current_context, "prod");
         assert_eq!(cfg.contexts.len(), 1);
         assert_eq!(cfg.contexts[0].name, "prod");
-        assert_eq!(cfg.contexts[0].endpoint, "https://prod.clampd.dev");
+        assert_eq!(cfg.contexts[0].dashboard_url, "https://prod.clampd.dev");
+        // gateway_url defaults
+        assert_eq!(cfg.contexts[0].gateway_url, "http://127.0.0.1:8080");
     }
 
     #[test]
@@ -825,7 +672,7 @@ license_token = ""
     #[test]
     fn test_set_context_field_nonexistent_context() {
         let mut cfg = CliConfig::default();
-        let result = cfg.set_context_field("nonexistent", "endpoint", "http://x");
+        let result = cfg.set_context_field("nonexistent", "dashboard_url", "http://x");
         assert!(result.is_err());
     }
 
@@ -834,22 +681,20 @@ license_token = ""
         let mut cfg = CliConfig::default();
         cfg.add_context(ClampdContext {
             name: "staging".into(),
-            endpoint: "https://staging.clampd.dev".into(),
+            dashboard_url: "https://staging.clampd.dev".into(),
             org_id: "org-stg".into(),
             api_token: "tok-stg".into(),
-            transport: "http".into(),
-            license_token: String::new(),
+            ..Default::default()
         }).unwrap();
         cfg.add_context(ClampdContext {
             name: "prod".into(),
-            endpoint: "https://prod.clampd.dev".into(),
+            dashboard_url: "https://prod.clampd.dev".into(),
             org_id: "org-prod".into(),
             api_token: "tok-prod".into(),
-            transport: "http".into(),
-            license_token: String::new(),
+            ..Default::default()
         }).unwrap();
         let names = cfg.context_names();
-        assert_eq!(names.len(), 3); // local + staging + prod
+        assert_eq!(names.len(), 3);
         assert!(names.contains(&"local"));
         assert!(names.contains(&"staging"));
         assert!(names.contains(&"prod"));
@@ -860,14 +705,15 @@ license_token = ""
         let mut cfg = CliConfig::default();
         cfg.add_context(ClampdContext {
             name: "other".into(),
-            endpoint: "https://other.test".into(),
+            dashboard_url: "https://other.test".into(),
+            gateway_url: "https://gw.other.test".into(),
             org_id: "org-other".into(),
             api_token: "tok-other".into(),
-            transport: "http".into(),
             license_token: "lic-other".into(),
         }).unwrap();
         cfg.use_context("other").unwrap();
         assert_eq!(cfg.dashboard_url(), "https://other.test");
+        assert_eq!(cfg.gateway_url(), "https://gw.other.test");
         assert_eq!(cfg.org_id(), "org-other");
         assert_eq!(cfg.api_token(), "tok-other");
         assert_eq!(cfg.license_token(), "lic-other");
@@ -876,14 +722,7 @@ license_token = ""
     #[test]
     fn test_set_context_field_endpoint() {
         let mut cfg = CliConfig::default();
-        cfg.set_context_field("local", "endpoint", "https://new.endpoint").unwrap();
-        assert_eq!(cfg.get_context("local").unwrap().endpoint, "https://new.endpoint");
-    }
-
-    #[test]
-    fn test_set_context_field_transport_grpc() {
-        let mut cfg = CliConfig::default();
-        cfg.set_context_field("local", "transport", "grpc").unwrap();
-        assert_eq!(cfg.get_context("local").unwrap().transport, "grpc");
+        cfg.set_context_field("local", "dashboard_url", "https://new.dashboard_url").unwrap();
+        assert_eq!(cfg.get_context("local").unwrap().dashboard_url, "https://new.dashboard_url");
     }
 }

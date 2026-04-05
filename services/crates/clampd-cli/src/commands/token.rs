@@ -31,9 +31,9 @@ async fn poll_command_result(
                 anyhow::bail!("Command failed: {}", error);
             }
             "expired" => {
-                anyhow::bail!("Command expired - ag-control may be unreachable");
+                anyhow::bail!("Command expired — ag-control may be unreachable");
             }
-            _ => continue, // pending or delivered - keep polling
+            _ => continue, // pending or delivered — keep polling
         }
     }
     anyhow::bail!(

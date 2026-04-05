@@ -108,7 +108,7 @@ impl RegistryService for RegistryServiceImpl {
             }));
         }
 
-        // 2. Cache miss - query DB
+        // 2. Cache miss — query DB
         let row = self
             .repo
             .get_agent(agent_id)
@@ -175,7 +175,7 @@ impl RegistryService for RegistryServiceImpl {
             }
             Ok(false) => {} // Name is available
             Err(e) => {
-                warn!(error = %e, "Failed to check agent name uniqueness - proceeding (fail-open)");
+                warn!(error = %e, "Failed to check agent name uniqueness — proceeding (fail-open)");
             }
         }
 
@@ -356,7 +356,7 @@ impl RegistryService for RegistryServiceImpl {
                     agent_id = %agent_id,
                     risk_score = req.risk_score,
                     threshold = risk::DEFAULT_AUTO_SUSPEND_THRESHOLD,
-                    "Risk score exceeded threshold - auto-suspending agent"
+                    "Risk score exceeded threshold — auto-suspending agent"
                 );
 
                 // Auto-suspend the agent
@@ -422,7 +422,7 @@ impl RegistryService for RegistryServiceImpl {
     ) -> Result<Response<TouchAgentResponse>, Status> {
         let req = request.into_inner();
 
-        // Write to Redis (debounced - background flusher updates DB every 60s)
+        // Write to Redis (debounced — background flusher updates DB every 60s)
         let touch_key = format!("ag:touch:{}", req.agent_id);
         let now = chrono::Utc::now().timestamp().to_string();
         if let Ok(mut conn) = self.redis.get().await {
@@ -552,7 +552,7 @@ impl RegistryService for RegistryServiceImpl {
         // delegation graph. The org_id field was added to the proto to
         // prevent cross-tenant data leakage.
         if req.org_id.is_empty() {
-            warn!("GetRelationshipGraph called without org_id - returning empty graph for safety");
+            warn!("GetRelationshipGraph called without org_id — returning empty graph for safety");
             return Ok(Response::new(GetRelationshipGraphResponse {
                 relationships: Vec::new(),
             }));

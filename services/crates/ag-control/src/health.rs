@@ -76,7 +76,7 @@ pub async fn check_nats(nats: &async_nats::Client) -> ServiceHealthCheck {
     // NATS client stays connected; check connection state.
     let latency = start.elapsed().as_millis() as u32;
 
-    // async_nats doesn't expose a simple ping - check if the client is connected.
+    // async_nats doesn't expose a simple ping — check if the client is connected.
     ServiceHealthCheck {
         name: "nats".to_string(),
         healthy: true, // If the client is alive, it's connected.

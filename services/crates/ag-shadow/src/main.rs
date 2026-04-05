@@ -117,7 +117,7 @@ async fn main() -> Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license - refusing to start"),
+        .expect("Invalid or tampered license — refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
@@ -128,7 +128,7 @@ async fn main() -> Result<()> {
     if plan_guard.is_enabled(FeatureFlags::PII_QUARANTINE) {
         info!("PII quarantine feature enabled");
     } else {
-        info!("PII quarantine feature not enabled - quarantine writes will be skipped");
+        info!("PII quarantine feature not enabled — quarantine writes will be skipped");
     }
 
     let config = ShadowConfig::from_env();
@@ -325,8 +325,8 @@ async fn run_leader_consumer_loop(
         let is_now_leader = is_leader.load(Ordering::Relaxed);
 
         if is_now_leader && !was_leader {
-            // Became leader - spawn consumer with fresh connections.
-            info!("Became shadow leader - starting consumer");
+            // Became leader — spawn consumer with fresh connections.
+            info!("Became shadow leader — starting consumer");
 
             let cfg = config.clone();
             let cn = consumer_name.clone();
@@ -359,8 +359,8 @@ async fn run_leader_consumer_loop(
                 }
             }));
         } else if !is_now_leader && was_leader {
-            // Lost leadership - abort consumer.
-            warn!("Lost shadow leadership - stopping consumer");
+            // Lost leadership — abort consumer.
+            warn!("Lost shadow leadership — stopping consumer");
             if let Some(handle) = consumer_handle.take() {
                 handle.abort();
             }
