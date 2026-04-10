@@ -1,0 +1,23 @@
+title: Cross-Site Scripting Payload
+id: sigma-xss-attempt
+description: Detects XSS payloads in agent inputs or tool parameters
+references:
+    - https://owasp.org/Top10/A03_2021-Injection/
+tags:
+    - attack.execution
+    - attack.t1059.007
+logsource:
+    category: http
+detection:
+    selection:
+        input|contains:
+            - '<script>'
+            - 'javascript:'
+            - 'onerror='
+            - 'onload='
+            - '<img src=x onerror'
+            - '<svg onload'
+            - 'eval('
+            - 'document.cookie'
+    condition: selection
+level: high

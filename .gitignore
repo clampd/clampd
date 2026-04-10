@@ -11,3 +11,4 @@ __pycache__/
 target/
 *.tgz
 .DS_Store
+video/demos/*.mp4

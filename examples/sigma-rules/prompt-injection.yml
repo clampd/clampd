@@ -1,0 +1,24 @@
+title: Prompt Injection Attack
+id: sigma-prompt-injection
+description: Detects attempts to override agent instructions via prompt injection
+references:
+    - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+tags:
+    - attack.execution
+    - attack.t1059
+logsource:
+    category: llm
+detection:
+    selection:
+        input|contains:
+            - 'ignore previous instructions'
+            - 'ignore all prior instructions'
+            - 'you are now'
+            - 'new instructions:'
+            - 'system prompt:'
+            - 'forget everything'
+            - 'disregard above'
+            - 'override your instructions'
+            - 'act as if you are'
+    condition: selection
+level: critical
