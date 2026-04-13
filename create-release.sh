@@ -79,12 +79,18 @@ gh release create "$VERSION" \
     --notes "$(cat <<'EOF'
 ## Install
 
-**Docker (recommended):**
+**Docker — Proxy (security pipeline):**
 ```bash
 curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.proxy.yml -o docker-compose.yml
 curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
 # Set CLAMPD_LICENSE_KEY in .env (get one at https://app.clampd.dev)
 docker compose --profile local-infra up -d
+```
+
+**Docker — Dashboard (control plane):**
+```bash
+curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.control.yml -o docker-compose.control.yml
+docker compose -f docker-compose.control.yml --profile local-infra up -d
 ```
 
 **CLI:**
@@ -106,11 +112,22 @@ npm install @clampd/sdk     # TypeScript
 
 ## Docker Images
 
-All images at `ghcr.io/clampd/*:TAG`
+All images at `ghcr.io/clampd/*:v0.9.0`
 
-```bash
-docker pull ghcr.io/clampd/ag-gateway:TAG
-```
+| Image | Service |
+|---|---|
+| `ghcr.io/clampd/ag-gateway` | HTTP gateway, 9-stage pipeline |
+| `ghcr.io/clampd/ag-intent` | Classification, 152 detection rules |
+| `ghcr.io/clampd/ag-policy` | Policy engine, scope exemptions |
+| `ghcr.io/clampd/ag-risk` | Anomaly detection, EMA scoring |
+| `ghcr.io/clampd/ag-shadow` | Audit pipeline, PII masking |
+| `ghcr.io/clampd/ag-kill` | Kill cascade, auto-suspend |
+| `ghcr.io/clampd/ag-registry` | Agent lifecycle |
+| `ghcr.io/clampd/ag-token` | Token exchange |
+| `ghcr.io/clampd/ag-control` | SaaS bridge, API key sync |
+| `ghcr.io/clampd/dashboard-api` | Dashboard API |
+| `ghcr.io/clampd/dashboard-web` | Dashboard UI |
+| `ghcr.io/clampd/mcp-proxy` | MCP server security wrapper |
 
 ## Checksums
 

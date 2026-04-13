@@ -24,7 +24,7 @@ Agent -> SDK -> Gateway -> [Auth -> Extract -> Classify -> Policy -> Token -> Fo
 
 ## Quick Start
 
-### 1. Run the pipeline
+### 1. Run the proxy (security pipeline)
 
 ```bash
 curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.proxy.yml -o docker-compose.yml
@@ -34,6 +34,13 @@ curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
 # Then edit .env and set CLAMPD_LICENSE_KEY
 
 docker compose --profile local-infra up -d
+```
+
+### 2. Run the dashboard (optional)
+
+```bash
+curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.control.yml -o docker-compose.control.yml
+docker compose -f docker-compose.control.yml --profile local-infra up -d
 ```
 
 <details>
@@ -53,14 +60,14 @@ docker compose --profile local-infra up -d
 
 </details>
 
-### 2. Install SDK
+### 3. Install SDK
 
 ```bash
 pip install clampd          # Python
 npm install @clampd/sdk     # TypeScript
 ```
 
-### 3. Wrap your client
+### 4. Wrap your client
 
 ```python
 import clampd
@@ -208,12 +215,25 @@ docker run -e UPSTREAM_MCP="npx -y @modelcontextprotocol/server-filesystem /tmp"
 
 ## Examples
 
-- [Python: Guard any function](sdk/python/examples/01_guard.py)
-- [TypeScript: OpenAI wrapper](sdk/typescript/examples/02-openai.ts)
-- [TypeScript: Anthropic wrapper](sdk/typescript/examples/03-anthropic.ts)
-- [TypeScript: Vercel AI](sdk/typescript/examples/05-vercel-ai.ts)
-- [TypeScript: Schema injection detection](sdk/typescript/examples/06-schema-injection.ts)
-- [Multi-agent A2A workflow](sdk/typescript/examples/07-a2a-workflow.ts)
+**Python SDK:**
+- [Guard any function](sdk/python/examples/01_guard.py)
+- [A2A multi-agent workflow](sdk/python/examples/07_a2a_workflow.py)
+- [GitHub Models integration](sdk/python/examples/08_github_models.py)
+
+**TypeScript SDK:**
+- [Guard a function](sdk/typescript/examples/01-guard.ts)
+- [OpenAI wrapper](sdk/typescript/examples/02-openai.ts)
+- [Anthropic wrapper](sdk/typescript/examples/03-anthropic.ts)
+- [Google ADK](sdk/typescript/examples/04-adk.ts)
+- [Vercel AI](sdk/typescript/examples/05-vercel-ai.ts)
+- [Schema injection detection](sdk/typescript/examples/06-schema-injection.ts)
+- [A2A multi-agent workflow](sdk/typescript/examples/07-a2a-workflow.ts)
+- [GitHub Models](sdk/typescript/examples/08-github-models.ts)
+
+**Advanced:**
+- [A2A attack simulations](examples/a2a_attacks.py)
+- [LangGraph A2A](examples/langgraph_a2a.py)
+- [SIGMA rule import](examples/sigma-rules/)
 
 ## Compliance
 
