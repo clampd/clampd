@@ -10,9 +10,13 @@ import { getDelegation, delegationHeaders } from "./delegation.js";
 export interface ProxyResponse {
   request_id: string;
   allowed: boolean;
-  /** Intent action: "pass", "flag", or "block". */
-  action?: string;
+  /** Raw intent action from gateway: "pass", "flag", or "block". */
+  raw_action?: string;
+  /** Reconciled action: "exempt" when allowed=true despite block rule. Added by enrichProxyResponse(). */
+  readonly action?: string;
   risk_score: number;
+  /** Alias for risk_score. Added by enrichProxyResponse(). */
+  readonly score?: number;
   scope_granted?: string | null;
   tool_response?: unknown | null;
   denial_reason?: string | null;
@@ -25,11 +29,17 @@ export interface ProxyResponse {
   session_flags: string[];
   /** HMAC scope token binding this approval to response scanning. */
   scope_token?: string | null;
+  /** Internal flag: true when the response was synthesized due to a gateway error. */
+  _gatewayError?: boolean;
 }
 
 export interface ScanResponse {
   allowed: boolean;
   risk_score: number;
+  /** Alias for risk_score. Added by enrichScanResponse(). */
+  readonly score?: number;
+  /** Computed action: "pass" or "block" based on allowed. Added by enrichScanResponse(). */
+  readonly action?: string;
   denial_reason?: string;
   matched_rules: string[];
   latency_ms: number;
@@ -38,6 +48,39 @@ export interface ScanResponse {
 export interface ScanOutputResponse extends ScanResponse {
   pii_found: Array<{ pii_type: string; count: number }>;
   secrets_found: Array<{ secret_type: string; count: number }>;
+}
+
+/**
+ * Enrich a raw gateway ProxyResponse with computed `action` and `score` getters.
+ */
+export function enrichProxyResponse(raw: Record<string, unknown>): ProxyResponse {
+  const resp = raw as unknown as ProxyResponse;
+  const rawAction = (raw.action as string) ?? "pass";
+  // Set plain values (not getters) so they survive spread/clone
+  raw.raw_action = rawAction;
+  raw.action = resp.allowed && rawAction === "block" ? "exempt" : rawAction;
+  raw.score = resp.risk_score;
+  return resp;
+}
+
+/**
+ * Enrich a raw gateway ScanResponse with computed `action` and `score` getters.
+ */
+export function enrichScanResponse<T extends ScanResponse>(raw: Record<string, unknown>): T {
+  const resp = raw as T;
+  raw.action = resp.allowed ? "pass" : "block";
+  raw.score = resp.risk_score;
+  return resp;
+}
+
+/** Returns "pass" or "block" based on the `allowed` field. */
+export function scanAction(resp: ScanResponse): string {
+  return resp.allowed ? "pass" : "block";
+}
+
+/** Alias for `risk_score` on a ProxyResponse. */
+export function proxyScore(resp: ProxyResponse): number {
+  return resp.risk_score;
 }
 
 // ── Request types ──────────────────────────────────────────────────
@@ -96,7 +139,7 @@ function blockedResponse(reason: string, gatewayError = false): ProxyResponse {
     degraded_stages: [],
     session_flags: [],
     _gatewayError: gatewayError,
-  } as ProxyResponse;
+  };
 }
 
 // ── Client ─────────────────────────────────────────────────────────
@@ -110,7 +153,10 @@ export class ClampdClient {
   private readonly gatewayUrl: string;
   public readonly agentId: string;
   private readonly apiKey: string;
-  private readonly jwt: string;
+  private readonly secret?: string;
+  private cachedJwt: string;
+  private jwtExpiresAt: number;
+  private readonly jwtTtlSeconds: number;
   private readonly timeoutMs: number;
 
   // Retry config
@@ -131,7 +177,10 @@ export class ClampdClient {
     );
     this.agentId = opts.agentId;
     this.apiKey = opts.apiKey ?? process.env.CLAMPD_API_KEY ?? "";
-    this.jwt = makeAgentJwt(this.agentId, { secret: opts.secret });
+    this.secret = opts.secret;
+    this.jwtTtlSeconds = 3600;
+    this.cachedJwt = makeAgentJwt(this.agentId, { secret: opts.secret });
+    this.jwtExpiresAt = Math.floor(Date.now() / 1000) + this.jwtTtlSeconds;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
 
     // Retry
@@ -172,9 +221,19 @@ export class ClampdClient {
     }
   }
 
+  /** Return a valid JWT, regenerating if within 60s of expiry. */
+  private getJwt(): string {
+    const now = Math.floor(Date.now() / 1000);
+    if (now >= this.jwtExpiresAt - 60) {
+      this.cachedJwt = makeAgentJwt(this.agentId, { secret: this.secret });
+      this.jwtExpiresAt = now + this.jwtTtlSeconds;
+    }
+    return this.cachedJwt;
+  }
+
   private headers(tools?: string[]): Record<string, string> {
     const h: Record<string, string> = {
-      Authorization: `Bearer ${this.jwt}`,
+      Authorization: `Bearer ${this.getJwt()}`,
       "X-AG-Key": this.apiKey,
       "Content-Type": "application/json",
       ...delegationHeaders(),
@@ -215,12 +274,18 @@ export class ClampdClient {
       body.tool_descriptor_hash = toolDescriptorHash;
     }
 
-    // Auto-include delegation context only for real cross-agent delegation.
-    // Single-element chain = agent calling itself = not delegation.
+    // Send delegation context if a chain exists.
+    // Auto-append this agent to the chain if not already present.
     const delegation = getDelegation();
-    if (delegation && delegation.chain.length > 1) {
-      body.delegation_chain = delegation.chain;
-      body.delegation_trace_id = delegation.traceId;
+    if (delegation && delegation.chain.length > 0) {
+      let chain = delegation.chain;
+      if (this.agentId && (!chain.length || chain[chain.length - 1] !== this.agentId)) {
+        chain = [...chain, this.agentId];
+      }
+      if (chain.length > 1) {
+        body.delegation_chain = chain;
+        body.delegation_trace_id = delegation.traceId;
+      }
     }
 
     return this.post("/v1/proxy", body, authorizedTools);
@@ -277,7 +342,8 @@ export class ClampdClient {
   async scanInput(text: string, messageCount?: number): Promise<ScanResponse> {
     const body: Record<string, unknown> = { text };
     if (messageCount) body.message_count = messageCount;
-    return this.postOrThrow<ScanResponse>("/v1/scan-input", body);
+    const raw = await this.postOrThrow<Record<string, unknown>>("/v1/scan-input", body);
+    return enrichScanResponse<ScanResponse>(raw);
   }
 
   /**
@@ -288,7 +354,8 @@ export class ClampdClient {
   async scanOutput(text: string, requestId?: string): Promise<ScanOutputResponse> {
     const body: Record<string, unknown> = { text };
     if (requestId) body.request_id = requestId;
-    return this.postOrThrow<ScanOutputResponse>("/v1/scan-output", body);
+    const raw = await this.postOrThrow<Record<string, unknown>>("/v1/scan-output", body);
+    return enrichScanResponse<ScanOutputResponse>(raw);
   }
 
   // ── Internal ────────────────────────────────────────────────────
@@ -302,7 +369,7 @@ export class ClampdClient {
     if (!this.cbAllowRequest()) {
       return blockedResponse(
         "Circuit breaker open: gateway unavailable, requests are being short-circuited",
-        true,
+        false, // Sustained outage — don't allow failOpen to bypass
       ) as unknown as T;
     }
 
@@ -332,17 +399,14 @@ export class ClampdClient {
 
       if (resp.ok) {
         this.cbRecordSuccess();
-        const json = (await resp.json()) as T;
+        const json = (await resp.json()) as Record<string, unknown>;
         // Ensure array fields are always present for ProxyResponse shape
         if (typeof json === "object" && json !== null && "degraded_stages" in json) {
-          const pr = json as unknown as ProxyResponse;
-          return {
-            ...json,
-            degraded_stages: pr.degraded_stages ?? [],
-            session_flags: pr.session_flags ?? [],
-          };
+          json.degraded_stages = (json.degraded_stages as string[]) ?? [];
+          json.session_flags = (json.session_flags as string[]) ?? [];
+          return enrichProxyResponse(json) as unknown as T;
         }
-        return json;
+        return json as unknown as T;
       }
 
       // Don't retry on 4xx client errors (except 429 rate limit)
@@ -374,31 +438,55 @@ export class ClampdClient {
    * Like `post`, but throws on network errors and non-OK responses
    * instead of synthesizing a blocked response. Used by scan methods
    * so callers can distinguish gateway errors from policy decisions.
+   * Includes retry and circuit breaker logic.
    */
   private async postOrThrow<T>(
     path: string,
     body: Record<string, unknown>,
   ): Promise<T> {
+    if (!this.cbAllowRequest()) {
+      throw new Error("Circuit breaker open: gateway unavailable");
+    }
+
     const url = `${this.gatewayUrl}${path}`;
+    let lastError = "";
 
-    let resp: Response;
-    try {
-      resp = await fetch(url, {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`Scan fetch error: ${message}`);
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = this.baseDelayMs * Math.pow(2, attempt - 1);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      let resp: Response;
+      try {
+        resp = await fetch(url, {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        this.cbRecordFailure();
+        continue;
+      }
+
+      if (resp.ok) {
+        this.cbRecordSuccess();
+        return (await resp.json()) as T;
+      }
+
+      // Don't retry 4xx (except 429)
+      if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+        this.cbRecordSuccess();
+        const text = await resp.text().catch(() => `HTTP ${resp.status}`);
+        throw new Error(`Scan request failed: ${text}`);
+      }
+
+      lastError = await resp.text().catch(() => `HTTP ${resp.status}`);
+      this.cbRecordFailure();
     }
 
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => `HTTP ${resp.status}`);
-      throw new Error(`Scan request failed: ${text}`);
-    }
-
-    return (await resp.json()) as T;
+    throw new Error(`Scan fetch error: ${lastError}`);
   }
 }

@@ -104,7 +104,7 @@ async function guardToolCall(
       );
       if (!res.allowed) {
         // Respect failOpen for gateway errors
-        if (opts.failOpen && (res as unknown as Record<string, unknown>)._gatewayError) {
+        if (opts.failOpen && res._gatewayError) {
           return;
         }
         throw new ClampdBlockedError(res);

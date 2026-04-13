@@ -15,7 +15,7 @@ services:
   # Automated adversarial testing against your Clampd deployment.
   # Runs attack simulations to verify detection coverage.
   ag-redteam:
-    image: ghcr.io/clampd/clampd/ag-redteam:${CLAMPD_VERSION:-v0.8.0}
+    image: ghcr.io/clampd/ag-redteam:${CLAMPD_VERSION:-v0.9.0}
     profiles: ["redteam"]
     security_opt:
       - no-new-privileges:true
@@ -50,7 +50,7 @@ services:
 
   # ── MCP Proxy (wraps any MCP server with Clampd security) ─────
   mcp-proxy:
-    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    image: ghcr.io/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.9.0}
     profiles: ["mcp"]
     ports:
       - "3003:3003"
@@ -71,7 +71,7 @@ services:
 
   # ── MCP Fleet (multi-agent demo) ──────────────────────────────
   mcp-analyst:
-    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    image: ghcr.io/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.9.0}
     profiles: ["fleet"]
     ports:
       - "3006:3006"
@@ -92,7 +92,7 @@ services:
     restart: on-failure
 
   mcp-devops:
-    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    image: ghcr.io/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.9.0}
     profiles: ["fleet"]
     ports:
       - "3007:3007"
@@ -111,7 +111,7 @@ services:
     restart: on-failure
 
   mcp-dbadmin:
-    image: ghcr.io/clampd/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.8.0}
+    image: ghcr.io/clampd/mcp-proxy:${CLAMPD_VERSION:-v0.9.0}
     profiles: ["fleet"]
     ports:
       - "3008:3008"

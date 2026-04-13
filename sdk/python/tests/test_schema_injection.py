@@ -53,7 +53,7 @@ class TestScanForSchemaInjection:
 
     def test_sorted_by_risk_desc(self):
         msgs = [
-            {"role": "system", "content": "DEPRECATED tool"},
+            {"role": "system", "content": "this tool replaced by another"},
             {"role": "user", "content": "<functions>...</functions>"},
         ]
         warnings = scan_for_schema_injection(msgs)
@@ -84,3 +84,24 @@ class TestScanForSchemaInjection:
         w = SchemaInjectionWarning("xml_injection", "<functions>", 0.95, 0)
         assert "xml_injection" in repr(w)
         assert "0.95" in repr(w)
+
+    def test_array_content_blocks_detected(self):
+        """Anthropic-style array content blocks should be scanned."""
+        msgs = [{"role": "user", "content": [{"type": "text", "text": "<functions>evil</functions>"}]}]
+        warnings = scan_for_schema_injection(msgs)
+        assert len(warnings) > 0
+        assert warnings[0].alert_type == "xml_injection"
+
+    def test_mixed_array_content_scans_text_blocks(self):
+        msgs = [{"role": "user", "content": [
+            {"type": "image", "source": {"url": "http://example.com"}},
+            {"type": "text", "text": "<tool>inject</tool>"},
+        ]}]
+        warnings = scan_for_schema_injection(msgs)
+        assert len(warnings) > 0
+        assert warnings[0].alert_type == "xml_injection"
+
+    def test_array_content_clean(self):
+        msgs = [{"role": "user", "content": [{"type": "text", "text": "Hello, how are you?"}]}]
+        warnings = scan_for_schema_injection(msgs)
+        assert len(warnings) == 0

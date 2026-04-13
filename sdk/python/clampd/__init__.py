@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import contextvars
+import copy
 import functools
 import hashlib
 import inspect
@@ -52,6 +53,14 @@ from clampd.delegation import (
     exit_delegation,
     get_delegation,
 )
+from clampd._guardrails import (
+    inspect_response as _inspect_response,
+    scan_input_openai as _scan_input_openai,
+    scan_input_anthropic as _scan_input_anthropic,
+    scan_output_content as _scan_output_content,
+    extract_openai_tool_names as _extract_openai_tool_names,
+    extract_anthropic_tool_names as _extract_anthropic_tool_names,
+)
 from clampd.stream_guard import guard_anthropic_stream, guard_openai_stream
 from clampd.tool_verify import (
     ScopeTokenClaims,
@@ -64,12 +73,8 @@ from clampd.tool_verify import (
 )
 
 __all__ = [
-    "AsyncClampdClient",
-    "ClampdClient",
-    "ClampdBlockedError",
-    "ProxyResponse",
-    "DelegationContext",
-    "make_agent_jwt",
+    # Core API
+    "init",
     "guard",
     "openai",
     "anthropic",
@@ -77,18 +82,22 @@ __all__ = [
     "adk",
     "crewai",
     "agent",
-    "init",
     "delegation_headers",
-    "get_delegation",
+    # Error types
+    "ClampdBlockedError",
+    "ScopeVerificationError",
+    # Scope verification (tool-side)
     "verify_scope_token",
     "require_scope",
     "get_current_scope_token",
     "ScopeTokenClaims",
-    "ScopeVerificationError",
-    "fetch_jwks",
-    "invalidate_jwks_cache",
+    # Security scanning
     "scan_for_schema_injection",
     "SchemaInjectionWarning",
+    # Advanced / escape-hatch (custom gateway setups)
+    "ClampdClient",
+    "AsyncClampdClient",
+    "make_agent_jwt",
 ]
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -105,6 +114,15 @@ _default_client: ClampdClient | None = None
 _agent_clients: dict[str, ClampdClient] = {}
 _agent_secrets: dict[str, str] = {}
 _shared_config: dict[str, str] = {}
+
+
+def _reset() -> None:
+    """Reset all global SDK state. Intended for test isolation."""
+    global _default_client
+    _default_client = None
+    _agent_clients.clear()
+    _agent_secrets.clear()
+    _shared_config.clear()
 
 
 def init(
@@ -208,69 +226,6 @@ def _get_client(
     )
 
 
-# ── Response inspection helper ────────────────────────────────────────
-
-
-def _inspect_response(
-    client: ClampdClient,
-    tool_name: str,
-    response_data: Any,
-    request_id: str = "",
-    fail_open: bool = False,
-    scope_token: str = "",
-) -> None:
-    """Send a tool response through inspect + scan_output endpoints.
-
-    The scope_token (from the original proxy() call) binds this
-    response scan to the approved call, proving it wasn't fabricated.
-
-    Runs two checks:
-    1. inspect — anomaly detection, scope validation
-    2. scan_output — PII/secrets detection on the serialized text
-    """
-    try:
-        try:
-            serializable = json.loads(json.dumps(response_data, default=str))
-        except (TypeError, ValueError):
-            serializable = str(response_data)
-        resp = client.inspect(
-            tool=tool_name,
-            response_data=serializable,
-            request_id=request_id,
-            scope_token=scope_token,
-        )
-    except Exception as e:
-        if fail_open:
-            logger.warning("Clampd inspect error (fail-open): %s", e)
-            return
-        raise ClampdBlockedError(f"Response inspection failed: {e}") from e
-
-    if not resp.allowed:
-        raise ClampdBlockedError(
-            resp.denial_reason or "Response blocked",
-            risk_score=resp.risk_score,
-            response=resp,
-        )
-
-    # Also run scan_output for PII/secrets detection.
-    # inspect checks anomalies/scope; scan_output catches sensitive data.
-    try:
-        text = json.dumps(response_data, default=str) if not isinstance(response_data, str) else response_data
-        scan_resp = client.scan_output(text, request_id=request_id)
-    except Exception as e:
-        if fail_open:
-            logger.warning("Clampd scan_output error (fail-open): %s", e)
-            return
-        raise ClampdBlockedError(f"Response scan failed: {e}") from e
-
-    if not scan_resp.allowed:
-        raise ClampdBlockedError(
-            scan_resp.denial_reason or "Response contains sensitive data",
-            risk_score=scan_resp.risk_score,
-            response=scan_resp,
-        )
-
-
 # ── @clampd.guard() decorator ────────────────────────────────────────
 
 
@@ -360,7 +315,9 @@ def guard(
                             resp.scope_granted,
                         )
 
-                    result = await fn(*args, **kwargs)
+                    # Snapshot kwargs to prevent mutation between guard and execution (TOCTOU)
+                    frozen_kwargs = copy.deepcopy(kwargs)
+                    result = await fn(*args, **frozen_kwargs)
 
                     if check_response:
                         _inspect_response(
@@ -433,7 +390,9 @@ def guard(
                             resp.scope_granted,
                         )
 
-                    result = fn(*args, **kwargs)
+                    # Snapshot kwargs to prevent mutation between guard and execution (TOCTOU)
+                    frozen_kwargs = copy.deepcopy(kwargs)
+                    result = fn(*args, **frozen_kwargs)
 
                     if check_response:
                         _inspect_response(
@@ -466,7 +425,7 @@ def openai(
     check_response: bool = False,
     scan_input: bool = True,
     scan_output: bool = True,
-    guard_stream: bool = False,
+    guard_stream: bool = True,
     schema_registry: dict[str, str] | None = None,
     secret: str | None = None,
 ) -> Any:
@@ -482,70 +441,13 @@ def openai(
     clampd_client = _get_client(agent_id=agent_id, secret=secret)
     original_create = client.chat.completions.create
 
-    def _scan_input_openai(kw: dict[str, Any]) -> None:
-        """Run input scan on OpenAI messages."""
-        # Schema injection pre-scan (runs on all message roles)
-        all_messages = kw.get("messages") or []
-        schema_warnings = scan_for_schema_injection(all_messages)
-        if schema_warnings:
-            top = schema_warnings[0]
-            if top.risk_score >= 0.85:
-                raise ClampdBlockedError(
-                    f"Schema injection detected: {top.alert_type} (pattern: {top.matched_pattern})",
-                    risk_score=top.risk_score,
-                )
-            else:
-                logger.warning("Schema injection warning: %s", top)
-
-        messages = kw.get("messages") or []
-        scannable = [
-            m for m in messages
-            if m.get("role") in ("user", "tool", "function")
-        ]
-        text = "\n".join(
-            m.get("content", "") for m in scannable
-            if isinstance(m.get("content"), str)
-        )
-        if text.strip():
-            try:
-                result = clampd_client.scan_input(
-                    text, message_count=len(messages)
-                )
-                if not result.allowed:
-                    raise ClampdBlockedError(
-                        result.denial_reason
-                        or "Input blocked by guardrail",
-                        risk_score=result.risk_score,
-                        response=result,
-                    )
-            except ClampdBlockedError:
-                raise
-            except Exception as e:
-                if not fail_open:
-                    raise
-                logger.warning("Input scan failed (fail-open): %s", e)
-
-    def _extract_openai_tool_names(kw: dict[str, Any]) -> list[str] | None:
-        """Extract tool names from OpenAI tools parameter for X-AG-Authorized-Tools."""
-        tools = kw.get("tools")
-        if not tools:
-            return None
-        names = []
-        for t in tools:
-            fn = t.get("function", {}) if isinstance(t, dict) else {}
-            name = fn.get("name", "")
-            if name:
-                names.append(name)
-        return names if names else None
-
     def guarded_create(*args: Any, **kwargs: Any) -> Any:
-        # Extract authorized tool names from the tools definition
         _authorized_tools = _extract_openai_tool_names(kwargs)
 
         # Streaming requests — intercept tool calls only when guard_stream=True
         if kwargs.get("stream"):
             if scan_input:
-                _scan_input_openai(kwargs)
+                _scan_input_openai(clampd_client, kwargs, fail_open)
             raw_stream = original_create(*args, **kwargs)
             if _authorized_tools:
                 if guard_stream:
@@ -558,38 +460,20 @@ def openai(
                     )
                 else:
                     logger.warning(
-                        "Streaming with tools detected but guard_stream is not enabled. "
-                        "Tool calls in this stream are not guarded. "
-                        "Set guard_stream=True to enable."
+                        "guard_stream explicitly disabled — streaming tool calls are not guarded."
                     )
             return raw_stream
 
         # ── INPUT GUARDRAIL ──
         if scan_input:
-            _scan_input_openai(kwargs)
+            _scan_input_openai(clampd_client, kwargs, fail_open)
 
         response = original_create(*args, **kwargs)
         choice = response.choices[0]
 
         # ── OUTPUT GUARDRAIL ──
         if scan_output and choice.message.content:
-            try:
-                out_result = clampd_client.scan_output(
-                    choice.message.content
-                )
-                if not out_result.allowed:
-                    raise ClampdBlockedError(
-                        out_result.denial_reason
-                        or "Output blocked by guardrail",
-                        risk_score=out_result.risk_score,
-                        response=out_result,
-                    )
-            except ClampdBlockedError:
-                raise
-            except Exception as e:
-                if not fail_open:
-                    raise
-                logger.warning("Output scan failed (fail-open): %s", e)
+            _scan_output_content(clampd_client, choice.message.content, fail_open)
 
         if (
             choice.finish_reason != "tool_calls"
@@ -704,8 +588,7 @@ def anthropic(
     check_response: bool = False,
     scan_input: bool = True,
     scan_output: bool = True,
-    guard_stream: bool = False,
-    schema_registry: dict[str, str] | None = None,
+    guard_stream: bool = True,
     secret: str | None = None,
 ) -> Any:
     """Wrap an Anthropic client so all tool calls go through Clampd.
@@ -720,61 +603,12 @@ def anthropic(
     clampd_client = _get_client(agent_id=agent_id, secret=secret)
     original_create = client.messages.create
 
-    def _extract_anthropic_tool_names(kw: dict[str, Any]) -> list[str] | None:
-        """Extract tool names from Anthropic tools parameter."""
-        tools = kw.get("tools")
-        if not tools:
-            return None
-        names = [t.get("name", "") for t in tools if isinstance(t, dict) and t.get("name")]
-        return names if names else None
-
     def guarded_create(*args: Any, **kwargs: Any) -> Any:
         _authorized_tools = _extract_anthropic_tool_names(kwargs)
-        # B1: Pass through streaming requests — tool calls come via stream events
+        # Streaming requests
         if kwargs.get("stream"):
             if scan_input:
-                # Schema injection pre-scan (runs on all message roles)
-                all_messages = kwargs.get("messages") or []
-                schema_warnings = scan_for_schema_injection(all_messages)
-                if schema_warnings:
-                    top = schema_warnings[0]
-                    if top.risk_score >= 0.85:
-                        raise ClampdBlockedError(
-                            f"Schema injection detected: {top.alert_type} (pattern: {top.matched_pattern})",
-                            risk_score=top.risk_score,
-                        )
-                    else:
-                        logger.warning("Schema injection warning: %s", top)
-
-                messages = kwargs.get("messages") or []
-                scannable = [
-                    m for m in messages
-                    if m.get("role") in ("user", "tool")
-                ]
-                text = "\n".join(
-                    m.get("content", "") for m in scannable
-                    if isinstance(m.get("content"), str)
-                )
-                if text.strip():
-                    try:
-                        result = clampd_client.scan_input(
-                            text, message_count=len(messages)
-                        )
-                        if not result.allowed:
-                            raise ClampdBlockedError(
-                                result.denial_reason
-                                or "Input blocked by guardrail",
-                                risk_score=result.risk_score,
-                                response=result,
-                            )
-                    except ClampdBlockedError:
-                        raise
-                    except Exception as e:
-                        if not fail_open:
-                            raise
-                        logger.warning(
-                            "Input scan failed (fail-open): %s", e
-                        )
+                _scan_input_anthropic(clampd_client, kwargs, fail_open)
             raw_stream = original_create(*args, **kwargs)
             if _authorized_tools:
                 if guard_stream:
@@ -787,53 +621,13 @@ def anthropic(
                     )
                 else:
                     logger.warning(
-                        "Streaming with tools detected but guard_stream is not enabled. "
-                        "Tool calls in this stream are not guarded. "
-                        "Set guard_stream=True to enable."
+                        "guard_stream explicitly disabled — streaming tool calls are not guarded."
                     )
             return raw_stream
 
         # ── INPUT GUARDRAIL ──
         if scan_input:
-            # Schema injection pre-scan (runs on all message roles)
-            all_messages = kwargs.get("messages") or []
-            schema_warnings = scan_for_schema_injection(all_messages)
-            if schema_warnings:
-                top = schema_warnings[0]
-                if top.risk_score >= 0.85:
-                    raise ClampdBlockedError(
-                        f"Schema injection detected: {top.alert_type} (pattern: {top.matched_pattern})",
-                        risk_score=top.risk_score,
-                    )
-                else:
-                    logger.warning("Schema injection warning: %s", top)
-
-            messages = kwargs.get("messages") or []
-            scannable = [
-                m for m in messages if m.get("role") in ("user", "tool")
-            ]
-            text = "\n".join(
-                m.get("content", "") for m in scannable
-                if isinstance(m.get("content"), str)
-            )
-            if text.strip():
-                try:
-                    result = clampd_client.scan_input(
-                        text, message_count=len(messages)
-                    )
-                    if not result.allowed:
-                        raise ClampdBlockedError(
-                            result.denial_reason
-                            or "Input blocked by guardrail",
-                            risk_score=result.risk_score,
-                            response=result,
-                        )
-                except ClampdBlockedError:
-                    raise
-                except Exception as e:
-                    if not fail_open:
-                        raise
-                    logger.warning("Input scan failed (fail-open): %s", e)
+            _scan_input_anthropic(clampd_client, kwargs, fail_open)
 
         response = original_create(*args, **kwargs)
 
@@ -997,65 +791,30 @@ def adk(
 
     Returns None to allow, or a response dict to block.
     """
+    from clampd._guardrails import guard_tool_callback, inspect_response_callback
+
     client = _get_client(agent_id=agent_id, secret=secret)
+
+    _last_scope_token = ""
 
     def before_tool(
         tool_name: str, args: dict[str, Any], context: Any
     ) -> dict[str, Any] | None:
-        try:
-            result = client.proxy(
-                tool=tool_name, params=args, target_url=target_url
-            )
-        except Exception as e:
-            if fail_open:
-                logger.warning("Clampd gateway error (fail-open): %s", e)
-                return None
-            return {
-                "error": f"Security gateway error: {type(e).__name__}"
-            }
-
-        if not result.allowed:
-            return {
-                "error": f"Blocked by Clampd: {result.denial_reason}",
-                "risk_score": result.risk_score,
-            }
-
-        return None
+        nonlocal _last_scope_token
+        error, scope_token = guard_tool_callback(
+            client, tool_name, args,
+            target_url=target_url, fail_open=fail_open,
+        )
+        _last_scope_token = scope_token
+        return error
 
     def after_tool(
         tool_name: str, response: Any, context: Any
     ) -> dict[str, Any] | None:
-        try:
-            serializable = (
-                response
-                if isinstance(
-                    response,
-                    (str, int, float, bool, type(None), dict, list),
-                )
-                else str(response)
-            )
-            result = client.inspect(
-                tool=tool_name, response_data=serializable
-            )
-        except Exception as e:
-            if fail_open:
-                logger.warning(
-                    "Clampd inspection error (fail-open): %s", e
-                )
-                return None
-            return {
-                "error": f"Response inspection error: {type(e).__name__}"
-            }
-
-        if not result.allowed:
-            return {
-                "error": (
-                    f"Response blocked by Clampd: {result.denial_reason}"
-                ),
-                "risk_score": result.risk_score,
-            }
-
-        return None
+        return inspect_response_callback(
+            client, tool_name, response,
+            fail_open=fail_open, scope_token=_last_scope_token,
+        )
 
     if check_response:
         return before_tool, after_tool

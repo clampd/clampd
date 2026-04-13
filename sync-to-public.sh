@@ -1,22 +1,29 @@
 #!/bin/bash
-# sync-to-public.sh - Selective sync: private repo → public repo
+# sync-to-public.sh — Selective sync: private repo → public distribution repo
 #
-# Selective sync with stubs for proprietary rule content.
+# What ships publicly:
+#   1. SDKs (full source, Apache 2.0)        — Python + TypeScript
+#   2. clampd-guard (full source, BSL 1.1)   — Claude Code / Cursor hook
+#   3. ag-gateway (partial source, BSL 1.1)  — request pipeline (no detection IP)
+#   4. ag-shadow (full source, BSL 1.1)      — audit pipeline + PII masker
+#   5. Proto (full, Apache 2.0)              — gRPC API contracts
+#   6. Docker compose + config               — deployment files
+#   7. Pre-built binaries                    — clampd CLI + clampd-guard
+#
+# Everything else ships as Docker images only (ghcr.io/clampd/*).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRIVATE_ROOT="$(dirname "$SCRIPT_DIR")"
 PUBLIC_ROOT="$SCRIPT_DIR"
-STUBS_DIR="$SCRIPT_DIR/stubs"
 SVC="$PRIVATE_ROOT/services/crates"
-PUB_SVC="$PUBLIC_ROOT/services/crates"
 
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true && echo "[DRY RUN]"
 
-VERSION="${CLAMPD_VERSION:-0.8.0}"
-echo "==> Syncing Clampd v${VERSION} (selective)"
+VERSION="${CLAMPD_VERSION:-0.9.0}"
+echo "==> Syncing Clampd v${VERSION}"
 
 copy_dir() {
     $DRY_RUN && echo "  [dry-run] $1 -> $2" && return
@@ -34,8 +41,8 @@ copy_files() {
     for f in "$@"; do cp "$src_dir/$f" "$dst_dir/" 2>/dev/null || true; done
 }
 
-# ── 1. SDKs (Apache 2.0 - full) ─────────────────────────────
-echo "[1/8] SDKs (Python + TypeScript only)"
+# ── 1. SDKs (Apache 2.0 — full source) ──────────────────────
+echo "[1/7] SDKs"
 copy_dir "$PRIVATE_ROOT/sdk/python" "$PUBLIC_ROOT/sdk/python"
 copy_dir "$PRIVATE_ROOT/sdk/typescript" "$PUBLIC_ROOT/sdk/typescript"
 if ! $DRY_RUN; then
@@ -45,196 +52,120 @@ if ! $DRY_RUN; then
     find "$PUBLIC_ROOT/sdk" \( -name '.env' -o -name '.env.local' -o -name '.env.backup' \) -delete 2>/dev/null || true
 fi
 
-# ── 2. Proto (Apache 2.0 - full) ────────────────────────────
-echo "[2/8] Proto"
+# ── 2. Proto (Apache 2.0 — full) ────────────────────────────
+echo "[2/7] Proto"
 copy_dir "$PRIVATE_ROOT/proto" "$PUBLIC_ROOT/proto"
 
-# ── 3. Docker (Apache 2.0) - clean customer-facing files ────
-echo "[3/8] Docker"
+# ── 3. Docker (Apache 2.0 — deployment files only) ──────────
+echo "[3/7] Docker"
 if ! $DRY_RUN; then
-    mkdir -p "$PUBLIC_ROOT/docker/services"
-    # Only ship the customer-facing compose files (proxy + control)
-    # NOT docker-compose.yml (dev-only, references demo seeds/mock-tool)
+    mkdir -p "$PUBLIC_ROOT/docker"
     cp "$PRIVATE_ROOT/clampd/docker-compose.proxy.yml" "$PUBLIC_ROOT/docker/" 2>/dev/null || true
     cp "$PRIVATE_ROOT/clampd/docker-compose.control.yml" "$PUBLIC_ROOT/docker/" 2>/dev/null || true
     cp "$PRIVATE_ROOT/clampd/.env.example" "$PUBLIC_ROOT/docker/" 2>/dev/null || true
-    # Caddyfile excluded - users configure their own reverse proxy
-    cp "$PRIVATE_ROOT/services/deploy/Dockerfile.service" "$PUBLIC_ROOT/docker/services/" 2>/dev/null || true
     cp "$PRIVATE_ROOT/sdk/typescript/mcp-proxy/Dockerfile" "$PUBLIC_ROOT/docker/mcp-proxy.Dockerfile" 2>/dev/null || true
 
-    # Remove dev-only compose (references demo seeds, mock-tool)
+    # Remove dev-only files
     rm -f "$PUBLIC_ROOT/docker/docker-compose.yml" 2>/dev/null || true
     rm -f "$PUBLIC_ROOT/docker/docker-compose.deploy.yml" 2>/dev/null || true
 
-    # Strip redteam + MCP + fleet from proxy compose (they're in docker-compose.demo.yml)
+    # Strip redteam from proxy compose
     if [[ -f "$PUBLIC_ROOT/docker/docker-compose.proxy.yml" ]]; then
-        # Remove everything from "Red Team Testing" to "Reverse Proxy"
         sed -i '/# ── Red Team Testing/,/# ── Reverse Proxy/{/# ── Reverse Proxy/!d}' \
             "$PUBLIC_ROOT/docker/docker-compose.proxy.yml" 2>/dev/null || true
-        # Remove any build: context blocks
         sed -i '/^\s*build:/,/^\s*dockerfile:/d' \
             "$PUBLIC_ROOT/docker/docker-compose.proxy.yml" 2>/dev/null || true
-        # Remove CLAMPD_DEMO_PANEL
         sed -i '/CLAMPD_DEMO_PANEL/d' \
             "$PUBLIC_ROOT/docker/docker-compose.proxy.yml" 2>/dev/null || true
     fi
 fi
 
-# ── 4. ag-gateway ──────────
-echo "[4/8] ag-gateway (pipeline)"
-copy_files "$SVC/ag-gateway/src" "$PUB_SVC/ag-gateway/src" \
+# ── 4. ag-gateway (BSL 1.1 — partial: pipeline, no detection IP) ──
+echo "[4/7] ag-gateway (partial — 15 pipeline files)"
+copy_files "$SVC/ag-gateway/src" "$PUBLIC_ROOT/src/ag-gateway" \
     main.rs proxy.rs middleware.rs extractor.rs normalize.rs \
     decision.rs delegation.rs scan.rs shadow.rs session.rs \
     metrics.rs otel.rs scope_token.rs rate_limiter.rs circuit_breaker.rs
-$DRY_RUN || cp "$SVC/ag-gateway/Cargo.toml" "$PUB_SVC/ag-gateway/"
+$DRY_RUN || cp "$SVC/ag-gateway/Cargo.toml" "$PUBLIC_ROOT/src/ag-gateway/"
 
-# ── 5. ag-engine ─────
-echo "[5/8] ag-engine (open modules + stubs)"
-if ! $DRY_RUN; then
-    # lib.rs
-    mkdir -p "$PUB_SVC/ag-engine/src"
-    cp "$SVC/ag-engine/Cargo.toml" "$PUB_SVC/ag-engine/"
-    cp "$SVC/ag-engine/src/lib.rs" "$PUB_SVC/ag-engine/src/"
-
-
-    for dir in parse compile execute normalize funnel scheme storage taxonomy versioning testing; do
-        if [[ -d "$SVC/ag-engine/src/$dir" ]]; then
-            mkdir -p "$PUB_SVC/ag-engine/src/$dir"
-            cp "$SVC/ag-engine/src/$dir/"*.rs "$PUB_SVC/ag-engine/src/$dir/" 2>/dev/null || true
-        fi
-    done
-
-    # Signals
-    mkdir -p "$PUB_SVC/ag-engine/src/signals"
-    cp "$STUBS_DIR/signals/mod.rs" "$PUB_SVC/ag-engine/src/signals/mod.rs"
-
-    # Dictionary
-    mkdir -p "$PUB_SVC/ag-engine/src/dictionary"
-    cp "$STUBS_DIR/dictionary/mod.rs" "$PUB_SVC/ag-engine/src/dictionary/mod.rs"
-
-    # Builtins
-    mkdir -p "$PUB_SVC/ag-engine/src/builtins"
-    cp "$STUBS_DIR/builtins/mod.rs" "$PUB_SVC/ag-engine/src/builtins/mod.rs"
-
-    # Compliance
-    mkdir -p "$PUB_SVC/ag-engine/src/compliance"
-    cp "$STUBS_DIR/compliance/mod.rs" "$PUB_SVC/ag-engine/src/compliance/mod.rs"
-fi
-
-# ── 6. ag-shadow ─────
-echo "[6/8] ag-shadow (audit pipeline)"
-copy_files "$SVC/ag-shadow/src" "$PUB_SVC/ag-shadow/src" \
+# ── 5. ag-shadow (BSL 1.1 — full: audit pipeline + PII masker) ──
+echo "[5/7] ag-shadow (full — data handling transparency)"
+copy_files "$SVC/ag-shadow/src" "$PUBLIC_ROOT/src/ag-shadow" \
     main.rs consumer.rs writer.rs pii_masker.rs enricher.rs lib.rs
-$DRY_RUN || cp "$SVC/ag-shadow/Cargo.toml" "$PUB_SVC/ag-shadow/"
+$DRY_RUN || cp "$SVC/ag-shadow/Cargo.toml" "$PUBLIC_ROOT/src/ag-shadow/"
 
-# ── 7. Supporting services (entry points only) ──────────────
-echo "[7/8] Supporting services (shells)"
-
-# ag-common
-copy_dir "$SVC/ag-common" "$PUB_SVC/ag-common"
-
-$DRY_RUN || rm -f "$PUB_SVC/ag-common/src/license_guard.rs" "$PUB_SVC/ag-common/src/license.rs"
-$DRY_RUN || rm -f "$PUB_SVC/ag-common/keys/license_priv.pem"
-
-# ag-proto
+# ── 6. clampd-guard (BSL 1.1 — full source + tests) ─────────
+echo "[6/7] clampd-guard (full source)"
 if ! $DRY_RUN; then
-    mkdir -p "$PUB_SVC/ag-proto/src"
-    cp "$SVC/ag-proto/Cargo.toml" "$PUB_SVC/ag-proto/"
-    cp "$SVC/ag-proto/build.rs" "$PUB_SVC/ag-proto/" 2>/dev/null || true
-    cp "$SVC/ag-proto/src/lib.rs" "$PUB_SVC/ag-proto/src/"
+    mkdir -p "$PUBLIC_ROOT/src/clampd-guard/src" "$PUBLIC_ROOT/src/clampd-guard/tests"
+    cp "$SVC/clampd-guard/Cargo.toml" "$PUBLIC_ROOT/src/clampd-guard/"
+    cp "$SVC/clampd-guard/src/"*.rs "$PUBLIC_ROOT/src/clampd-guard/src/"
+    cp "$SVC/clampd-guard/tests/"*.rs "$PUBLIC_ROOT/src/clampd-guard/tests/" 2>/dev/null || true
 fi
 
-# ag-policy
-copy_files "$SVC/ag-policy/src" "$PUB_SVC/ag-policy/src" \
-    main.rs service.rs decision.rs lib.rs
-$DRY_RUN || cp "$SVC/ag-policy/Cargo.toml" "$PUB_SVC/ag-policy/"
-
-# ag-risk
-copy_files "$SVC/ag-risk/src" "$PUB_SVC/ag-risk/src" \
-    main.rs service.rs scorer.rs baseline.rs lib.rs
-$DRY_RUN || cp "$SVC/ag-risk/Cargo.toml" "$PUB_SVC/ag-risk/"
-
-# ag-intent
-copy_files "$SVC/ag-intent/src" "$PUB_SVC/ag-intent/src" \
-    main.rs service.rs lib.rs
-$DRY_RUN || cp "$SVC/ag-intent/Cargo.toml" "$PUB_SVC/ag-intent/"
-
-# ag-token
-copy_files "$SVC/ag-token/src" "$PUB_SVC/ag-token/src" \
-    main.rs service.rs lib.rs signing.rs exchange.rs
-$DRY_RUN || cp "$SVC/ag-token/Cargo.toml" "$PUB_SVC/ag-token/"
-
-# ag-kill
-copy_files "$SVC/ag-kill/src" "$PUB_SVC/ag-kill/src" \
-    main.rs service.rs cascade.rs
-$DRY_RUN || cp "$SVC/ag-kill/Cargo.toml" "$PUB_SVC/ag-kill/"
-
-# ag-registry
-copy_files "$SVC/ag-registry/src" "$PUB_SVC/ag-registry/src" \
-    main.rs service.rs lifecycle.rs repository.rs lib.rs
-$DRY_RUN || cp "$SVC/ag-registry/Cargo.toml" "$PUB_SVC/ag-registry/"
-
-# ag-control
-copy_files "$SVC/ag-control/src" "$PUB_SVC/ag-control/src" \
-    main.rs service.rs poller.rs health.rs leader.rs
-$DRY_RUN || cp "$SVC/ag-control/Cargo.toml" "$PUB_SVC/ag-control/"
-
-# clampd-cli
+# ── 7. Binaries ──────────────────────────────────────────────
+echo "[7/7] Binaries"
 if ! $DRY_RUN; then
-    mkdir -p "$PUB_SVC/clampd-cli/src/commands"
-    cp "$SVC/clampd-cli/Cargo.toml" "$PUB_SVC/clampd-cli/"
-    copy_files "$SVC/clampd-cli/src" "$PUB_SVC/clampd-cli/src" \
-        main.rs config.rs output.rs state.rs
-    for f in "$SVC/clampd-cli/src/commands/"*.rs; do
-        fname="$(basename "$f")"
-        [[ "$fname" == "demo.rs" ]] && continue
-        cp "$f" "$PUB_SVC/clampd-cli/src/commands/"
-    done
-    rm -f "$PUB_SVC/clampd-cli/src/license_gate.rs"
-fi
+    mkdir -p "$PUBLIC_ROOT/bin"
 
-# Workspace Cargo files
-$DRY_RUN || cp "$PRIVATE_ROOT/services/Cargo.toml" "$PUBLIC_ROOT/services/" 2>/dev/null || true
-$DRY_RUN || cp "$PRIVATE_ROOT/services/Cargo.lock" "$PUBLIC_ROOT/services/" 2>/dev/null || true
-
-# CLI binary - build if needed, copy with version
-if ! $DRY_RUN; then
+    # clampd CLI
     CLI_BIN="$PRIVATE_ROOT/services/target/release/clampd"
     if [[ ! -f "$CLI_BIN" ]]; then
-        echo "    Building CLI binary..."
+        echo "    Building clampd CLI..."
         (cd "$PRIVATE_ROOT/services" && cargo build --release --bin clampd -p clampd-cli 2>&1 | tail -3)
     fi
     if [[ -f "$CLI_BIN" ]]; then
-        mkdir -p "$PUBLIC_ROOT/bin"
         cp "$CLI_BIN" "$PUBLIC_ROOT/bin/clampd-v${VERSION}-linux-amd64"
         chmod +x "$PUBLIC_ROOT/bin/clampd-v${VERSION}-linux-amd64"
-        echo "    CLI binary: bin/clampd-v${VERSION}-linux-amd64 ($(du -h "$PUBLIC_ROOT/bin/clampd-v${VERSION}-linux-amd64" | cut -f1))"
+        echo "    clampd CLI: bin/clampd-v${VERSION}-linux-amd64 ($(du -h "$PUBLIC_ROOT/bin/clampd-v${VERSION}-linux-amd64" | cut -f1))"
     else
-        echo "    ERROR: CLI build failed"
+        echo "    ERROR: clampd CLI build failed"
         exit 1
+    fi
+
+    # clampd-guard
+    GUARD_BIN="$PRIVATE_ROOT/services/target/release/clampd-guard"
+    if [[ ! -f "$GUARD_BIN" ]]; then
+        echo "    Building clampd-guard..."
+        (cd "$PRIVATE_ROOT/services" && cargo build --release --bin clampd-guard -p clampd-guard 2>&1 | tail -3)
+    fi
+    if [[ -f "$GUARD_BIN" ]]; then
+        cp "$GUARD_BIN" "$PUBLIC_ROOT/bin/clampd-guard-v${VERSION}-linux-amd64"
+        chmod +x "$PUBLIC_ROOT/bin/clampd-guard-v${VERSION}-linux-amd64"
+        echo "    clampd-guard: bin/clampd-guard-v${VERSION}-linux-amd64 ($(du -h "$PUBLIC_ROOT/bin/clampd-guard-v${VERSION}-linux-amd64" | cut -f1))"
+    else
+        echo "    WARN: clampd-guard build failed (non-fatal)"
     fi
 fi
 
-# ── 8. Verify - audit the auditor ────────────────────────────
-echo "[8/8] Verifying (deep scan)"
+# ── Verify — leak scanner ───────────────────────────────────
+echo ""
+echo "Verifying (deep scan)..."
 LEAKED=false
 
-# Known bad directories
-for bad in ag-license ag-redteam integration-tests; do
-    [[ -e "$PUB_SVC/$bad" ]] && echo "  WARN: excluded service '$bad' found!" && LEAKED=true
+# Must NOT exist in public repo
+for bad in ag-license ag-redteam integration-tests ag-engine ag-intent ag-policy \
+           ag-risk ag-kill ag-registry ag-control ag-token ag-common ag-proto clampd-cli; do
+    for check_dir in "$PUBLIC_ROOT/services/crates/$bad" "$PUBLIC_ROOT/src/$bad"; do
+        # ag-gateway and ag-shadow are allowed in src/
+        [[ "$bad" == "ag-gateway" || "$bad" == "ag-shadow" ]] && [[ "$check_dir" == "$PUBLIC_ROOT/src/$bad" ]] && continue
+        if [[ -e "$check_dir" ]]; then
+            echo "  WARN: excluded service '$bad' found at $check_dir!"
+            LEAKED=true
+        fi
+    done
 done
 
-# Known bad files
-[[ -d "$PUB_SVC/ag-engine/src/builtins/rules" ]] && echo "  WARN: Rule TOML files leaked!" && LEAKED=true
-[[ -f "$PUB_SVC/clampd-cli/src/license_gate.rs" ]] && echo "  WARN: license_gate.rs leaked!" && LEAKED=true
-[[ -f "$PUB_SVC/ag-common/src/license_guard.rs" ]] && echo "  WARN: license_guard.rs leaked!" && LEAKED=true
-[[ -f "$PUB_SVC/ag-common/src/license.rs" ]] && echo "  WARN: license.rs leaked!" && LEAKED=true
-[[ -f "$PUB_SVC/clampd-cli/src/commands/demo.rs" ]] && echo "  WARN: demo.rs leaked!" && LEAKED=true
+# Old services/ directory should not have crates
+if [[ -d "$PUBLIC_ROOT/services/crates" ]]; then
+    echo "  WARN: old services/crates/ directory still exists — remove it!"
+    LEAKED=true
+fi
 
-# RSA private key - CRITICAL
+# RSA private key — CRITICAL
 PRIV_KEYS=$(find "$PUBLIC_ROOT" -name "*priv*" -o -name "private*.pem" 2>/dev/null || true)
 if [[ -n "$PRIV_KEYS" ]]; then
-    echo "  CRITICAL: RSA private key found in public repo!"
+    echo "  CRITICAL: RSA private key found!"
     echo "  $PRIV_KEYS"
     LEAKED=true
 fi
@@ -243,13 +174,13 @@ fi
 ENV_FILES=$(find "$PUBLIC_ROOT" -name '.env' -not -name '.env.example' 2>/dev/null || true)
 [[ -n "$ENV_FILES" ]] && echo "  WARN: .env files: $ENV_FILES" && LEAKED=true
 
-# Secrets pattern scan - grep for anything that looks like a real key/token/password
+# Secrets scan
 SECRETS=$(grep -rn \
     -e 'ag_test_\|ags_[a-f0-9]\{16,\}\|sk-[a-zA-Z0-9]\{20,\}' \
     -e 'PRIVATE KEY' \
     -e 'password\s*=\s*"[^"]\{8,\}"' \
     --include='*.rs' --include='*.toml' --include='*.yml' --include='*.json' --include='*.py' --include='*.ts' \
-    "$PUBLIC_ROOT/services" "$PUBLIC_ROOT/docker" 2>/dev/null \
+    "$PUBLIC_ROOT/src" "$PUBLIC_ROOT/docker" "$PUBLIC_ROOT/sdk" 2>/dev/null \
     | grep -v 'test\|example\|mock\|fixture\|\.env\.example\|password.*clampd\|POSTGRES_PASSWORD\|detect_secrets\|EXAMPLE\|BEGIN.*PRIVATE.*comment\|/// ' \
     || true)
 if [[ -n "$SECRETS" ]]; then
@@ -258,32 +189,40 @@ if [[ -n "$SECRETS" ]]; then
     LEAKED=true
 fi
 
-# Check no private directories leaked that we didn't expect
-for unexpected in dashboard deploy terraform .claude memory documents; do
+# No private directories
+for unexpected in dashboard deploy terraform .claude memory documents license-service; do
     if [[ -e "$PUBLIC_ROOT/$unexpected" ]]; then
         echo "  WARN: unexpected directory '$unexpected' in public repo!"
         LEAKED=true
     fi
 done
 
-# Count check - if we suddenly have way more .rs files than expected, something is wrong
-RS_COUNT=$(find "$PUBLIC_ROOT/services" -name "*.rs" -type f 2>/dev/null | wc -l)
-if [[ "$RS_COUNT" -gt 200 ]]; then
-    echo "  WARN: ${RS_COUNT} .rs files - expected ~120, possible full-copy leak"
+# .rs file count — should be low (guard:8, gateway:15, shadow:6 + tests)
+RS_COUNT=$(find "$PUBLIC_ROOT/src" -name "*.rs" -type f 2>/dev/null | wc -l)
+if [[ "$RS_COUNT" -gt 50 ]]; then
+    echo "  WARN: ${RS_COUNT} .rs files in src/ — expected ~30, possible leak"
     LEAKED=true
 fi
 
 $LEAKED && echo "  ABORT: Fix issues before pushing." && exit 1
-echo "  OK - clean (${RS_COUNT} .rs files)"
+echo "  OK — clean (${RS_COUNT} .rs files in src/)"
 
 # ── Summary ──────────────────────────────────────────────────
-RS_COUNT=$(find "$PUBLIC_ROOT/services" -name "*.rs" -type f 2>/dev/null | wc -l)
 echo ""
-echo "==> Done! v${VERSION} - ${RS_COUNT} .rs files"
+echo "==> Done! v${VERSION}"
 echo ""
-echo "  OPEN (full source):     SDKs, proto, docker, ag-common, signals"
-echo "  OPEN (data path):       ag-gateway(15), ag-shadow(6), ag-engine modules"
-echo "  OPEN (service shells):  ag-policy, ag-risk, ag-intent, ag-token, ag-kill,"
-echo "                          ag-registry, ag-control, clampd-cli"
-echo "  STUBBED (interface):    builtins(rules), dictionary(keywords), compliance(mappings)"
-echo "  EXCLUDED:               dashboard, deploy, ag-license, ag-redteam, integration-tests"
+echo "  OPEN SOURCE:"
+echo "    sdk/python/             Python SDK (Apache 2.0)"
+echo "    sdk/typescript/         TypeScript SDK (Apache 2.0)"
+echo "    src/clampd-guard/       Claude Code & Cursor guard — full source (BSL 1.1)"
+echo "    src/ag-gateway/         Request pipeline — 15 files, partial (BSL 1.1)"
+echo "    src/ag-shadow/          Audit + PII masking — full source (BSL 1.1)"
+echo "    proto/                  gRPC contracts (Apache 2.0)"
+echo ""
+echo "  BINARY ONLY (Docker images at ghcr.io/clampd/*):"
+echo "    ag-engine, ag-intent, ag-policy, ag-risk, ag-kill,"
+echo "    ag-registry, ag-token, ag-control, dashboard"
+echo ""
+echo "  PRE-BUILT BINARIES:"
+echo "    bin/clampd-v${VERSION}-linux-amd64"
+echo "    bin/clampd-guard-v${VERSION}-linux-amd64"

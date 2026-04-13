@@ -29,9 +29,11 @@ const PATTERN_GROUPS: PatternGroup[] = [
     riskScore: 0.95,
     patterns: [
       /<\/?functions\s*>/i,
-      /<function\s+/i,
+      /<function[\s>]/i,
       /<\/?tool\s*>/i,
       /<\/?tool_call\s*>/i,
+      /<\/?tool_code\s*>/i,
+      /<\/?tools\s*>/i,
       /<system\s*>/i,
     ],
   },
@@ -57,8 +59,8 @@ const PATTERN_GROUPS: PatternGroup[] = [
     alertType: "tool_steering",
     riskScore: 0.80,
     patterns: [
-      /\bDEPRECATED\b/i,
-      /\bOBSOLETE\b/i,
+      // Multi-word patterns only — single words like "DEPRECATED" cause
+      // false positives in normal conversation (alert fatigue risk).
       /use\s+\w+\s+instead\b/i,
       /\breplaced\s+by\b/i,
       /\bsuperseded\s+by\b/i,
@@ -90,7 +92,16 @@ export function scanForSchemaInjection(messages: MessageLike[]): SchemaInjection
 
   for (let idx = 0; idx < messages.length; idx++) {
     const msg = messages[idx];
-    const content = typeof msg.content === "string" ? msg.content : "";
+    let content = "";
+    if (typeof msg.content === "string") {
+      content = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      // Anthropic-style content blocks: [{type: "text", text: "..."}]
+      content = (msg.content as Array<Record<string, unknown>>)
+        .filter((b) => b.type === "text" && typeof b.text === "string")
+        .map((b) => b.text as string)
+        .join("\n");
+    }
     if (!content) continue;
 
     for (const group of PATTERN_GROUPS) {

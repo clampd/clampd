@@ -1,0 +1,5 @@
+89de13d2abef8c648c0515ebef8ff6249970aae47facaeb71af0e690568f087e  clampd-guard-linux-amd64.tar.gz
+4e56c44e4d3867ada267b6c78db6fd3961213cae566baeb01af87a78ab9a03e1  clampd-linux-amd64.tar.gz
+90ff03c257ba044af03478ce99ee43881528954dfb39bad55b1fd1cf896900c9  docker-compose.control.yml
+c4a4094968428f7c42283cb90aa5f060cc2c7ef61377e4142efc1c0802caf6fe  docker-compose.proxy.yml
+5feaff0c142eab39b50c7d3054e1a4d3fe85c46bf5405e7561d96fda6c66b8ff  setup.sh

@@ -108,10 +108,10 @@ class TestCrewAIGuard:
         original_run = MagicMock()
         tool._run = original_run
 
-        guard.wrap_tool(tool)
+        wrapped = guard.wrap_tool(tool)
 
         with pytest.raises(ClampdBlockedError, match="policy violation"):
-            tool._run(path="/etc/passwd", content="hacked")
+            wrapped._run(path="/etc/passwd", content="hacked")
 
         original_run.assert_not_called()
 
@@ -137,5 +137,5 @@ class TestCrewAIGuard:
         step.tool = "search"
         step.tool_input = {"query": "hello"}
 
-        with pytest.raises(ClampdBlockedError, match="gateway down"):
+        with pytest.raises(ClampdBlockedError, match="Security gateway error"):
             guard.step_callback(step)

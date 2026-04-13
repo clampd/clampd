@@ -79,7 +79,7 @@ class ScopeTokenClaims:
 
 _cached_jwks: dict[str, Any] | None = None
 _jwks_fetched_at: float = 0.0
-_JWKS_CACHE_TTL = 3600  # 1 hour
+_JWKS_CACHE_TTL = 300  # 5 minutes
 
 
 def _b64url_decode(s: str) -> bytes:

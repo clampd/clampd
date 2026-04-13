@@ -35,7 +35,7 @@ fi
 if [ "$VERSION" = "latest" ]; then
   VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')
   if [ -z "$VERSION" ]; then
-    echo "Failed to detect latest version. Set CLAMPD_VERSION=v0.8.1 manually."
+    echo "Failed to detect latest version. Set CLAMPD_VERSION=v0.9.0 manually."
     exit 1
   fi
 fi

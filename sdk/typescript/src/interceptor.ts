@@ -12,6 +12,7 @@
  */
 
 import { ClampdClient, type ProxyResponse } from "./client.js";
+import { setScopeToken, withScopeToken } from "./tool-verify.js";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -183,6 +184,10 @@ export function wrapFunction<TArgs extends unknown[], TReturn>(
     }
 
     // Allowed (or blockOnDeny=false) — execute the original function.
+    if (proxyRes.allowed && proxyRes.scope_token) {
+      setScopeToken(proxyRes.scope_token);
+      return withScopeToken(proxyRes.scope_token, () => fn(...args));
+    }
     return fn(...args);
   };
 }
@@ -243,6 +248,10 @@ export function wrapOpenAITools(
         throw new ClampdBlockedError(proxyRes);
       }
 
+      if (proxyRes.allowed && proxyRes.scope_token) {
+        setScopeToken(proxyRes.scope_token);
+        return withScopeToken(proxyRes.scope_token, () => originalExecute(args));
+      }
       return originalExecute(args);
     };
 
@@ -327,6 +336,12 @@ export class ClampdGuard {
 
     if (!proxyResponse.allowed) {
       throw new ClampdBlockedError(proxyResponse);
+    }
+
+    if (proxyResponse.scope_token) {
+      setScopeToken(proxyResponse.scope_token);
+      const result = await withScopeToken(proxyResponse.scope_token, fn);
+      return { result, proxyResponse };
     }
 
     const result = await fn();

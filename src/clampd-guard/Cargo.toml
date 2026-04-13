@@ -1,0 +1,50 @@
+[package]
+name = "clampd-guard"
+version = "0.1.0"
+edition = "2021"
+description = "Runtime security guard for AI coding tools — PreToolUse/PostToolUse hook for Claude Code"
+homepage = "https://clampd.dev"
+repository = "https://github.com/clampd/services"
+license = "BSL-1.1"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/guard-v{ version }/clampd-guard-{ target }{ archive-suffix }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/guard-v{ version }/clampd-guard-linux-amd64.tar.gz"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/guard-v{ version }/clampd-guard-linux-amd64-static.tar.gz"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/guard-v{ version }/clampd-guard-linux-arm64.tar.gz"
+
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/guard-v{ version }/clampd-guard-darwin-arm64.tar.gz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/guard-v{ version }/clampd-guard-windows-amd64.zip"
+pkg-fmt = "zip"
+
+[[bin]]
+name = "clampd-guard"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+hmac = "0.12"
+dirs = "6"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+axum = { workspace = true }
+tempfile = "3"
+tokio = { workspace = true, features = ["full"] }

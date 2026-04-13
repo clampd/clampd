@@ -56,7 +56,10 @@ describe("clampd.guard()", () => {
 
 describe("clampd.openai()", () => {
   it("passes through when no tool calls", async () => {
-    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ allowed: true, risk_score: 0, matched_rules: [], latency_ms: 1 }),
+    }));
 
     const response = {
       choices: [{ finish_reason: "stop", message: { content: "Hello", tool_calls: [] } }],
@@ -123,7 +126,10 @@ describe("clampd.openai()", () => {
 
 describe("clampd.anthropic()", () => {
   it("passes through when no tool_use", async () => {
-    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ allowed: true, risk_score: 0, matched_rules: [], latency_ms: 1 }),
+    }));
 
     const response = {
       stop_reason: "end_turn",
@@ -193,8 +199,8 @@ describe("response checking", () => {
     const result = await guarded({ sql: "SELECT 1" });
 
     expect(result).toBe("result with PII");
-    // Should call fetch three times: proxy + inspect + scanOutput
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    // Two fetch calls: proxy + inspect (PII detection handled server-side by /v1/inspect)
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it("guard with checkResponse throws when inspect denies", async () => {
@@ -388,7 +394,10 @@ describe("streaming passthrough", () => {
 
 describe("array validation on tool calls", () => {
   it("openai handles null tool_calls without crashing", async () => {
-    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ allowed: true, risk_score: 0, matched_rules: [], latency_ms: 1 }),
+    }));
 
     const response = {
       choices: [{
@@ -405,7 +414,10 @@ describe("array validation on tool calls", () => {
   });
 
   it("openai handles undefined tool_calls without crashing", async () => {
-    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ allowed: true, risk_score: 0, matched_rules: [], latency_ms: 1 }),
+    }));
 
     const response = {
       choices: [{

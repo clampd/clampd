@@ -108,8 +108,8 @@ describe("usage: guard an async function", () => {
 
     const result = await guarded({});
     expect(result).toBe("some result with data");
-    // Three fetch calls: proxy + inspect + scanOutput
-    expect(callCount).toBe(3);
+    // Two fetch calls: proxy + inspect (PII detection handled server-side by /v1/inspect)
+    expect(callCount).toBe(2);
   });
 });
 

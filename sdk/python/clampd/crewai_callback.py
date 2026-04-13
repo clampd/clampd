@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from typing import Any
 
 from clampd.client import ClampdBlockedError, ClampdClient
-from clampd.delegation import enter_delegation, exit_delegation
+from clampd._guardrails import guard_tool_callback, inspect_response_callback
 
 logger = logging.getLogger("clampd.crewai")
 
@@ -43,12 +44,42 @@ class ClampdCrewAIGuard:
         self._check_response = check_response
         self._last_scope_token: str = ""
 
+    def _guard_and_raise(self, tool_name: str, params: dict[str, Any]) -> None:
+        """Shared guard logic: delegation + proxy + scope token + failOpen.
+
+        Raises ClampdBlockedError if blocked.
+        """
+        error, scope_token = guard_tool_callback(
+            self._client, tool_name, params,
+            target_url=self._target_url, fail_open=self._fail_open,
+        )
+        self._last_scope_token = scope_token
+        if error:
+            raise ClampdBlockedError(
+                error.get("error", "Tool call blocked"),
+                risk_score=error.get("risk_score", 1.0),
+            )
+
+    def _inspect_and_raise(self, tool_name: str, response_data: Any) -> None:
+        """Shared response inspection: inspect + failOpen.
+
+        Raises ClampdBlockedError if blocked.
+        """
+        error = inspect_response_callback(
+            self._client, tool_name, response_data,
+            fail_open=self._fail_open, scope_token=self._last_scope_token,
+        )
+        if error:
+            raise ClampdBlockedError(
+                error.get("error", "Response blocked"),
+                risk_score=error.get("risk_score", 1.0),
+            )
+
     def step_callback(self, step_output: Any) -> Any:
         """CrewAI step callback that guards tool calls.
 
         Inspect the step output for tool usage and guard it through Clampd.
         """
-        # CrewAI step_output has .tool (name) and .tool_input (args) when a tool is used
         tool_name = getattr(step_output, "tool", None)
         if not tool_name:
             return step_output
@@ -60,32 +91,23 @@ class ClampdCrewAIGuard:
             except (json.JSONDecodeError, TypeError):
                 tool_input = {"raw": tool_input}
 
-        ctx, token = enter_delegation(self._client.agent_id)
-        try:
-            result = self._client.proxy(
-                tool=tool_name,
-                params=tool_input if isinstance(tool_input, dict) else {"input": tool_input},
-                target_url=self._target_url,
-            )
-            self._last_scope_token = result.scope_token or ""
-            if not result.allowed:
-                raise ClampdBlockedError(
-                    result.denial_reason or "Tool call blocked",
-                    risk_score=result.risk_score,
-                    response=result,
-                )
-        except ClampdBlockedError:
-            raise
-        except Exception as exc:
-            if not self._fail_open:
-                raise ClampdBlockedError(str(exc))
-        finally:
-            exit_delegation(token)
+        self._guard_and_raise(
+            tool_name,
+            tool_input if isinstance(tool_input, dict) else {"input": tool_input},
+        )
+
+        # Inspect step output if check_response enabled
+        tool_output = getattr(step_output, "tool_output", None)
+        if self._check_response and tool_output is not None:
+            self._inspect_and_raise(tool_name, tool_output)
 
         return step_output
 
     def wrap_tool(self, tool: Any) -> Any:
-        """Wrap a CrewAI tool's _run method with Clampd guard."""
+        """Wrap a CrewAI tool's _run method with Clampd guard.
+
+        Returns a shallow copy — the original tool is not modified.
+        """
         original_run = tool._run
         guard = self
 
@@ -93,29 +115,14 @@ class ClampdCrewAIGuard:
             tool_name = getattr(tool, "name", type(tool).__name__)
             params = kwargs if kwargs else {"args": args}
 
-            ctx, token = enter_delegation(guard._client.agent_id)
-            try:
-                result = guard._client.proxy(
-                    tool=tool_name,
-                    params=params,
-                    target_url=guard._target_url,
-                )
-                guard._last_scope_token = result.scope_token or ""
-                if not result.allowed:
-                    raise ClampdBlockedError(
-                        result.denial_reason or "Tool call blocked",
-                        risk_score=result.risk_score,
-                        response=result,
-                    )
-            except ClampdBlockedError:
-                raise
-            except Exception as exc:
-                if not guard._fail_open:
-                    raise ClampdBlockedError(str(exc))
-            finally:
-                exit_delegation(token)
+            guard._guard_and_raise(tool_name, params)
+            result = original_run(*args, **kwargs)
 
-            return original_run(*args, **kwargs)
+            if guard._check_response:
+                guard._inspect_and_raise(tool_name, result)
 
-        tool._run = guarded_run
-        return tool
+            return result
+
+        wrapped = copy.copy(tool)
+        wrapped._run = guarded_run
+        return wrapped

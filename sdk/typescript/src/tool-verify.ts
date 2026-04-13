@@ -94,7 +94,7 @@ interface JwksResponse {
 
 let _cachedJwks: JwksResponse | null = null;
 let _jwksFetchedAt = 0;
-const _JWKS_CACHE_TTL = 3600 * 1000; // 1 hour in ms
+const _JWKS_CACHE_TTL = 300 * 1000; // 5 minutes in ms
 
 function getGatewayUrl(): string {
   return (
@@ -138,6 +138,15 @@ export function invalidateJwksCache(): void {
 }
 
 /**
+ * Base64url decode (no padding) to Buffer.
+ */
+function b64urlDecode(s: string): Buffer {
+  // Add padding back
+  const padded = s + "=".repeat((4 - (s.length % 4)) % 4);
+  return Buffer.from(padded, "base64url");
+}
+
+/**
  * Extract the Ed25519 public key from JWKS as a Node.js KeyObject.
  */
 async function getEd25519PublicKey(
@@ -150,15 +159,23 @@ async function getEd25519PublicKey(
   if (!key) {
     throw new ScopeVerificationError("No Ed25519 scope key found in JWKS");
   }
+  if (!key.x) {
+    throw new ScopeVerificationError("Ed25519 key missing 'x' parameter");
+  }
 
-  // Convert JWK to a Node.js KeyObject
+  // Decode the raw 32-byte Ed25519 public key from the JWK x parameter
+  const rawKeyBytes = b64urlDecode(key.x);
+
+  // Build a DER-encoded Ed25519 public key (RFC 8032 / RFC 8410).
+  // Format: SEQUENCE { SEQUENCE { OID 1.3.101.112 }, BIT STRING { raw key } }
+  // The fixed 12-byte prefix for Ed25519 public keys:
+  const ed25519DerPrefix = Buffer.from("302a300506032b6570032100", "hex");
+  const derKey = Buffer.concat([ed25519DerPrefix, rawKeyBytes]);
+
   return createPublicKey({
-    key: {
-      kty: "OKP",
-      crv: "Ed25519",
-      x: key.x,
-    },
-    format: "jwk",
+    key: derKey,
+    format: "der",
+    type: "spki",
   });
 }
 
@@ -174,11 +191,23 @@ async function getEd25519PublicKey(
  */
 export async function verifyScopeToken(
   token: string,
-  publicKey?: KeyObject,
+  publicKeyOrOpts?: KeyObject | { publicKey?: KeyObject; gatewayUrl?: string },
   gatewayUrl?: string,
 ): Promise<ScopeTokenClaims> {
   if (!token) {
     throw new ScopeVerificationError("No scope token provided");
+  }
+
+  // Accept both (token, KeyObject, url) and (token, { gatewayUrl, publicKey })
+  let resolvedKey: KeyObject | undefined;
+  let resolvedUrl: string | undefined = gatewayUrl;
+  if (publicKeyOrOpts && typeof publicKeyOrOpts === "object" && !(publicKeyOrOpts instanceof KeyObject)) {
+    // Options object form: verifyScopeToken(token, { gatewayUrl: "..." })
+    const opts = publicKeyOrOpts as { publicKey?: KeyObject; gatewayUrl?: string };
+    resolvedKey = opts.publicKey;
+    resolvedUrl = opts.gatewayUrl ?? gatewayUrl;
+  } else {
+    resolvedKey = publicKeyOrOpts as KeyObject | undefined;
   }
 
   // Split token: base64url_payload.base64url_signature
@@ -192,7 +221,7 @@ export async function verifyScopeToken(
   const [payloadB64, sigB64] = parts;
 
   // Get public key
-  const pubKey = publicKey || (await getEd25519PublicKey(gatewayUrl));
+  const pubKey = resolvedKey || (await getEd25519PublicKey(resolvedUrl));
 
   // Decode signature
   let sigBytes: Buffer;

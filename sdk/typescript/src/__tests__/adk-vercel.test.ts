@@ -59,7 +59,7 @@ describe("clampd.adk()", () => {
     expect(typeof withCheck.afterTool).toBe("function");
   });
 
-  it("afterTool calls inspect endpoint", async () => {
+  it("afterTool calls inspect and scanOutput endpoints", async () => {
     const mockFetch = vi.fn()
       // First call: beforeTool proxy
       .mockResolvedValueOnce({
@@ -79,8 +79,8 @@ describe("clampd.adk()", () => {
     const result = await afterTool!("db.query", { rows: [{ id: 1 }] });
 
     expect(result).toBeNull();
+    // Two fetch calls: proxy + inspect (PII detection handled server-side by /v1/inspect)
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    // The second fetch call should be to the inspect endpoint
     const secondCallUrl = mockFetch.mock.calls[1][0] as string;
     expect(secondCallUrl).toContain("/inspect");
   });

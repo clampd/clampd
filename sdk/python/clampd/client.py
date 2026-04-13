@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re as _re
 import time
@@ -18,9 +19,11 @@ from clampd.delegation import get_delegation
 _SCHEMA_INJECTION_PATTERNS = {
     "xml_injection": [
         _re.compile(r"</?functions\s*>", _re.IGNORECASE),
-        _re.compile(r"<function\s+", _re.IGNORECASE),
+        _re.compile(r"<function[\s>]", _re.IGNORECASE),
         _re.compile(r"</?tool\s*>", _re.IGNORECASE),
         _re.compile(r"</?tool_call\s*>", _re.IGNORECASE),
+        _re.compile(r"</?tool_code\s*>", _re.IGNORECASE),
+        _re.compile(r"</?tools\s*>", _re.IGNORECASE),
         _re.compile(r"<system\s*>", _re.IGNORECASE),
     ],
     "json_injection": [
@@ -28,8 +31,8 @@ _SCHEMA_INJECTION_PATTERNS = {
         _re.compile(r'"parameters"\s*:\s*\{[^}]*"type"\s*:\s*"object"'),
     ],
     "tool_steering": [
-        _re.compile(r"\bDEPRECATED\b", _re.IGNORECASE),
-        _re.compile(r"\bOBSOLETE\b", _re.IGNORECASE),
+        # Multi-word patterns only — single words like "DEPRECATED" cause
+        # false positives in normal conversation (alert fatigue risk).
         _re.compile(r"use\s+\w+\s+instead\b", _re.IGNORECASE),
         _re.compile(r"\breplaced\s+by\b", _re.IGNORECASE),
         _re.compile(r"\bsuperseded\s+by\b", _re.IGNORECASE),
@@ -81,8 +84,18 @@ def scan_for_schema_injection(messages: list[dict[str, Any]]) -> list[SchemaInje
     warnings: list[SchemaInjectionWarning] = []
 
     for idx, msg in enumerate(messages):
-        content = msg.get("content", "")
-        if not isinstance(content, str) or not content:
+        raw = msg.get("content", "")
+        if isinstance(raw, str):
+            content = raw
+        elif isinstance(raw, list):
+            # Anthropic-style content blocks: [{"type": "text", "text": "..."}]
+            content = "\n".join(
+                b.get("text", "") for b in raw
+                if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str)
+            )
+        else:
+            content = ""
+        if not content:
             continue
 
         for alert_type, patterns in _SCHEMA_INJECTION_PATTERNS.items():
@@ -107,7 +120,7 @@ def scan_for_schema_injection(messages: list[dict[str, Any]]) -> list[SchemaInje
 class ProxyResponse(BaseModel):
     request_id: str = ""
     allowed: bool
-    action: str = "pass"  # "pass", "flag", or "block"
+    raw_action: str = "pass"  # "pass", "flag", or "block" (from gateway)
     risk_score: float
     scope_granted: str | None = None
     tool_response: Any | None = None
@@ -119,6 +132,25 @@ class ProxyResponse(BaseModel):
     session_flags: list[str] = []
     scope_token: str | None = None
 
+    model_config = {"populate_by_name": True}
+
+    def __init__(self, **data: Any) -> None:
+        # Accept "action" from gateway JSON and map to raw_action
+        if "action" in data and "raw_action" not in data:
+            data["raw_action"] = data.pop("action")
+        super().__init__(**data)
+
+    @property
+    def action(self) -> str:
+        """Reconciled action: 'exempt' when allowed despite a block rule."""
+        if self.allowed and self.raw_action == "block":
+            return "exempt"
+        return self.raw_action
+
+    @property
+    def score(self) -> float:
+        return self.risk_score
+
 
 class ScanResponse(BaseModel):
     allowed: bool
@@ -126,6 +158,10 @@ class ScanResponse(BaseModel):
     denial_reason: str | None = None
     matched_rules: list[str] = []
     latency_ms: int = 0
+
+    @property
+    def action(self) -> str:
+        return "pass" if self.allowed else "block"
 
 
 class ScanOutputResponse(ScanResponse):
@@ -174,7 +210,10 @@ class ClampdClient:
         self.agent_id = agent_id
         self.api_key = api_key or os.environ.get("CLAMPD_API_KEY", "")
         self.session_id = session_id
+        self._secret = secret
+        self._jwt_ttl = 3600
         self._jwt = make_agent_jwt(agent_id, secret=secret)
+        self._jwt_expires_at = time.monotonic() + self._jwt_ttl
         self._http = httpx.Client(timeout=timeout)
         # Retry config
         self.max_retries = max_retries
@@ -186,9 +225,16 @@ class ClampdClient:
         self._cb_opened_at: float = 0.0
         self._cb_state: str = "closed"  # closed, open, half-open
 
+    def _get_jwt(self) -> str:
+        """Return a valid JWT, regenerating if within 60s of expiry."""
+        if time.monotonic() >= self._jwt_expires_at - 60:
+            self._jwt = make_agent_jwt(self.agent_id, secret=self._secret)
+            self._jwt_expires_at = time.monotonic() + self._jwt_ttl
+        return self._jwt
+
     def _headers(self, *, tools: list[str] | None = None) -> dict[str, str]:
         h = {
-            "Authorization": f"Bearer {self._jwt}",
+            "Authorization": f"Bearer {self._get_jwt()}",
             "X-AG-Key": self.api_key,
             "Content-Type": "application/json",
         }
@@ -216,12 +262,16 @@ class ClampdClient:
             body["prompt_context"] = prompt_context
         if tool_descriptor_hash:
             body["tool_descriptor_hash"] = tool_descriptor_hash
-        # Only send delegation for real cross-agent calls (chain >= 2 agents).
-        # Single-element chain = agent calling itself = not delegation.
+        # Send delegation context if a chain exists.
+        # Auto-append this agent to the chain if not already present.
         ctx = get_delegation()
-        if ctx is not None and len(ctx.chain) > 1:
-            body["delegation_chain"] = ctx.chain
-            body["delegation_trace_id"] = ctx.trace_id
+        if ctx is not None and ctx.chain:
+            chain = ctx.chain
+            if self.agent_id and (not chain or chain[-1] != self.agent_id):
+                chain = chain + [self.agent_id]
+            if len(chain) > 1:
+                body["delegation_chain"] = chain
+                body["delegation_trace_id"] = ctx.trace_id
         return self._post("/v1/proxy", body, authorized_tools=authorized_tools)
 
     @staticmethod
@@ -421,17 +471,40 @@ class AsyncClampdClient:
         api_key: str | None = None,
         secret: str | None = None,
         timeout: float = 30.0,
+        max_retries: int = 0,
+        base_delay_ms: int = 500,
+        cb_threshold: int = 5,
+        cb_reset_timeout_ms: int = 30000,
     ) -> None:
         self.gateway_url = gateway_url.rstrip("/")
         self.agent_id = agent_id
         self.api_key = api_key or os.environ.get("CLAMPD_API_KEY", "")
+        self._secret = secret
+        self._jwt_ttl = 3600
         # B4: Create JWT before httpx client — no resource leak if JWT fails
         self._jwt = make_agent_jwt(agent_id, secret=secret)
+        self._jwt_expires_at = time.monotonic() + self._jwt_ttl
         self._http = httpx.AsyncClient(timeout=timeout)
+        # Retry config
+        self.max_retries = max_retries
+        self.base_delay_ms = base_delay_ms
+        # Circuit breaker config
+        self._cb_threshold = cb_threshold
+        self._cb_reset_timeout_ms = cb_reset_timeout_ms
+        self._cb_failures = 0
+        self._cb_opened_at: float = 0.0
+        self._cb_state: str = "closed"
+
+    def _get_jwt(self) -> str:
+        """Return a valid JWT, regenerating if within 60s of expiry."""
+        if time.monotonic() >= self._jwt_expires_at - 60:
+            self._jwt = make_agent_jwt(self.agent_id, secret=self._secret)
+            self._jwt_expires_at = time.monotonic() + self._jwt_ttl
+        return self._jwt
 
     def _headers(self, *, tools: list[str] | None = None) -> dict[str, str]:
         h = {
-            "Authorization": f"Bearer {self._jwt}",
+            "Authorization": f"Bearer {self._get_jwt()}",
             "X-AG-Key": self.api_key,
             "Content-Type": "application/json",
         }
@@ -496,17 +569,18 @@ class AsyncClampdClient:
 
     async def scan_input(
         self, text: str, message_count: int = 0
-    ) -> ProxyResponse:
+    ) -> ScanResponse:
         """Scan prompt text for injection/policy violations (async)."""
         body: dict[str, Any] = {"text": text}
         if message_count:
             body["message_count"] = message_count
-        return await self._post("/v1/scan-input", body)
+        proxy_resp = await self._post("/v1/scan-input", body)
+        return ScanResponse.model_validate(proxy_resp.model_dump())
 
     async def scan_output(
         self, text: str, request_id: str = ""
-    ) -> dict[str, Any]:
-        """Scan LLM response text (async)."""
+    ) -> ScanOutputResponse:
+        """Scan LLM response text for PII, secrets, policy violations (async)."""
         body: dict[str, Any] = {"text": text}
         if request_id:
             body["request_id"] = request_id
@@ -517,15 +591,10 @@ class AsyncClampdClient:
                 json=body,
             )
         except Exception:
-            return {
-                "allowed": False,
-                "risk_score": 1.0,
-                "denial_reason": "gateway_error",
-            }
+            return ScanOutputResponse(allowed=False, risk_score=1.0, denial_reason="gateway_error")
 
         if resp.status_code == 200:
-            result: dict[str, Any] = resp.json()
-            return result
+            return ScanOutputResponse.model_validate(resp.json())
 
         try:
             data: dict[str, Any] = resp.json()
@@ -536,77 +605,124 @@ class AsyncClampdClient:
             )
         except Exception:
             reason = f"http_{resp.status_code}"
-        return {
-            "allowed": False,
-            "risk_score": 1.0,
-            "denial_reason": reason,
-        }
+        return ScanOutputResponse(allowed=False, risk_score=1.0, denial_reason=reason)
+
+    # ── Circuit breaker ─────────────────────────────────────────────────
+
+    def _cb_allow_request(self) -> bool:
+        """Return True if the circuit breaker allows a request."""
+        if self._cb_state == "closed":
+            return True
+        if self._cb_state == "open":
+            elapsed_ms = (time.monotonic() - self._cb_opened_at) * 1000
+            if elapsed_ms >= self._cb_reset_timeout_ms:
+                self._cb_state = "half-open"
+                return True
+            return False
+        # half-open: allow one probe request
+        return True
+
+    def _cb_record_success(self) -> None:
+        self._cb_failures = 0
+        self._cb_state = "closed"
+
+    def _cb_record_failure(self) -> None:
+        self._cb_failures += 1
+        if self._cb_failures >= self._cb_threshold:
+            self._cb_state = "open"
+            self._cb_opened_at = time.monotonic()
+
+    # ── HTTP post with retry + circuit breaker ───────────────────────────
 
     async def _post(
         self, path: str, body: dict[str, Any], *, authorized_tools: list[str] | None = None
     ) -> ProxyResponse:
-        try:
-            resp = await self._http.post(
-                f"{self.gateway_url}{path}",
-                headers=self._headers(tools=authorized_tools),
-                json=body,
-            )
-        except httpx.TimeoutException:
+        if not self._cb_allow_request():
             return ProxyResponse(
-                request_id="error",
-                allowed=False,
-                risk_score=1.0,
-                denial_reason="gateway_timeout",
-                latency_ms=0,
-            )
-        except httpx.ConnectError:
-            return ProxyResponse(
-                request_id="error",
-                allowed=False,
-                risk_score=1.0,
-                denial_reason="gateway_unreachable",
-                latency_ms=0,
-            )
-        except Exception:
-            return ProxyResponse(
-                request_id="error",
-                allowed=False,
-                risk_score=1.0,
-                denial_reason="gateway_error",
-                latency_ms=0,
+                request_id="error", allowed=False, risk_score=1.0,
+                denial_reason="circuit_breaker_open", latency_ms=0,
             )
 
-        if resp.status_code == 200:
-            return ProxyResponse.model_validate(resp.json())
+        last_result: ProxyResponse | None = None
+        for attempt in range(1 + self.max_retries):
+            retryable = False
+            try:
+                resp = await self._http.post(
+                    f"{self.gateway_url}{path}",
+                    headers=self._headers(tools=authorized_tools),
+                    json=body,
+                )
+            except httpx.TimeoutException:
+                retryable = True
+                last_result = ProxyResponse(
+                    request_id="error", allowed=False, risk_score=1.0,
+                    denial_reason="gateway_timeout", latency_ms=0,
+                )
+                self._cb_record_failure()
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.base_delay_ms * (2 ** attempt) / 1000)
+                continue
+            except httpx.ConnectError:
+                retryable = True
+                last_result = ProxyResponse(
+                    request_id="error", allowed=False, risk_score=1.0,
+                    denial_reason="gateway_unreachable", latency_ms=0,
+                )
+                self._cb_record_failure()
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.base_delay_ms * (2 ** attempt) / 1000)
+                continue
+            except Exception:
+                self._cb_record_failure()
+                return ProxyResponse(
+                    request_id="error", allowed=False, risk_score=1.0,
+                    denial_reason="gateway_error", latency_ms=0,
+                )
 
-        try:
-            data = resp.json()
-            error_code = data.get("error_code", "")
-            error_msg = (
-                data.get("denial_reason")
-                or data.get("error")
-                or f"http_{resp.status_code}"
+            if resp.status_code == 200:
+                self._cb_record_success()
+                return ProxyResponse.model_validate(resp.json())
+
+            # Retry on 5xx and 429; don't retry on other 4xx
+            if resp.status_code == 429 or resp.status_code >= 500:
+                retryable = True
+                self._cb_record_failure()
+            elif 400 <= resp.status_code < 500:
+                retryable = False
+
+            try:
+                data = resp.json()
+                error_code = data.get("error_code", "")
+                error_msg = (
+                    data.get("denial_reason")
+                    or data.get("error")
+                    or f"http_{resp.status_code}"
+                )
+                if "InvalidSignature" in error_msg or "JWT validation failed" in error_msg:
+                    if resp.status_code == 401:
+                        error_msg = (
+                            "Agent authentication failed. This usually means the agent is suspended "
+                            "or the signing secret is incorrect. Check your agent status in the dashboard "
+                            "or verify CLAMPD_AGENT_SECRET / secret= parameter."
+                        )
+                        error_code = error_code or "agent_auth_failed"
+                reason = f"{error_code}: {error_msg}" if error_code else error_msg
+            except Exception:
+                reason = f"http_{resp.status_code}"
+
+            last_result = ProxyResponse(
+                request_id="error", allowed=False, risk_score=1.0,
+                denial_reason=reason, latency_ms=0,
             )
-            # Map cryptic JWT errors to user-friendly messages
-            if "InvalidSignature" in error_msg or "JWT validation failed" in error_msg:
-                if resp.status_code == 401:
-                    error_msg = (
-                        "Agent authentication failed. This usually means the agent is suspended "
-                        "or the signing secret is incorrect. Check your agent status in the dashboard "
-                        "or verify CLAMPD_AGENT_SECRET / secret= parameter."
-                    )
-                    error_code = error_code or "agent_auth_failed"
-            reason = (
-                f"{error_code}: {error_msg}" if error_code else error_msg
-            )
-        except Exception:
-            reason = f"http_{resp.status_code}"
-        return ProxyResponse(
-            request_id="error",
-            allowed=False,
-            risk_score=1.0,
-            denial_reason=reason,
-            latency_ms=0,
+
+            if not retryable or attempt >= self.max_retries:
+                return last_result
+
+            await asyncio.sleep(self.base_delay_ms * (2 ** attempt) / 1000)
+
+        return last_result or ProxyResponse(
+            request_id="error", allowed=False, risk_score=1.0,
+            denial_reason="gateway_error", latency_ms=0,
         )
 
     async def close(self) -> None:

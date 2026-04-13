@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clampd"
-version = "0.8.0"
+version = "0.10.6"
 description = "Runtime security SDK for AI agents — guard tool calls in 1 line"
 license = {text = "Apache-2.0"}
 authors = [{name = "Clampd", email = "mehul.soni89@gmail.com"}]

@@ -16,7 +16,7 @@ const client = clampd.openai(new OpenAI(), { agentId: "my-agent" });
 
 ## What it does
 
-Your agent calls a tool. Clampd intercepts it, runs it through 75 detection rules across 5 layers, and blocks it if it looks like SQL injection, prompt injection, SSRF, path traversal, PII exfiltration, or any of the other patterns below. If it's clean, the call goes through. Response gets scanned too.
+Your agent calls a tool. Clampd intercepts it, runs it through 152 detection rules across 5 layers, and blocks it if it looks like SQL injection, prompt injection, SSRF, path traversal, PII exfiltration, or any of the other patterns below. If it's clean, the call goes through. Response gets scanned too.
 
 ```
 Agent -> SDK -> Gateway -> [Auth -> Extract -> Classify -> Policy -> Token -> Forward -> Audit]
@@ -27,10 +27,21 @@ Agent -> SDK -> Gateway -> [Auth -> Extract -> Classify -> Policy -> Token -> Fo
 ### 1. Run the pipeline
 
 ```bash
-curl -sL https://github.com/clampd/clampd/raw/main/docker/.env.example -o .env
 curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.proxy.yml -o docker-compose.yml
+curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
 
-# Generate secrets
+# Add your license key (get one at https://app.clampd.dev)
+# Then edit .env and set CLAMPD_LICENSE_KEY
+
+docker compose --profile local-infra up -d
+```
+
+<details>
+<summary>Manual setup (without setup.sh)</summary>
+
+```bash
+curl -sL https://github.com/clampd/clampd/raw/main/docker/.env.example -o .env
+
 sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env
 sed -i "s/^NATS_TOKEN=.*/NATS_TOKEN=$(openssl rand -hex 32)/" .env
 sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env
@@ -39,6 +50,8 @@ sed -i "s/^AG_INTERNAL_SECRET=.*/AG_INTERNAL_SECRET=$(openssl rand -hex 64)/" .e
 
 docker compose --profile local-infra up -d
 ```
+
+</details>
 
 ### 2. Install SDK
 
@@ -91,7 +104,7 @@ response = client.chat.completions.create(
                        |
                   ag-engine (5 detection layers)
                   L0: Binary funnel (yara, entropy, magic bytes)
-                  L1: Rule engine (75 rules, TOML + SIGMA)
+                  L1: Rule engine (152 rules, TOML + SIGMA)
                   L2: Dictionary (Aho-Corasick, O(n) scan)
                   L3: Signals (40+ compound micro-signals)
                   L4: Normalizer (13-step recursive decode)
@@ -101,33 +114,80 @@ response = client.chat.completions.create(
 
 Everything runs in your infrastructure. Audit logs go to your ClickHouse instance.
 
-## Source Code
+## What's in This Repo
+
+**Open source:**
 
 | Directory | Contents | License |
 |---|---|---|
 | [`sdk/`](sdk/) | Python + TypeScript SDKs | Apache 2.0 |
+| [`src/clampd-guard/`](src/clampd-guard/) | Claude Code & Cursor guard — full source + tests | BSL 1.1 |
+| [`src/ag-gateway/`](src/ag-gateway/) | HTTP gateway, 9-stage request pipeline | BSL 1.1 |
+| [`src/ag-shadow/`](src/ag-shadow/) | Audit pipeline, PII masking | BSL 1.1 |
 | [`proto/`](proto/) | gRPC API contracts | Apache 2.0 |
-| [`docker/`](docker/) | Compose files, .env.example | Apache 2.0 |
-| [`services/crates/ag-gateway/`](services/crates/ag-gateway/) | HTTP gateway, 9-stage pipeline | BSL 1.1 |
-| [`services/crates/ag-engine/`](services/crates/ag-engine/) | Detection engine (parse, compile, execute, signals) | BSL 1.1 |
-| [`services/crates/ag-shadow/`](services/crates/ag-shadow/) | Audit pipeline, PII masking | BSL 1.1 |
-| [`services/crates/ag-common/`](services/crates/ag-common/) | Shared types | BSL 1.1 |
-| [`bin/`](bin/) | CLI binary | BSL 1.1 |
+| [`docker/`](docker/) | Compose files, setup script, .env.example | Apache 2.0 |
+| [`bin/`](bin/) | Pre-built CLI binaries | BSL 1.1 |
 
-The full rule library (75 TOML patterns), keyword dictionary, and compliance mappings are compiled into the Docker images.
+**Docker images only** (closed source — this is the detection engine you're paying for):
+
+| Image | What it does |
+|---|---|
+| `ghcr.io/clampd/ag-engine` | 152 rules, 5 detection layers, keyword dictionary |
+| `ghcr.io/clampd/ag-intent` | Classification, session patterns, encoding detection |
+| `ghcr.io/clampd/ag-policy` | Policy engine, scope exemptions, Cedar policies |
+| `ghcr.io/clampd/ag-risk` | EMA scoring, anomaly detectors, behavioral baselines |
+| `ghcr.io/clampd/ag-kill` | Kill cascade, auto-suspend, permanent kill |
+| `ghcr.io/clampd/ag-registry` | Agent lifecycle, tool registration |
+| `ghcr.io/clampd/ag-token` | Token exchange, scope tokens |
+| `ghcr.io/clampd/ag-control` | SaaS bridge, API key sync, delegation sync |
 
 ## CLI
 
 ```bash
-curl -sL https://github.com/clampd/clampd/raw/main/bin/clampd-v0.8.0-linux-amd64 -o clampd
-chmod +x clampd
+# Install (Linux/macOS)
+curl -fsSL https://clampd.dev/install.sh | sh
 
-./clampd agent list
-./clampd policy evaluate --agent my-agent --tool database.query --params '{"sql":"SELECT 1"}'
-./clampd risk review --agent my-agent
-./clampd rules import --format sigma my-rules/
-./clampd keywords add --keyword "exfiltrate" --category data_exfil --weight 0.9
+# Or download directly
+curl -sL https://github.com/clampd/clampd/releases/latest/download/clampd-linux-amd64.tar.gz | tar xz
+sudo mv clampd /usr/local/bin/
+
+# Usage
+clampd license activate --license "$CLAMPD_LICENSE_KEY"
+clampd agent list
+clampd policy evaluate --agent my-agent --tool database.query --params '{"sql":"SELECT 1"}'
+clampd risk review --agent my-agent
+clampd rules import --format sigma my-rules/
+clampd keywords add --keyword "exfiltrate" --category data_exfil --weight 0.9
 ```
+
+Binaries available for Linux (amd64/arm64), macOS (arm64), and Windows (amd64).
+
+## Claude Code & Cursor Protection
+
+`clampd-guard` is a standalone binary that hooks into Claude Code and Cursor as a PreToolUse/PostToolUse guard. Every tool call is verified against your Clampd gateway before execution.
+
+```bash
+# Install
+curl -fsSL https://clampd.dev/install-guard.sh | sh
+
+# Setup (one time — installs hooks automatically)
+clampd-guard setup \
+  --url https://your-gateway:8080 \
+  --key your-api-key \
+  --agent your-agent-id \
+  --secret your-agent-secret
+
+# Sync tools for dashboard visibility
+clampd-guard sync
+```
+
+What it does:
+- **PreToolUse**: Blocks Bash commands, file writes, web fetches before they execute
+- **PostToolUse**: Scans tool output for PII, secrets, sensitive data
+- **MCP tool discovery**: Finds all MCP servers in Claude Code and Cursor configs
+- **Managed config**: Security teams can push `/etc/clampd/guard.json` via MDM
+
+3.2MB binary, <100ms per check. Config at `~/.clampd/guard.json`.
 
 ## MCP Proxy
 
@@ -143,7 +203,7 @@ docker run -e UPSTREAM_MCP="npx -y @modelcontextprotocol/server-filesystem /tmp"
            -e AG_API_KEY=your-key \
            -e AG_AGENT_ID=your-agent-id \
            -p 3003:3003 \
-           ghcr.io/clampd/clampd/mcp-proxy:v0.8.0
+           ghcr.io/clampd/mcp-proxy:v0.9.0
 ```
 
 ## Examples
@@ -175,4 +235,4 @@ Detection features (Luhn credit card validation, secrets scanning, multi-layer d
 - https://clampd.dev
 - PyPI: `pip install clampd`
 - npm: `npm install @clampd/sdk`
-- Docker: `ghcr.io/clampd/clampd/ag-gateway:v0.8.0`
+- Docker: `ghcr.io/clampd/ag-gateway:v0.9.0`

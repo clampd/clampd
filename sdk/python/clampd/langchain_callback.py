@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 from clampd.client import ClampdBlockedError, ClampdClient
+from clampd._guardrails import guard_tool_callback, inspect_response_callback
 
 logger = logging.getLogger("clampd.langchain")
 
@@ -49,42 +50,27 @@ class ClampdCallbackHandler(BaseCallbackHandler):
             except (json.JSONDecodeError, TypeError):
                 params = {"input": input_str}
 
-        try:
-            result = self.client.proxy(tool=tool_name, params=params, target_url=self.target_url)
-        except Exception as e:
-            if self.fail_open:
-                logger.warning("Gateway error (fail-open): %s", e)
-                return
-            raise ClampdBlockedError(str(e)) from e
+        error, scope_token = guard_tool_callback(
+            self.client, tool_name, params,
+            target_url=self.target_url, fail_open=self.fail_open,
+        )
+        self._last_scope_token = scope_token
 
-        if not result.allowed:
+        if error:
             raise ClampdBlockedError(
-                result.denial_reason or "denied",
-                risk_score=result.risk_score,
-                response=result,
+                error.get("error", "denied"),
+                risk_score=error.get("risk_score", 1.0),
             )
-
-        self._last_scope_token = result.scope_token or ""
 
     def on_tool_end(self, output: str, **kwargs: Any) -> None:
         if not self.check_response:
             return
-        try:
-            resp = self.client.inspect(
-                tool=self._last_tool_name,
-                response_data=output,
-                scope_token=self._last_scope_token,
+        error = inspect_response_callback(
+            self.client, self._last_tool_name, output,
+            fail_open=self.fail_open, scope_token=self._last_scope_token,
+        )
+        if error:
+            raise ClampdBlockedError(
+                error.get("error", "Response blocked"),
+                risk_score=error.get("risk_score", 1.0),
             )
-            if not resp.allowed:
-                raise ClampdBlockedError(
-                    resp.denial_reason or "Response blocked",
-                    risk_score=resp.risk_score,
-                    response=resp,
-                )
-        except ClampdBlockedError:
-            raise
-        except Exception as e:
-            if self.fail_open:
-                logger.warning("Clampd inspect error (fail-open): %s", e)
-                return
-            raise ClampdBlockedError(f"Response inspection failed: {e}") from e

@@ -1,0 +1,52 @@
+[package]
+name = "ag-gateway"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ag-gateway"
+path = "src/main.rs"
+
+[dependencies]
+ag-common = { path = "../ag-common", features = ["normalizer", "session"] }
+ag-license = { path = "../ag-license" }
+ag-proto = { path = "../ag-proto" }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+reqwest = { workspace = true }
+bb8 = { workspace = true }
+bb8-redis = { workspace = true }
+redis = { workspace = true }
+futures = { workspace = true }
+async-nats = { workspace = true }
+dashmap = { workspace = true }
+bytes = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+jsonwebtoken = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+regex = { workspace = true }
+base64 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+opentelemetry = "0.24"
+url = "2"
+opentelemetry_sdk = { version = "0.24", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.17", features = ["tonic"] }
+tracing-opentelemetry = "0.25"
+
+[dev-dependencies]
+tempfile = "3"
+hmac = "0.12"
