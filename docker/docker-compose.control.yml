@@ -59,6 +59,8 @@ services:
       STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Set to "true" for self-hosted/local — skips email verification on signup
+      CLAMPD_AUTO_VERIFY_EMAIL: ${CLAMPD_AUTO_VERIFY_EMAIL:-true}
     networks:
       - clampd-shared
     depends_on:
