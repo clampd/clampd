@@ -16,7 +16,7 @@ const client = clampd.openai(new OpenAI(), { agentId: "my-agent" });
 
 ## What it does
 
-Your agent calls a tool. Clampd intercepts it, runs it through 152 detection rules across 5 layers, and blocks it if it looks like SQL injection, prompt injection, SSRF, path traversal, PII exfiltration, or any of the other patterns below. If it's clean, the call goes through. Response gets scanned too.
+Your agent calls a tool. Clampd intercepts it, runs it through 150+ detection rules across 5 layers, and blocks it if it looks like SQL injection, prompt injection, SSRF, path traversal, PII exfiltration, or any of the other patterns below. If it's clean, the call goes through. Response gets scanned too.
 
 ```
 Agent -> SDK -> Gateway -> [Auth -> Extract -> Classify -> Policy -> Token -> Forward -> Audit]
