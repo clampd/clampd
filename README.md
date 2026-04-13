@@ -114,11 +114,11 @@ response = client.chat.completions.create(
                  ag-intent  ag-policy  ag-token  ag-kill
                        |
                   ag-engine (5 detection layers)
-                  L0: Binary funnel (yara, entropy, magic bytes)
-                  L1: Rule engine (152 rules, TOML + SIGMA)
-                  L2: Dictionary (Aho-Corasick, O(n) scan)
-                  L3: Signals (40+ compound micro-signals)
-                  L4: Normalizer (13-step recursive decode)
+                  L0: ...
+                  L1: ...
+                  L2: ...
+                  L3: ...
+                  L4: ...
                        |
                     ag-risk --> ag-shadow --> ClickHouse
 ```
