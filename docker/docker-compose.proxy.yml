@@ -25,6 +25,9 @@ x-rust-defaults: &rust-defaults
   read_only: true
   tmpfs:
     - /tmp:noexec,nosuid,size=64m
+  # Mount activation file from host (created by: clampd license activate-machine)
+  volumes:
+    - ${CLAMPD_ACTIVATION_DIR:-/var/lib/clampd}:/var/lib/clampd:ro
   restart: on-failure
 
 services:
@@ -126,8 +129,6 @@ services:
     ports:
       - "8080:8080"
       - "9090:9090"
-    volumes:
-      - clampd_activation:/var/lib/clampd:ro
     deploy:
       replicas: 1
       resources:
@@ -283,5 +284,4 @@ networks:
     external: true
     name: clampd-shared
 
-volumes:
-  clampd_activation:
+volumes: {}

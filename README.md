@@ -34,12 +34,26 @@ curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.control
 
 # Generate .env with all secrets
 curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
-
-# Add your license key (get one at https://app.clampd.dev)
-# Edit .env and set CLAMPD_LICENSE_KEY
 ```
 
-### 2. Start everything
+### 2. Activate your license
+
+```bash
+# Get your license key at https://app.clampd.dev, then:
+export CLAMPD_LICENSE_KEY="your-license-key-here"
+
+# Add it to .env
+sed -i "s/^CLAMPD_LICENSE_KEY=.*/CLAMPD_LICENSE_KEY=${CLAMPD_LICENSE_KEY}/" .env
+
+# Install the CLI and activate on this machine
+curl -fsSL https://clampd.dev/install.sh | sh
+sudo mkdir -p /var/lib/clampd && sudo chown $(whoami) /var/lib/clampd
+clampd license activate-machine --license "$CLAMPD_LICENSE_KEY" --dashboard-url https://license.clampd.dev
+```
+
+The activation file at `/var/lib/clampd/activation.json` is mounted into all containers automatically.
+
+### 3. Start everything
 
 ```bash
 # Proxy only (security pipeline + local infra)
@@ -50,7 +64,7 @@ docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml -f docker
 ```
 
 <details>
-<summary>Manual setup (without setup.sh)</summary>
+<summary>Manual .env setup (without setup.sh)</summary>
 
 ```bash
 curl -sL https://github.com/clampd/clampd/raw/main/docker/.env.example -o .env
