@@ -239,6 +239,13 @@ docker run -e UPSTREAM_MCP="npx -y @modelcontextprotocol/server-filesystem /tmp"
 - [LangGraph A2A](examples/langgraph_a2a.py)
 - [SIGMA rule import](examples/sigma-rules/)
 
+## Videos
+
+- [Video 1](https://www.youtube.com/watch?v=Ne3H6_Nq92U)
+- [Video 2](https://www.youtube.com/watch?v=l5hQC_963-I)
+- [Video 3](https://www.youtube.com/watch?v=c9Qh7aZ7gxs)
+- [Full playlist](https://www.youtube.com/playlist?list=PLiyjm0uV9lj2UxW5Xp_tIi5FjkFBDxi-r)
+
 ## Compliance
 
 - **HIPAA** - 18 Safe Harbor PHI identifiers, 27 PII regex patterns, ClickHouse audit trail
