@@ -1,10 +1,13 @@
-# Clampd Proxy Runtime — Customer Infrastructure
+# Clampd Proxy Runtime — Security Pipeline
 #
-# Runs the full 9-service security pipeline + infrastructure.
-# NO Dashboard services — the control plane runs separately (docker-compose.control.yml).
+# Runs the 9-service security pipeline. Requires shared infrastructure
+# from docker-compose.infra.yml (Postgres, Redis, NATS, ClickHouse).
 #
-# Usage:
-#   cp .env.example .env   # fill in secrets
+# Usage (with local infrastructure):
+#   docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml up -d
+#
+# Usage (with managed databases — Neon, Upstash, etc.):
+#   Set DATABASE_URL, REDIS_URL, NATS_URL in .env, then:
 #   docker compose -f docker-compose.proxy.yml up -d
 #
 # ag-control connects to the SaaS control plane via CLAMPD_SAAS_URL.
@@ -25,75 +28,10 @@ x-rust-defaults: &rust-defaults
   restart: on-failure
 
 services:
-  # ── Infrastructure ─────────────────────────────────────────────
-
-  # Local Postgres/Redis — skip when using Neon/Upstash (set DATABASE_URL + REDIS_URL in .env)
-  postgres:
-    image: postgres:16-alpine
-    profiles: ["local-infra"]
-    environment:
-      POSTGRES_USER: clampd
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clampd}
-      POSTGRES_DB: clampd
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U clampd"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    profiles: ["local-infra"]
-    command: redis-server --requirepass ${REDIS_PASSWORD:-clampd}
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  nats:
-    image: nats:2-alpine
-    command: >
-      --auth ${NATS_TOKEN:?NATS_TOKEN is required — set it in .env}
-      --jetstream --store_dir /data -m 8222
-    volumes:
-      - nats_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:8222/healthz || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    networks:
-      - default
-      - clampd-shared
-
-  # OPA sidecar removed — policy engine + scope exemptions now in pure Rust.
-
-  clickhouse:
-    profiles: ["local-infra"]
-    image: clickhouse/clickhouse-server:24-alpine
-    volumes:
-      - ch_data:/var/lib/clickhouse
-    environment:
-      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE: "805306368"
-      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE_FOR_USER: "402653184"
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-    healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
-
   # ── Runtime Security Layer ─────────────────────────────────────
+  # All services connect to shared infra via clampd-shared network.
+  # Infrastructure (Postgres, Redis, NATS, ClickHouse) is defined
+  # in docker-compose.infra.yml — start that first.
 
   ag-registry:
     image: ghcr.io/clampd/ag-registry:${CLAMPD_VERSION:-v0.9.0}
@@ -107,10 +45,12 @@ services:
     environment:
       <<: *license
       AG_REGISTRY_PORT: "50051"
-      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_registry=debug"
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
@@ -127,9 +67,11 @@ services:
     environment:
       <<: *license
       AG_INTENT_PORT: "50051"
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_intent=debug"
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
@@ -146,9 +88,11 @@ services:
     environment:
       <<: *license
       AG_POLICY_PORT: "50051"
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_policy=debug"
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
@@ -165,11 +109,13 @@ services:
     environment:
       <<: *license
       AG_TOKEN_PORT: "50051"
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
-      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       IDP_PROVIDER: "none"
       RUST_LOG: "info,ag_token=debug"
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
@@ -180,7 +126,6 @@ services:
     ports:
       - "8080:8080"
       - "9090:9090"
-    # Activation volume for self-hosted license validation (read-only)
     volumes:
       - clampd_activation:/var/lib/clampd:ro
     deploy:
@@ -193,7 +138,7 @@ services:
       <<: *license
       AG_GATEWAY_PORT: "8080"
       AG_GATEWAY_METRICS_PORT: "9090"
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       REGISTRY_URL: http://ag-registry:50051
       INTENT_URL: http://ag-intent:50051
@@ -202,6 +147,8 @@ services:
       KILL_URL: http://ag-kill:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
       RUST_LOG: "info,ag_gateway=debug"
+    networks:
+      - clampd-shared
     depends_on:
       ag-registry:
         condition: service_started
@@ -236,6 +183,8 @@ services:
       PII_NER_ENABLED: "true"
       PII_TOKENIZATION_ENABLED: "false"
       RUST_LOG: "info,ag_shadow=debug"
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
@@ -252,12 +201,14 @@ services:
     environment:
       <<: *license
       AG_KILL_PORT: "50055"
-      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       TOKEN_URL: http://ag-token:50051
       REGISTRY_URL: http://ag-registry:50051
       RUST_LOG: "info,ag_kill=debug"
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
@@ -279,12 +230,14 @@ services:
       <<: *license
       AG_RISK_PORT: "50056"
       AG_RISK_WS_PORT: "8081"
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       KILL_URL: http://ag-kill:50055
       REGISTRY_URL: http://ag-registry:50051
       RUST_LOG: "info,ag_risk=debug"
       AG_RISK_LEADER_FOLLOWER: true
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
@@ -303,8 +256,8 @@ services:
     environment:
       <<: *license
       AG_CONTROL_PORT: "50057"
-      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
-      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       REGISTRY_URL: http://ag-registry:50051
       KILL_URL: http://ag-kill:50055
@@ -317,36 +270,18 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
       CLAMPD_POLL_INTERVAL: "5"
       RUST_LOG: "info,ag_control=debug"
+    networks:
+      - clampd-shared
     depends_on:
       nats:
         condition: service_healthy
       ag-registry:
         condition: service_started
 
-  # ── Reverse Proxy ─────────────────────────────────────────────
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - default
-      - clampd-shared
-    restart: on-failure
-
 networks:
   clampd-shared:
+    external: true
     name: clampd-shared
 
 volumes:
-  pg_data:
-  redis_data:
-  nats_data:
-  ch_data:
-  caddy_data:
-  caddy_config:
   clampd_activation:

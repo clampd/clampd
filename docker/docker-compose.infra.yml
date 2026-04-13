@@ -1,0 +1,98 @@
+# Clampd Shared Infrastructure
+#
+# Postgres, Redis, NATS, and ClickHouse — shared by both
+# the proxy pipeline and the dashboard control plane.
+#
+# Usage (all-in-one with proxy + dashboard):
+#   docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml -f docker-compose.control.yml up -d
+#
+# Usage (proxy only):
+#   docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml up -d
+#
+# Skip this file entirely if you use managed databases (Neon, Upstash, etc.)
+# — just set DATABASE_URL, REDIS_URL, NATS_URL in .env.
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────────────────
+  # Shared by: ag-registry, ag-token, ag-kill, ag-control, dashboard-api
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: clampd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: clampd
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clampd"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - clampd-shared
+
+  # ── Redis ──────────────────────────────────────────────────────
+  # Shared by: all ag-* services + dashboard-api (session cache, deny keys, risk scores)
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - clampd-shared
+
+  # ── NATS + JetStream ──────────────────────────────────────────
+  # Shared by: all ag-* services + dashboard-api (events, kill/revive, risk feed)
+  nats:
+    image: nats:2-alpine
+    command: >
+      --auth ${NATS_TOKEN:?NATS_TOKEN is required}
+      --jetstream --store_dir /data -m 8222
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - clampd-shared
+
+  # ── ClickHouse (optional — for audit analytics) ───────────────
+  # Used by: ag-shadow (write), ag-control (read), dashboard-api (read)
+  # Remove this if you don't need audit log analytics.
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    volumes:
+      - ch_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE: "805306368"
+      CLICKHOUSE_DEFAULT_MAX_MEMORY_USAGE_FOR_USER: "402653184"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - clampd-shared
+
+networks:
+  clampd-shared:
+    name: clampd-shared
+
+volumes:
+  pg_data:
+  redis_data:
+  nats_data:
+  ch_data:

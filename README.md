@@ -24,23 +24,29 @@ Agent -> SDK -> Gateway -> [Auth -> Extract -> Classify -> Policy -> Token -> Fo
 
 ## Quick Start
 
-### 1. Run the proxy (security pipeline)
+### 1. Download compose files and generate secrets
 
 ```bash
-curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.proxy.yml -o docker-compose.yml
+# Download all three compose files
+curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.infra.yml -o docker-compose.infra.yml
+curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.proxy.yml -o docker-compose.proxy.yml
+curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.control.yml -o docker-compose.control.yml
+
+# Generate .env with all secrets
 curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
 
 # Add your license key (get one at https://app.clampd.dev)
-# Then edit .env and set CLAMPD_LICENSE_KEY
-
-docker compose --profile local-infra up -d
+# Edit .env and set CLAMPD_LICENSE_KEY
 ```
 
-### 2. Run the dashboard (optional)
+### 2. Start everything
 
 ```bash
-curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.control.yml -o docker-compose.control.yml
-docker compose -f docker-compose.control.yml --profile local-infra up -d
+# Proxy only (security pipeline + local infra)
+docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml up -d
+
+# Proxy + Dashboard (full stack)
+docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml -f docker-compose.control.yml up -d
 ```
 
 <details>
@@ -54,8 +60,6 @@ sed -i "s/^NATS_TOKEN=.*/NATS_TOKEN=$(openssl rand -hex 32)/" .env
 sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env
 sed -i "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 16)/" .env
 sed -i "s/^AG_INTERNAL_SECRET=.*/AG_INTERNAL_SECRET=$(openssl rand -hex 64)/" .env
-
-docker compose --profile local-infra up -d
 ```
 
 </details>
