@@ -26,6 +26,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd}
     networks:
       - clampd-shared
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: "no"
 
   # ── Application ────────────────────────────────────────────────
