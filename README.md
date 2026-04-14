@@ -16,7 +16,7 @@ const client = clampd.openai(new OpenAI(), { agentId: "my-agent" });
 
 ## What it does
 
-Your agent calls a tool. Clampd intercepts it, runs it through 150+ detection rules across 5 layers, and blocks it if it looks like SQL injection, prompt injection, SSRF, path traversal, PII exfiltration, or any of the other patterns below. If it's clean, the call goes through. Response gets scanned too.
+Your agent calls a tool. Clampd intercepts it, runs it through 243 detection rules across 5 layers, and blocks it if it looks like SQL injection, prompt injection, SSRF, path traversal, PII exfiltration, or any of the other patterns below. If it's clean, the call goes through. Response gets scanned too.
 
 ```
 Agent -> SDK -> Gateway -> [Auth -> Extract -> Classify -> Policy -> Token -> Forward -> Audit]
@@ -157,7 +157,7 @@ Everything runs in your infrastructure. Audit logs go to your ClickHouse instanc
 
 | Image | What it does |
 |---|---|
-| `ghcr.io/clampd/ag-engine` | 152 rules, 5 detection layers, keyword dictionary |
+| `ghcr.io/clampd/ag-engine` | 243 rules, 5 detection layers, keyword dictionary |
 | `ghcr.io/clampd/ag-intent` | Classification, session patterns, encoding detection |
 | `ghcr.io/clampd/ag-policy` | Policy engine, scope exemptions, Cedar policies |
 | `ghcr.io/clampd/ag-risk` | EMA scoring, anomaly detectors, behavioral baselines |
