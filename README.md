@@ -36,6 +36,7 @@ curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.control
 curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
 ```
 
+
 ### 2. Activate your license
 
 ```bash
