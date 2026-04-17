@@ -24,6 +24,7 @@ POSTGRES_PASSWORD=$(gen_hex 16)
 REDIS_PASSWORD=$(gen_hex 16)
 AG_INTERNAL_SECRET=$(gen_hex 64)
 NATS_TOKEN=$(gen_hex 32)
+AG_TOKEN_ENCRYPTION_KEY=$(gen_hex 32)
 
 cat > "$ENV_FILE" <<EOF
 # Clampd v0.9.0 — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -39,6 +40,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 AG_INTERNAL_SECRET=${AG_INTERNAL_SECRET}
 NATS_TOKEN=${NATS_TOKEN}
+AG_TOKEN_ENCRYPTION_KEY=${AG_TOKEN_ENCRYPTION_KEY}
 
 # ── Database (default: local containers via --profile local-infra) ─
 # For managed databases (Neon, Supabase, Upstash), uncomment and set:

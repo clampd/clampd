@@ -112,6 +112,7 @@ services:
     environment:
       <<: *license
       AG_TOKEN_PORT: "50051"
+      AG_TOKEN_ENCRYPTION_KEY: ${AG_TOKEN_ENCRYPTION_KEY:?AG_TOKEN_ENCRYPTION_KEY is required - set it in .env (openssl rand -hex 32)}
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
