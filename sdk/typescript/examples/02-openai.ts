@@ -1,5 +1,5 @@
 /**
- * Example: clampd.openai() — Wrap an OpenAI client.
+ * Example: clampd.openai() - Wrap an OpenAI client.
  *
  * Run: npx tsx examples/02-openai.ts
  *
@@ -13,7 +13,7 @@ import clampd, { ClampdBlockedError } from "../src/index.js";
 
 installMockGateway();
 
-// Mock OpenAI client — replace with `new OpenAI()` for real usage
+// Mock OpenAI client - replace with `new OpenAI()` for real usage
 const mockOpenAI = {
   chat: {
     completions: {
@@ -37,7 +37,7 @@ const mockOpenAI = {
 async function main() {
   clampd.init({ agentId: "openai-demo-agent" });
 
-  // Wrap the client — all tool calls are guarded automatically
+  // Wrap the client - all tool calls are guarded automatically
   const client = clampd.openai(mockOpenAI, {
     scanInput: true,
     scanOutput: true,

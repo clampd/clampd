@@ -77,7 +77,7 @@ impl GuardConfig {
             serde_json::from_str::<Self>(&content)
                 .with_context(|| format!("Failed to parse {}", user_path.display()))?
         } else if managed_path.exists() {
-            // No user config but managed exists — use managed as base
+            // No user config but managed exists - use managed as base
             Self::default()
         } else {
             anyhow::bail!(

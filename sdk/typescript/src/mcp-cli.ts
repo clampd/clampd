@@ -34,7 +34,7 @@ interface ParsedArgs {
 
 function printUsage(): void {
   const usage = `
-Clampd MCP Proxy — Route MCP tool calls through the Clampd security pipeline.
+Clampd MCP Proxy - Route MCP tool calls through the Clampd security pipeline.
 
 USAGE:
   npx tsx src/mcp-cli.ts --downstream <cmd> --agent-id <id> [options]

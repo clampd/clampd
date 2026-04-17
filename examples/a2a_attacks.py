@@ -70,7 +70,7 @@ def redteam_shell(command: str) -> str:
 # ── LangChain-style agent workflows ──────────────────────────
 
 def analyst_workflow():
-    """Analyst agent workflow — queries data for reports."""
+    """Analyst agent workflow - queries data for reports."""
     print("\n📊 Analyst Agent Workflow")
     print("-" * 40)
 
@@ -90,7 +90,7 @@ def analyst_workflow():
 
 
 def devops_workflow():
-    """Devops agent workflow — server operations."""
+    """Devops agent workflow - server operations."""
     print("\n🔧 Devops Agent Workflow")
     print("-" * 40)
 
@@ -216,11 +216,11 @@ def attack_6_redteam_direct():
     for name, fn in attacks:
         try:
             r = fn()
-            print(f"  {name}: ✅ ALLOWED — {r}")
+            print(f"  {name}: ✅ ALLOWED - {r}")
         except clampd.ClampdBlockedError as e:
             print(f"  {name}: 🛑 BLOCKED risk={e.risk_score:.2f}")
         except Exception as e:
-            print(f"  {name}: ❌ ERROR — {e}")
+            print(f"  {name}: ❌ ERROR - {e}")
 
 
 # ── Main ──────────────────────────────────────────────────────

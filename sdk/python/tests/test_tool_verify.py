@@ -1,4 +1,4 @@
-"""Tests for clampd.tool_verify — Ed25519 scope token verification."""
+"""Tests for clampd.tool_verify - Ed25519 scope token verification."""
 
 import base64
 import hashlib

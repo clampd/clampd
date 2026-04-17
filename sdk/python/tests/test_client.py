@@ -1,4 +1,4 @@
-"""Tests for clampd.client — HTTP gateway client."""
+"""Tests for clampd.client - HTTP gateway client."""
 
 from unittest.mock import MagicMock, patch
 

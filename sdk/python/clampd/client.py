@@ -1,4 +1,4 @@
-"""ClampdClient — gateway HTTP client."""
+"""ClampdClient - gateway HTTP client."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ _SCHEMA_INJECTION_PATTERNS = {
         _re.compile(r'"parameters"\s*:\s*\{[^}]*"type"\s*:\s*"object"'),
     ],
     "tool_steering": [
-        # Multi-word patterns only — single words like "DEPRECATED" cause
+        # Multi-word patterns only - single words like "DEPRECATED" cause
         # false positives in normal conversation (alert fatigue risk).
         _re.compile(r"use\s+\w+\s+instead\b", _re.IGNORECASE),
         _re.compile(r"\breplaced\s+by\b", _re.IGNORECASE),
@@ -481,7 +481,7 @@ class AsyncClampdClient:
         self.api_key = api_key or os.environ.get("CLAMPD_API_KEY", "")
         self._secret = secret
         self._jwt_ttl = 3600
-        # B4: Create JWT before httpx client — no resource leak if JWT fails
+        # B4: Create JWT before httpx client - no resource leak if JWT fails
         self._jwt = make_agent_jwt(agent_id, secret=secret)
         self._jwt_expires_at = time.monotonic() + self._jwt_ttl
         self._http = httpx.AsyncClient(timeout=timeout)

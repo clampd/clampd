@@ -35,7 +35,7 @@ clampd.init(
 )
 
 
-# ── Guarded tools — each has its own agent_id ─────────────────────
+# ── Guarded tools - each has its own agent_id ─────────────────────
 
 @clampd.guard("web.search", agent_id="research-agent")
 def search_web(query: str) -> dict:
@@ -74,7 +74,7 @@ def delete_files(path: str) -> str:
     return f"Deleted: {path}"
 
 
-# ── Orchestrator — just use clampd.agent() for the scope ──────────
+# ── Orchestrator - just use clampd.agent() for the scope ──────────
 
 def main():
     print("=== A2A Workflow Demo (Python) ===\n")

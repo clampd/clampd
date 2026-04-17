@@ -1,5 +1,5 @@
 #!/bin/sh
-# clampd-guard installer — runtime security for Claude Code and Cursor.
+# clampd-guard installer - runtime security for Claude Code and Cursor.
 # Usage: curl -fsSL https://clampd.dev/install-guard.sh | sh
 set -e
 

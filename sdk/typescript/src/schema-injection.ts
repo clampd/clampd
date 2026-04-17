@@ -59,7 +59,7 @@ const PATTERN_GROUPS: PatternGroup[] = [
     alertType: "tool_steering",
     riskScore: 0.80,
     patterns: [
-      // Multi-word patterns only — single words like "DEPRECATED" cause
+      // Multi-word patterns only - single words like "DEPRECATED" cause
       // false positives in normal conversation (alert fatigue risk).
       /use\s+\w+\s+instead\b/i,
       /\breplaced\s+by\b/i,

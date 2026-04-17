@@ -1,5 +1,5 @@
 /**
- * ClampdClient — thin wrapper around the ag-gateway HTTP API.
+ * ClampdClient - thin wrapper around the ag-gateway HTTP API.
  */
 
 import { makeAgentJwt } from "./auth.js";
@@ -318,7 +318,7 @@ export class ClampdClient {
   }
 
   /**
-   * Dry-run: stages 1-6 only — no token exchange or forwarding.
+   * Dry-run: stages 1-6 only - no token exchange or forwarding.
    */
   async verify(
     tool: string,
@@ -369,7 +369,7 @@ export class ClampdClient {
     if (!this.cbAllowRequest()) {
       return blockedResponse(
         "Circuit breaker open: gateway unavailable, requests are being short-circuited",
-        false, // Sustained outage — don't allow failOpen to bypass
+        false, // Sustained outage - don't allow failOpen to bypass
       ) as unknown as T;
     }
 
@@ -425,7 +425,7 @@ export class ClampdClient {
         return blockedResponse(errorText, true) as unknown as T;
       }
 
-      // 5xx or 429 — retry
+      // 5xx or 429 - retry
       lastError = await resp.text().catch(() => `HTTP ${resp.status}`);
       this.cbRecordFailure();
     }

@@ -1,5 +1,5 @@
 /**
- * A2A Delegation E2E test — runs against live Clampd services.
+ * A2A Delegation E2E test - runs against live Clampd services.
  *
  * Simulates two agents in the same process where Agent A delegates to Agent B.
  *
@@ -108,7 +108,7 @@ describe.skipIf(SKIP)("A2A Delegation E2E", () => {
       });
     });
 
-    // Outside — empty
+    // Outside - empty
     const empty = delegationHeaders();
     expect(Object.keys(empty)).toHaveLength(0);
   });

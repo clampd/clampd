@@ -1,7 +1,7 @@
 """
 Clampd + GitHub Models (FREE GPT-4o access)
 
-Uses GitHub Models inference API — no paid OpenAI key needed.
+Uses GitHub Models inference API - no paid OpenAI key needed.
 Just a GitHub personal access token (PAT) with no special scopes.
 
 Setup:

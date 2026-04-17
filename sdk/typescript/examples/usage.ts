@@ -32,7 +32,7 @@ async function exampleGuard() {
     return `Results for: ${params.sql}`;
   }
 
-  // Wrap it with clampd — every call is now guarded
+  // Wrap it with clampd - every call is now guarded
   const safeQuery = clampd.guard(queryDatabase, {
     toolName: "db.query",
     checkResponse: true,  // Also inspect the response for PII
@@ -75,7 +75,7 @@ async function exampleOpenAI() {
     },
   };
 
-  // Wrap the client — all tool calls are now guarded automatically
+  // Wrap the client - all tool calls are now guarded automatically
   const safeClient = clampd.openai(openaiClient, {
     agentId: "weather-agent",
     scanInput: true,   // Scan prompts for injection (default: true)

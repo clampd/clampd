@@ -3,9 +3,9 @@ syntax = "proto3";
 package agentguard.kill;
 
 service KillService {
-  // Single agent emergency revocation — 8-layer cascade.
+  // Single agent emergency revocation - 8-layer cascade.
   rpc KillAgent(KillRequest) returns (KillResponse);
-  // Org-wide emergency — kill all agents in an org (bounded concurrency).
+  // Org-wide emergency - kill all agents in an org (bounded concurrency).
   rpc KillAll(KillAllRequest) returns (KillAllResponse);
   // Query kill state for an agent.
   rpc GetKillStatus(GetKillStatusRequest) returns (GetKillStatusResponse);

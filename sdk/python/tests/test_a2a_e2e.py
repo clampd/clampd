@@ -1,4 +1,4 @@
-"""A2A Delegation E2E test — runs against live Clampd services.
+"""A2A Delegation E2E test - runs against live Clampd services.
 
 Simulates two agents in the same process where Agent A delegates to Agent B.
 Verifies:
@@ -37,7 +37,7 @@ from clampd.delegation import (
 GATEWAY_URL = os.environ.get("CLAMPD_GATEWAY_URL", "http://localhost:8080")
 API_KEY = os.environ.get("CLAMPD_API_KEY", "ag_test_demo_clampd_2026")
 
-# Two agent IDs — simulating separate agents in the same process
+# Two agent IDs - simulating separate agents in the same process
 AGENT_A_ID = "b0000000-0000-0000-0000-000000000001"  # demo agent from seed
 AGENT_B_ID = "b0000000-0000-0000-0000-000000000002"  # second agent (may not exist in registry)
 
@@ -59,7 +59,7 @@ def test_gateway_health():
 
 
 def test_single_agent_proxy():
-    """Single agent makes a safe tool call — no delegation."""
+    """Single agent makes a safe tool call - no delegation."""
     client_a = make_client(AGENT_A_ID)
     resp = client_a.proxy(
         tool="db.query",
@@ -76,7 +76,7 @@ def test_single_agent_no_delegation_fields():
 
 
 def test_nested_delegation_auto_detected():
-    """Agent A calls Agent B — delegation chain auto-detected via contextvars."""
+    """Agent A calls Agent B - delegation chain auto-detected via contextvars."""
     client_a = make_client(AGENT_A_ID)
     client_b = make_client(AGENT_B_ID)
 
@@ -96,7 +96,7 @@ def test_nested_delegation_auto_detected():
             assert ctx_b.depth == 2
             print(f"  Agent B context: chain={ctx_b.chain}, caller={ctx_b.caller_agent_id}, trace={ctx_b.trace_id}")
 
-            # Agent B makes a proxy call — should include delegation fields
+            # Agent B makes a proxy call - should include delegation fields
             resp = client_b.proxy(
                 tool="db.query",
                 params={"sql": "SELECT COUNT(*) FROM orders"},
@@ -233,7 +233,7 @@ def test_delegation_headers():
         exit_delegation(token_b)
         exit_delegation(token_a)
 
-    # Outside delegation — empty headers
+    # Outside delegation - empty headers
     headers = clampd.delegation_headers()
     assert headers == {}
 

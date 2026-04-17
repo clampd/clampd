@@ -1,4 +1,4 @@
-//! ag-gateway — the ONLY external entry point for SDK/agent traffic.
+//! ag-gateway - the ONLY external entry point for SDK/agent traffic.
 //!
 //! Architecture boundaries:
 //! - External: SDKs, agents, MCP clients connect HERE via REST API
@@ -107,9 +107,9 @@ pub struct AppState {
     pub baseline_cache: Arc<baseline_cache::BaselineCache>,
     /// License plan guard for feature gating and limit checks.
     pub plan_guard: Arc<PlanGuard>,
-    /// Ed25519 signing key for scope token minting (private — never exposed).
+    /// Ed25519 signing key for scope token minting (private - never exposed).
     pub scope_signing_key: ed25519_dalek::SigningKey,
-    /// Ed25519 verifying key for scope token verification (public — exposed via JWKS).
+    /// Ed25519 verifying key for scope token verification (public - exposed via JWKS).
     pub scope_verifying_key: ed25519_dalek::VerifyingKey,
 }
 
@@ -120,7 +120,7 @@ async fn main() -> Result<()> {
     // Initialize OpenTelemetry distributed tracing (OTLP exporter + tracing-subscriber).
     // Falls back to plain tracing-subscriber if OTel init fails (e.g. no collector).
     if let Err(e) = otel::init_tracer("ag-gateway") {
-        // OTel is optional — fall back to plain structured logging.
+        // OTel is optional - fall back to plain structured logging.
         eprintln!("OpenTelemetry init failed (non-fatal, falling back to plain logging): {e}");
         tracing_subscriber::fmt()
             .with_env_filter(
@@ -133,7 +133,7 @@ async fn main() -> Result<()> {
 
     // License check: validate CLAMPD_LICENSE_KEY before any other initialization.
     // Each service independently verifies the license using embedded crypto.
-    // No network call — pure offline RSA/HMAC verification.
+    // No network call - pure offline RSA/HMAC verification.
     ag_common::license_guard::enforce_or_exit("ag-gateway");
 
     // Validate license JWT and extract plan guard for feature gating.
@@ -141,14 +141,14 @@ async fn main() -> Result<()> {
         PlanGuard::from_license_jwt(
             &std::env::var("CLAMPD_LICENSE_KEY").expect("CLAMPD_LICENSE_KEY required"),
         )
-        .expect("Invalid or tampered license — refusing to start"),
+        .expect("Invalid or tampered license - refusing to start"),
     );
     info!(plan = %plan_guard.plan, org_id = %plan_guard.org_id, "Plan guard initialized");
 
     let config = GatewayConfig::from_env();
     let config = Arc::new(config);
 
-    // JWT_SECRET is mandatory. Without it, ANY JWT would be accepted — unacceptable
+    // JWT_SECRET is mandatory. Without it, ANY JWT would be accepted - unacceptable
     // for a security product. No decode-only mode, no bypass flags.
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_default();
     if jwt_secret.is_empty() {
@@ -317,7 +317,7 @@ async fn main() -> Result<()> {
                                 {
                                     Ok(_) => replayed += 1,
                                     Err(e) => {
-                                        warn!("WAL replay publish failed: {} — stopping replay", e);
+                                        warn!("WAL replay publish failed: {} - stopping replay", e);
                                         break;
                                     }
                                 }
@@ -333,7 +333,7 @@ async fn main() -> Result<()> {
             Some(wal)
         }
         Err(e) => {
-            warn!("Failed to initialize WAL: {} — shadow events may be lost on NATS failure", e);
+            warn!("Failed to initialize WAL: {} - shadow events may be lost on NATS failure", e);
             None
         }
     };
@@ -408,7 +408,7 @@ async fn main() -> Result<()> {
     info!("Starting connection warmup...");
     let warmup_start = Instant::now();
 
-    // 1. Redis warmup — establish a pooled connection and verify reachability.
+    // 1. Redis warmup - establish a pooled connection and verify reachability.
     match state.redis_pool.get().await {
         Ok(mut conn) => {
             let ping_result: Result<String, _> = redis::cmd("PING").query_async(&mut *conn).await;
@@ -420,7 +420,7 @@ async fn main() -> Result<()> {
         Err(e) => warn!("Redis warmup failed (non-fatal): {}", e),
     }
 
-    // 2. gRPC channel warmup — send health checks to each upstream service
+    // 2. gRPC channel warmup - send health checks to each upstream service
     //    to force tonic's lazy HTTP/2 connection establishment.
     {
         use tonic_health::pb::health_client::HealthClient;
@@ -465,7 +465,7 @@ async fn main() -> Result<()> {
                                 warn!(
                                     service = name,
                                     error = %e,
-                                    "gRPC health check failed (non-fatal) — channel connected but service may not be ready"
+                                    "gRPC health check failed (non-fatal) - channel connected but service may not be ready"
                                 );
                             }
                         }
@@ -482,7 +482,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    // 3. NATS warmup — flush to verify the connection round-trips to the server.
+    // 3. NATS warmup - flush to verify the connection round-trips to the server.
     match state.nats.flush().await {
         Ok(_) => info!("NATS connection verified (flush OK)"),
         Err(e) => warn!("NATS flush failed (non-fatal): {}", e),
@@ -507,7 +507,7 @@ async fn main() -> Result<()> {
             .allow_headers(Any))
         .route("/health", get(health))
         .route("/metrics", get(metrics_handler))
-        // JWKS endpoint — Ed25519 public key for scope token verification
+        // JWKS endpoint - Ed25519 public key for scope token verification
         .route("/.well-known/jwks.json", get(handle_jwks))
         .with_state(state);
 
@@ -528,7 +528,7 @@ async fn main() -> Result<()> {
         );
     } else if !tls_configured {
         warn!(
-            "TLS not configured — acceptable for development. \
+            "TLS not configured - acceptable for development. \
              Set CLAMPD_TLS_CERT and CLAMPD_TLS_KEY for production compliance."
         );
     }
@@ -591,7 +591,7 @@ async fn metrics_handler() -> String {
     metrics::render_prometheus()
 }
 
-/// JWKS endpoint — exposes the Ed25519 public key for scope token verification.
+/// JWKS endpoint - exposes the Ed25519 public key for scope token verification.
 /// Tool-side SDKs fetch this to verify scope tokens without needing a shared secret.
 async fn handle_jwks(
     State(state): State<Arc<AppState>>,

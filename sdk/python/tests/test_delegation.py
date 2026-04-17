@@ -376,7 +376,7 @@ class TestClientProxyDelegation:
             }
             mock_http.post.return_value = mock_resp
 
-            # Single agent context — not delegation
+            # Single agent context - not delegation
             ctx, tok = enter_delegation("agent-A")
             try:
                 client.proxy(tool="tool.x", params={"k": "v"})

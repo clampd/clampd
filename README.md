@@ -146,14 +146,14 @@ Everything runs in your infrastructure. Audit logs go to your ClickHouse instanc
 | Directory | Contents | License |
 |---|---|---|
 | [`sdk/`](sdk/) | Python + TypeScript SDKs | Apache 2.0 |
-| [`src/clampd-guard/`](src/clampd-guard/) | Claude Code & Cursor guard — full source + tests | BSL 1.1 |
+| [`src/clampd-guard/`](src/clampd-guard/) | Claude Code & Cursor guard - full source + tests | BSL 1.1 |
 | [`src/ag-gateway/`](src/ag-gateway/) | HTTP gateway, 9-stage request pipeline | BSL 1.1 |
 | [`src/ag-shadow/`](src/ag-shadow/) | Audit pipeline, PII masking | BSL 1.1 |
 | [`proto/`](proto/) | gRPC API contracts | Apache 2.0 |
 | [`docker/`](docker/) | Compose files, setup script, .env.example | Apache 2.0 |
 | [`bin/`](bin/) | Pre-built CLI binaries | BSL 1.1 |
 
-**Docker images only** (closed source — this is the detection engine you're paying for):
+**Docker images only** (closed source - this is the detection engine you're paying for):
 
 | Image | What it does |
 |---|---|
@@ -195,7 +195,7 @@ Binaries available for Linux (amd64/arm64), macOS (arm64), and Windows (amd64).
 # Install
 curl -fsSL https://clampd.dev/install-guard.sh | sh
 
-# Setup (one time — installs hooks automatically)
+# Setup (one time - installs hooks automatically)
 clampd-guard setup \
   --url https://your-gateway:8080 \
   --key your-api-key \

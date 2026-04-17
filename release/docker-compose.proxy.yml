@@ -1,7 +1,7 @@
-# Clampd Proxy Runtime — Customer Infrastructure
+# Clampd Proxy Runtime - Customer Infrastructure
 #
 # Runs the full 9-service security pipeline + infrastructure.
-# NO Dashboard services — the control plane runs separately (docker-compose.control.yml).
+# NO Dashboard services - the control plane runs separately (docker-compose.control.yml).
 #
 # Usage:
 #   cp .env.example .env   # fill in secrets
@@ -11,7 +11,7 @@
 # Leave CLAMPD_SAAS_URL empty for standalone mode (no cloud connection).
 
 x-license: &license
-  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required — set it in .env}
+  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required - set it in .env}
   AG_INTERNAL_SECRET: ${AG_INTERNAL_SECRET:-}
 
 x-rust-defaults: &rust-defaults
@@ -27,7 +27,7 @@ x-rust-defaults: &rust-defaults
 services:
   # ── Infrastructure ─────────────────────────────────────────────
 
-  # Local Postgres/Redis — skip when using Neon/Upstash (set DATABASE_URL + REDIS_URL in .env)
+  # Local Postgres/Redis - skip when using Neon/Upstash (set DATABASE_URL + REDIS_URL in .env)
   postgres:
     image: postgres:16-alpine
     profiles: ["local-infra"]
@@ -58,7 +58,7 @@ services:
   nats:
     image: nats:2-alpine
     command: >
-      --auth ${NATS_TOKEN:?NATS_TOKEN is required — set it in .env}
+      --auth ${NATS_TOKEN:?NATS_TOKEN is required - set it in .env}
       --jetstream --store_dir /data -m 8222
     volumes:
       - nats_data:/data
@@ -72,7 +72,7 @@ services:
       - default
       - clampd-shared
 
-  # OPA sidecar removed — policy engine + scope exemptions now in pure Rust.
+  # OPA sidecar removed - policy engine + scope exemptions now in pure Rust.
 
   clickhouse:
     profiles: ["local-infra"]
@@ -200,7 +200,7 @@ services:
       POLICY_URL: http://ag-policy:50051
       TOKEN_URL: http://ag-token:50051
       KILL_URL: http://ag-kill:50055
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
       RUST_LOG: "info,ag_gateway=debug"
     depends_on:
       ag-registry:
@@ -314,7 +314,7 @@ services:
       CLAMPD_SAAS_URL: ${CLAMPD_SAAS_URL:-}
       CLAMPD_LICENSE_TOKEN: ${CLAMPD_LICENSE_TOKEN:-}
       CLAMPD_SHARED_DB: ${CLAMPD_SHARED_DB:-true}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
       CLAMPD_POLL_INTERVAL: "5"
       RUST_LOG: "info,ag_control=debug"
     depends_on:

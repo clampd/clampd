@@ -1,5 +1,5 @@
 /**
- * Mock Clampd Gateway — drop-in replacement for testing without a real gateway.
+ * Mock Clampd Gateway - drop-in replacement for testing without a real gateway.
  *
  * Usage:
  *   import { installMockGateway, removeMockGateway } from "./mock-gateway.js";
@@ -23,7 +23,7 @@ if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = "mock-secret-for-local-testing-32ch!";
 }
 
-// Configurable blocked tool patterns — add patterns to simulate blocking
+// Configurable blocked tool patterns - add patterns to simulate blocking
 const BLOCKED_TOOLS = new Set([
   "rm_rf", "exec_shell", "delete_database", "drop_table",
 ]);

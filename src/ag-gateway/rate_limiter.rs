@@ -1,6 +1,6 @@
 //! Dual-tier rate limiter for ag-gateway.
 //!
-//! Tier 1: Global Redis sliding window — accurate, shared across pods.
+//! Tier 1: Global Redis sliding window - accurate, shared across pods.
 //! Key pattern: `ag:ratelimit:{key}:{epoch_window}`
 //! Uses Redis INCR + EXPIRE pattern for O(1) per-request cost.
 //!
@@ -59,7 +59,7 @@ impl RateLimiter {
         let mut conn = match pool.get().await {
             Ok(c) => c,
             Err(e) => {
-                warn!(key = %key, "Rate limit fail-open — Redis unavailable: {}", e);
+                warn!(key = %key, "Rate limit fail-open - Redis unavailable: {}", e);
                 crate::metrics::increment_rate_limit_fail_open();
                 return RateLimitResult {
                     allowed: true,
@@ -77,7 +77,7 @@ impl RateLimiter {
         {
             Ok(val) => {
                 if val == 1 {
-                    // First request in this window — set expiry to 2x window_secs
+                    // First request in this window - set expiry to 2x window_secs
                     // to ensure the key survives into the next window for overlap.
                     if let Err(e) = redis::cmd("EXPIRE")
                         .arg(&current_key)
@@ -91,7 +91,7 @@ impl RateLimiter {
                 val.max(0) as u32
             }
             Err(e) => {
-                warn!(key = %key, "Rate limit fail-open — Redis INCR failed: {}", e);
+                warn!(key = %key, "Rate limit fail-open - Redis INCR failed: {}", e);
                 crate::metrics::increment_rate_limit_fail_open();
                 return RateLimitResult {
                     allowed: true,
@@ -173,7 +173,7 @@ impl RateLimiter {
         let mut conn = match pool.get().await {
             Ok(c) => c,
             Err(e) => {
-                warn!(agent_id = %agent_id, "Byte rate limit fail-open — Redis unavailable: {}", e);
+                warn!(agent_id = %agent_id, "Byte rate limit fail-open - Redis unavailable: {}", e);
                 return RateLimitResult {
                     allowed: true,
                     remaining: 0,
@@ -191,7 +191,7 @@ impl RateLimiter {
         {
             Ok(val) => {
                 if val == bytes as i64 {
-                    // First request in this window — set expiry
+                    // First request in this window - set expiry
                     if let Err(e) = redis::cmd("EXPIRE")
                         .arg(&key)
                         .arg(window_secs * 2)
@@ -204,7 +204,7 @@ impl RateLimiter {
                 val.max(0) as u64
             }
             Err(e) => {
-                warn!(agent_id = %agent_id, "Byte rate limit fail-open — Redis INCRBY failed: {}", e);
+                warn!(agent_id = %agent_id, "Byte rate limit fail-open - Redis INCRBY failed: {}", e);
                 return RateLimitResult {
                     allowed: true,
                     remaining: 0,

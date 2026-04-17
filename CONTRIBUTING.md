@@ -20,7 +20,7 @@ Open an issue with the `enhancement` label. Describe the use case, not just the 
 1. Fork the repo and create a branch from `main`
 2. Write tests for any new functionality
 3. Run the test suite: `cargo test --workspace` (services) or `npm test` / `pytest` (SDKs)
-4. Keep PRs focused — one feature or fix per PR
+4. Keep PRs focused - one feature or fix per PR
 5. Update documentation if you changed behavior
 
 ### What we accept

@@ -217,7 +217,7 @@ describe("circuit breaker", () => {
 
     await client.proxy("t", {});
 
-    // Circuit should be closed now — subsequent calls go through
+    // Circuit should be closed now - subsequent calls go through
     const res = await client.proxy("t", {});
     expect(res.allowed).toBe(true);
     expect(successFetch).toHaveBeenCalledTimes(2);

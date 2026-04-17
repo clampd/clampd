@@ -142,7 +142,7 @@ describe("openai scanInput", () => {
     expect(originalCreate).not.toHaveBeenCalled();
   });
 
-  it("skips system messages — only sends user/tool/function", async () => {
+  it("skips system messages - only sends user/tool/function", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => mockScanInputResponse(true, 0.02),
@@ -180,7 +180,7 @@ describe("openai scanInput", () => {
     expect(body.message_count).toBe(4);
   });
 
-  it("scan enabled by default — scan-input called even without explicit flag", async () => {
+  it("scan enabled by default - scan-input called even without explicit flag", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => mockScanInputResponse(true, 0.02),
@@ -358,7 +358,7 @@ describe("openai scan defaults (scanInput=true, scanOutput=true)", () => {
     const originalCreate = vi.fn().mockResolvedValue(response);
     const oai = { chat: { completions: { create: originalCreate } } };
 
-    // No explicit scanInput/scanOutput — defaults to true for both
+    // No explicit scanInput/scanOutput - defaults to true for both
     const wrapped = clampd.openai(oai, { agentId: "test" });
     const result = await wrapped.chat.completions.create({
       model: "gpt-4o",
@@ -395,7 +395,7 @@ describe("openai scan defaults (scanInput=true, scanOutput=true)", () => {
     const originalCreate = vi.fn().mockResolvedValue(response);
     const oai = { chat: { completions: { create: originalCreate } } };
 
-    // No explicit scanOutput — defaults to true
+    // No explicit scanOutput - defaults to true
     const wrapped = clampd.openai(oai, { agentId: "test" });
     const result = await wrapped.chat.completions.create({
       model: "gpt-4o",

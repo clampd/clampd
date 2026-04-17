@@ -1,6 +1,6 @@
 # Clampd Python SDK
 
-Runtime security for AI agents. Guard every tool call — OpenAI, Anthropic, LangChain, Google ADK — in 1 line. Prompt and response scanning enabled by default.
+Runtime security for AI agents. Guard every tool call - OpenAI, Anthropic, LangChain, Google ADK - in 1 line. Prompt and response scanning enabled by default.
 
 ## Installation
 
@@ -30,7 +30,7 @@ clampd.init(
     api_key="ag_live_...",
 )
 
-# Wrap your OpenAI client — done
+# Wrap your OpenAI client - done
 client = clampd.openai(OpenAI())
 
 # Use it exactly like before. Clampd intercepts every tool call.
@@ -46,10 +46,10 @@ response = client.chat.completions.create(
 
 ## What's New in 0.5.0
 
-- **Per-agent JWT identity** — each agent authenticates independently in multi-agent systems
-- **Streaming guard** — opt-in tool call interception for streaming responses (`guard_stream=True`)
-- **Circuit breaker & retry** — automatic retry with exponential backoff
-- **CrewAI integration** — guard CrewAI agent tool calls
+- **Per-agent JWT identity** - each agent authenticates independently in multi-agent systems
+- **Streaming guard** - opt-in tool call interception for streaming responses (`guard_stream=True`)
+- **Circuit breaker & retry** - automatic retry with exponential backoff
+- **CrewAI integration** - guard CrewAI agent tool calls
 - **216 detection rules** with Aho-Corasick prefilter (22μs at 10K rules)
 
 ## Configuration

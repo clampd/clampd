@@ -1,7 +1,7 @@
 use std::sync::{Arc, LazyLock};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-/// Cached JWT_SECRET — read once at first access, immutable thereafter.
+/// Cached JWT_SECRET - read once at first access, immutable thereafter.
 /// main.rs validates length (>=32 chars) and exits before any request handler runs,
 /// so this is guaranteed non-empty in production.
 pub(crate) static JWT_SECRET_CACHED: LazyLock<String> = LazyLock::new(|| {
@@ -197,7 +197,7 @@ async fn increment_and_get_calls(
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Redis pool error for request counter: {} — fail-open with 0", e);
+            warn!("Redis pool error for request counter: {} - fail-open with 0", e);
             return 0;
         }
     };
@@ -217,13 +217,13 @@ async fn increment_and_get_calls(
                     .query_async::<()>(&mut *conn)
                     .await
                 {
-                    warn!("Redis EXPIRE failed for rate-limit key {}: {} — key may persist without TTL", current_key, e);
+                    warn!("Redis EXPIRE failed for rate-limit key {}: {} - key may persist without TTL", current_key, e);
                 }
             }
             val.max(0) as u32
         }
         Err(e) => {
-            warn!("Redis INCR failed for {}: {} — fail-open with 0", current_key, e);
+            warn!("Redis INCR failed for {}: {} - fail-open with 0", current_key, e);
             return 0;
         }
     };
@@ -237,7 +237,7 @@ async fn increment_and_get_calls(
         Ok(Some(val)) => val.max(0) as u32,
         Ok(None) => 0,
         Err(e) => {
-            debug!("Redis GET for previous bucket {}: {} — treating as 0", prev_key, e);
+            debug!("Redis GET for previous bucket {}: {} - treating as 0", prev_key, e);
             0
         }
     };
@@ -245,7 +245,7 @@ async fn increment_and_get_calls(
     current_count + prev_count
 }
 
-/// POST /v1/proxy — Full 9-stage pipeline.
+/// POST /v1/proxy - Full 9-stage pipeline.
 pub async fn handle_proxy(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -332,7 +332,7 @@ pub async fn handle_proxy(
     let license_gate = license_gate::check_license(&state.redis_pool).await;
 
     if license_gate.status == GatewayLicenseStatus::Revoked {
-        return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "license_revoked", "License revoked — contact support at clampd.dev"));
+        return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "license_revoked", "License revoked - contact support at clampd.dev"));
     }
 
     if license_gate.degraded {
@@ -365,7 +365,7 @@ pub async fn handle_proxy(
                 return Err(api_error(
                     StatusCode::FORBIDDEN,
                     "plan_limit_reached",
-                    format!("{} — upgrade at https://clampd.dev/#early-access", e),
+                    format!("{} - upgrade at https://clampd.dev/#early-access", e),
                 ));
             }
         }
@@ -382,7 +382,7 @@ pub async fn handle_proxy(
     )
     // Gateway appends the current agent (from JWT sub) to the chain.
     // The SDK sends chain=[A] (who delegated), the gateway completes it to [A, B]
-    // using the authenticated agent identity. This is authoritative — can't be spoofed.
+    // using the authenticated agent identity. This is authoritative - can't be spoofed.
     .map(|mut ctx| {
         if !ctx.chain.contains(&agent_id_str) {
             ctx.chain.push(agent_id_str.clone());
@@ -404,7 +404,7 @@ pub async fn handle_proxy(
                 StatusCode::BAD_REQUEST,
                 "invalid_delegation_confidence",
                 format!(
-                    "Invalid delegation confidence '{}' — must be one of: verified, inferred, declared",
+                    "Invalid delegation confidence '{}' - must be one of: verified, inferred, declared",
                     ctx.confidence
                 ),
             ));
@@ -496,15 +496,15 @@ pub async fn handle_proxy(
                 error!("Registry unavailable: {}", e);
                 degraded_stages.push("registry".to_string());
                 return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "registry_unavailable",
-                    "Agent identity cannot be verified — registry unavailable (fail-closed)"));
+                    "Agent identity cannot be verified - registry unavailable (fail-closed)"));
             }
         }
     } else {
-        // Circuit is open — fail-closed: deny the request.
+        // Circuit is open - fail-closed: deny the request.
         degraded_stages.push("registry".to_string());
-        warn!("Registry circuit breaker is open — fail-closed");
+        warn!("Registry circuit breaker is open - fail-closed");
         return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "registry_unavailable",
-            "Agent identity cannot be verified — registry unavailable (fail-closed)"));
+            "Agent identity cannot be verified - registry unavailable (fail-closed)"));
     };
 
     // ---- CROSS-ORG AGENT ACCESS GUARD ----
@@ -554,7 +554,7 @@ pub async fn handle_proxy(
         if let Some(ref caller_id) = ctx.caller_agent_id {
             // The caller_agent_id must be resolvable within the same org.
             // We check the Redis delegation approval key which is org-scoped:
-            // ag:delegation:approved:{parent}:{child} — only exists within same org.
+            // ag:delegation:approved:{parent}:{child} - only exists within same org.
             // If caller claims to be from a different org, the approval lookup will fail
             // and enforcement mode will block the request.
             //
@@ -641,7 +641,7 @@ pub async fn handle_proxy(
 
             // Delegation enforcement moved to Cedar (builtin-delegation-approval).
             // Gateway enriches delegation_approved context for Cedar.
-            // Check approval status and pass to EvaluateRequest — Cedar decides.
+            // Check approval status and pass to EvaluateRequest - Cedar decides.
             if crate::delegation::is_enforcement_enabled(&state.redis_pool, &api_key_info.org_id).await {
                 let (approved, _allowed_tools) = crate::delegation::check_delegation_approved(
                     &state.redis_pool,
@@ -653,7 +653,7 @@ pub async fn handle_proxy(
             }
 
             // Record observed delegation AFTER enforcement check passes.
-            // Blocked delegations must NOT be recorded as observations — they
+            // Blocked delegations must NOT be recorded as observations - they
             // would pollute workflow auto-discovery (the enforcement block above
             // returns early on deny, so we only reach here for allowed delegations).
             crate::delegation::record_observed_delegation(
@@ -724,7 +724,7 @@ pub async fn handle_proxy(
 
                     match set_result {
                         Ok(false) => {
-                            // Key already existed — this is a replay
+                            // Key already existed - this is a replay
                             let reason = format!(
                                 "task_replay_detected: duplicate delegation {} → {} within 60s",
                                 &caller[..caller.len().min(12)],
@@ -756,10 +756,10 @@ pub async fn handle_proxy(
                                 reason,
                             ));
                         }
-                        Ok(true) => {} // First time — proceed
+                        Ok(true) => {} // First time - proceed
                         Err(e) => {
-                            // Redis error — log and continue (fail-open for replay, fail-closed would block legitimate retries)
-                            warn!(error = %e, "Redis SET NX failed for replay detection — skipping");
+                            // Redis error - log and continue (fail-open for replay, fail-closed would block legitimate retries)
+                            warn!(error = %e, "Redis SET NX failed for replay detection - skipping");
                         }
                     }
                 }
@@ -808,7 +808,7 @@ pub async fn handle_proxy(
     // Only structural failures (expired TTL, malformed signature) are blocked here.
     let ap2_risk_modifier: f64 = if is_payment_tool {
         if let Some(mandate) = crate::ap2::extract_mandate(&body.params) {
-            // Structural validation only — no boundary checks.
+            // Structural validation only - no boundary checks.
             // TTL expiry and signature format are protocol concerns, not policy.
             // Amount/vendor/payee enforcement is handled by Cedar (Phase 2).
             let structural_bounds = crate::ap2::Ap2Boundaries::default(); // no limits = skip boundary checks
@@ -847,7 +847,7 @@ pub async fn handle_proxy(
                 obj.as_object_mut().map(|m| m.insert("__prompt_context".to_string(), serde_json::Value::String(ctx.clone())));
                 params_json = serde_json::to_string(&obj).unwrap_or(params_json);
             } else {
-                // params_json isn't a JSON object — create a wrapper
+                // params_json isn't a JSON object - create a wrapper
                 params_json = serde_json::json!({
                     "__raw_params": params_json,
                     "__prompt_context": ctx,
@@ -964,7 +964,7 @@ pub async fn handle_proxy(
             return Err(api_error(
                 StatusCode::FORBIDDEN,
                 "session_blocked",
-                "Session creation blocked — agent was recently kill-switched",
+                "Session creation blocked - agent was recently kill-switched",
             ));
         }
 
@@ -1048,7 +1048,7 @@ pub async fn handle_proxy(
     }
     let session_risk_factor = session_context.risk_factor();
 
-    // Scope boundary enforcement moved to ag-policy (Layer 0) — ISSUE-025
+    // Scope boundary enforcement moved to ag-policy (Layer 0) - ISSUE-025
     // Gateway passes agent_allowed_scopes to policy; policy denies if tool scope is outside boundary.
 
     stage_latencies.push(("session_toolauth", stage_start.elapsed().as_micros() as u64));
@@ -1078,7 +1078,7 @@ pub async fn handle_proxy(
                 session_total_calls: session_context.tool_calls.len() as i32,
                 session_context_window: session_context.tool_calls.len().min(10) as i32,
                 session_context_json: build_session_context_json(&session_context, baseline.as_ref()),
-                // agent_scopes removed — scope exemptions handled by policy layer
+                // agent_scopes removed - scope exemptions handled by policy layer
                 caller_agent_id: delegation_ctx.as_ref().and_then(|d| d.caller_agent_id.clone()),
                 delegation_chain: delegation_ctx.as_ref().map(|d| d.chain.clone()).unwrap_or_default(),
                 delegation_trace_id: delegation_ctx.as_ref().and_then(|d| d.trace_id.clone()),
@@ -1127,7 +1127,7 @@ pub async fn handle_proxy(
                 }
             }
             None => {
-                // Circuit breaker is open — apply degradation.
+                // Circuit breaker is open - apply degradation.
                 match apply_degradation_or_default(state.degradation.intent_unavailable) {
                     Some((risk, class, labels, rules, _action)) => (risk, class, labels, rules, None, 0i32, false),
                     None => {
@@ -1138,7 +1138,7 @@ pub async fn handle_proxy(
         };
 
     // ---- Stage 5.5: MODEL ESCALATION (gray-zone hybrid) ----
-    // Skip if intent already said Block — per-tool thresholds already decided.
+    // Skip if intent already said Block - per-tool thresholds already decided.
     let assessed_risk = if intent_action != 2 && crate::model_escalation::needs_escalation(
         &state.config.model_escalation,
         assessed_risk,
@@ -1174,7 +1174,7 @@ pub async fn handle_proxy(
                 model_resp.risk_score.clamp(0.0, 1.0)
             }
             None => {
-                // Model unavailable or fail-open — use rules score as-is
+                // Model unavailable or fail-open - use rules score as-is
                 assessed_risk
             }
         }
@@ -1183,7 +1183,7 @@ pub async fn handle_proxy(
     };
 
     // ---- Stage 5.5b: LLM-AS-JUDGE (semantic gray-zone) ----
-    // Skip if intent already said Block — no point calling LLM for a request
+    // Skip if intent already said Block - no point calling LLM for a request
     // that's already blocked by per-tool-category thresholds.
     let assessed_risk = if intent_action != 2 && crate::model_escalation::needs_llm_judge(
         &state.config.llm_judge,
@@ -1263,7 +1263,7 @@ pub async fn handle_proxy(
             .await
         {
             Ok(scopes) => scopes,
-            // No grant — fall back to tool descriptor scope resolution (transition path)
+            // No grant - fall back to tool descriptor scope resolution (transition path)
             Err(_) => match state.baseline_cache
                 .resolve_tool_scopes(&api_key_info.org_id, &tool_name)
                 .await
@@ -1580,14 +1580,14 @@ pub async fn handle_proxy(
     stage_start = Instant::now();
 
     // ---- Evaluate-only fast path: skip token exchange + forwarding when no target_url ----
-    // This is the default SDK flow — agent executes the tool locally after getting allow/deny.
+    // This is the default SDK flow - agent executes the tool locally after getting allow/deny.
     if body.target_url.is_empty() {
         let scope_granted = granted_scopes.join(" ");
 
         // Mint a compact scope token (payload.signature) proving this call was approved.
         // Contains scope grant, tool binding, and expiry.
         //
-        // Ed25519 asymmetric signing — cannot forge without the private key.
+        // Ed25519 asymmetric signing - cannot forge without the private key.
         // Public key is distributed via GET /.well-known/jwks.json for tool-side verification.
         let scope_token = {
             let scope_token_ttl: i64 = if policy_token_ttl > 0 {
@@ -1921,7 +1921,7 @@ pub async fn handle_proxy(
                                 .query_async(&mut *conn)
                                 .await
                                 .unwrap_or(None);
-                            // Parse "caller_id:risk:ts" — check if risk > 0.5
+                            // Parse "caller_id:risk:ts" - check if risk > 0.5
                             val.map_or(false, |v| {
                                 let mut parts = v.rsplitn(3, ':');
                                 let _ts = parts.next();
@@ -1933,7 +1933,7 @@ pub async fn handle_proxy(
                     };
 
                     if !has_risky_contact {
-                        return; // Drift without risky contact — not a sleeper signal
+                        return; // Drift without risky contact - not a sleeper signal
                     }
 
                     // 4. Call llm_judge_drift for semantic assessment
@@ -1957,7 +1957,7 @@ pub async fn handle_proxy(
                                 tool = %drift_tool_name,
                                 drift_risk = resp.risk_score,
                                 label = %resp.label,
-                                "Sleeper agent drift detected by LLM judge — flagging for enhanced monitoring"
+                                "Sleeper agent drift detected by LLM judge - flagging for enhanced monitoring"
                             );
                             // Set enhanced monitoring flag in Redis (300s TTL)
                             if let Ok(mut conn) = drift_pool.get().await {
@@ -2058,14 +2058,14 @@ pub async fn handle_proxy(
                         }));
                     }
 
-                    // Allowed — adjust risk and log.
+                    // Allowed - adjust risk and log.
                     debug!(
                         request_id = %request_id,
                         agent_id = %agent_id_str,
                         amount = %payment.amount,
                         currency = %payment.currency,
                         risk_modifier = decision.risk_modifier,
-                        "x402 payment ALLOWED — passing 402 through"
+                        "x402 payment ALLOWED - passing 402 through"
                     );
                     // Note: risk modifier applied via x402 audit trail; assessed_risk
                     // is already finalized at this point in the pipeline. The risk
@@ -2081,7 +2081,7 @@ pub async fn handle_proxy(
                     debug!(
                         request_id = %request_id,
                         status = status_code,
-                        "Sanitized error response — stripped sensitive internal details"
+                        "Sanitized error response - stripped sensitive internal details"
                     );
                 }
                 sanitized
@@ -2110,7 +2110,7 @@ pub async fn handle_proxy(
             request_id = %request_id,
             agent_id = %agent_id_str,
             tool = %tool_name,
-            "Agent killed mid-flight — discarding downstream response"
+            "Agent killed mid-flight - discarding downstream response"
         );
 
         // Publish shadow event for the discarded response
@@ -2161,7 +2161,7 @@ pub async fn handle_proxy(
         return Err(api_error(
             StatusCode::FORBIDDEN,
             "agent_killed_mid_flight",
-            "Agent was kill-switched during tool execution — response discarded",
+            "Agent was kill-switched during tool execution - response discarded",
         ));
     }
 
@@ -2296,7 +2296,7 @@ pub async fn handle_proxy(
     }))
 }
 
-/// POST /v1/verify — Dry-run (Stages 1-6 only, no token exchange or forwarding).
+/// POST /v1/verify - Dry-run (Stages 1-6 only, no token exchange or forwarding).
 ///
 /// Important: /v1/verify READS session context but does NOT WRITE to it.
 /// Session state is only updated by actual /v1/proxy calls.
@@ -2338,7 +2338,7 @@ pub async fn handle_verify(
     // License gate applies to verify too
     let license_gate = license_gate::check_license(&state.redis_pool).await;
     if license_gate.status == GatewayLicenseStatus::Revoked {
-        return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "license_revoked", "License revoked — contact support at clampd.dev"));
+        return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "license_revoked", "License revoked - contact support at clampd.dev"));
     }
 
     let (tool_name, action, params_json, _params_hash, _) = extract_tool_call(&body);
@@ -2504,7 +2504,7 @@ const SENSITIVE_KEYWORDS: &[&str] = &[
     "client-secret",
 ];
 
-/// POST /v1/inspect — Inspect a tool response for PII, anomalies, and sensitive data.
+/// POST /v1/inspect - Inspect a tool response for PII, anomalies, and sensitive data.
 ///
 /// Runs the response data through lightweight checks without forwarding or
 /// token exchange. Uses the same auth pattern as /v1/proxy (JWT + API key).
@@ -2557,7 +2557,7 @@ pub async fn handle_inspect(
     // 1. PII detection via the existing response_inspector machinery
     let metadata = inspect_response(
         serialized_bytes,
-        200, // synthetic status — we're inspecting data, not a real HTTP response
+        200, // synthetic status - we're inspecting data, not a real HTTP response
         "application/json",
     );
     if metadata.contains_pii_patterns {
@@ -2590,7 +2590,7 @@ pub async fn handle_inspect(
         ));
     }
 
-    // 4. Scope token verification — check that response doesn't violate granted scope
+    // 4. Scope token verification - check that response doesn't violate granted scope
     let mut scope_blocked = false;
     if let Some(ref token) = body.scope_token {
         match crate::scope_token::verify(token, &state.scope_verifying_key, chrono::Utc::now().timestamp()) {
@@ -2623,7 +2623,7 @@ pub async fn handle_inspect(
             }
             Err(reason) => {
                 warn!(reason = %reason, "Invalid scope_token in inspect request");
-                // Don't block — token verification failure shouldn't prevent inspection
+                // Don't block - token verification failure shouldn't prevent inspection
                 // But record it for audit trail
                 findings.push(format!("scope_token_invalid: {}", reason));
             }
@@ -2691,7 +2691,7 @@ fn apply_degradation_error<T>(
             Err(api_error(StatusCode::SERVICE_UNAVAILABLE, code, message))
         }
         DegradationMode::ApplyCachedRules => {
-            warn!("Degraded (ApplyCachedRules): {} — no cache impl yet, fail-closed", message);
+            warn!("Degraded (ApplyCachedRules): {} - no cache impl yet, fail-closed", message);
             Err(api_error(StatusCode::SERVICE_UNAVAILABLE, code, message))
         }
         DegradationMode::ApplyDefaultDeny => {
@@ -2777,7 +2777,7 @@ async fn check_auto_trust(
         .unwrap_or(None);
 
     if let Some(wf_id) = workflow_id {
-        // Workflow exists — check if it's NOT enforcing (= learning mode)
+        // Workflow exists - check if it's NOT enforcing (= learning mode)
         let enforcement_key = format!("ag:delegation:enforcement:{org_id}");
         let enforcing: Option<String> = redis::cmd("GET")
             .arg(&enforcement_key)
@@ -2806,7 +2806,7 @@ async fn check_auto_trust(
         return false;
     }
 
-    // No workflow — fall back to org-level auto_trust
+    // No workflow - fall back to org-level auto_trust
     let org_key = format!("ag:org:auto_trust:{org_id}");
     let result: Option<String> = redis::cmd("GET")
         .arg(&org_key)
@@ -2839,7 +2839,7 @@ pub(crate) async fn validate_api_key(
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            tracing::error!("Redis unavailable for API key validation: {} — rejecting (fail-closed)", e);
+            tracing::error!("Redis unavailable for API key validation: {} - rejecting (fail-closed)", e);
             return None;
         }
     };
@@ -2860,7 +2860,7 @@ pub(crate) async fn validate_api_key(
         }
         Ok(None) => None,
         Err(e) => {
-            tracing::error!("Redis GET failed for API key: {} — rejecting (fail-closed)", e);
+            tracing::error!("Redis GET failed for API key: {} - rejecting (fail-closed)", e);
             None
         }
     }
@@ -2884,9 +2884,9 @@ async fn validate_jwt_with_agent_credential(
 ) -> Result<ag_common::models::AgentJwtClaims, String> {
     use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm, TokenData};
 
-    // JWT_SECRET is always required — no decode-only mode.
+    // JWT_SECRET is always required - no decode-only mode.
     if jwt_secret.is_empty() {
-        return Err("JWT_SECRET not configured — cannot validate JWT".to_string());
+        return Err("JWT_SECRET not configured - cannot validate JWT".to_string());
     }
 
     // Step 1: Decode without sig verification to extract agent_id (sub claim).
@@ -2919,14 +2919,14 @@ async fn validate_jwt_with_agent_credential(
                     Ok(val) => val,
                     Err(e) => {
                         return Err(format!(
-                            "Redis error during credential lookup: {} — rejecting request (fail-closed)", e
+                            "Redis error during credential lookup: {} - rejecting request (fail-closed)", e
                         ));
                     }
                 }
             }
             Err(e) => {
                 return Err(format!(
-                    "Redis unavailable for credential lookup: {} — rejecting request (fail-closed)", e
+                    "Redis unavailable for credential lookup: {} - rejecting request (fail-closed)", e
                 ));
             }
         }
@@ -2939,7 +2939,7 @@ async fn validate_jwt_with_agent_credential(
     // - Per-agent key exists in Redis → validate ONLY against that key.
     //   This is the credential_hash (SHA-256 of the raw ags_ secret).
     //   The SDK signs the JWT with the same hash.  If it doesn't match,
-    //   the request is rejected — period.
+    //   the request is rejected - period.
     //
     // - No per-agent key in Redis (IdP agent, agent without clampd auth) →
     //   validate against global JWT_SECRET.  This is the only case where
@@ -3048,7 +3048,7 @@ mod tests {
 
     #[test]
     fn extract_claims_empty_sub_rejected() {
-        // Empty string is not a valid UUID — rejected at extraction
+        // Empty string is not a valid UUID - rejected at extraction
         let claims = json!({"sub": ""});
         let result = extract_claims_from_value(&claims);
         assert!(result.is_err());
@@ -3148,13 +3148,13 @@ mod tests {
 
         // Tampered token should fail on signature verification
         // (it reaches Redis lookup first since decode succeeds, but the sig
-        //  check happens after — in unit tests without Redis it fails at Redis)
+        //  check happens after - in unit tests without Redis it fails at Redis)
         let result2 = validate_jwt_with_agent_credential(&tampered_token, secret, &pool).await;
         assert!(result2.is_err());
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // ADVERSARIAL TESTS — SSRF Protection (#15)
+    // ADVERSARIAL TESTS - SSRF Protection (#15)
     // ══════════════════════════════════════════════════════════════════
 
     #[test]

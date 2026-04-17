@@ -61,7 +61,7 @@ def guard_openai_stream(
        Per-tool-call buffers would either lose chunks (only store in one)
        or duplicate them (store in all, yield the same chunk N times).
 
-    2. Parallel tool calls in the same LLM response are atomic — if the
+    2. Parallel tool calls in the same LLM response are atomic - if the
        model says "call weather AND calendar", both must be approved before
        either executes. If one is denied, the entire response is blocked.
        Partial release of one tool call's chunks would give the consumer
@@ -71,7 +71,7 @@ def guard_openai_stream(
     def _generate() -> Iterator[Any]:
         # Accumulate tool call data per index; shared buffer holds all chunks.
         tool_calls: dict[int, dict[str, Any]] = {}
-        buffered_chunks: list[Any] = []  # shared — see docstring for why
+        buffered_chunks: list[Any] = []  # shared - see docstring for why
 
         for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
@@ -132,12 +132,12 @@ def guard_openai_stream(
                                 response=result,
                             )
 
-                    # All tool calls allowed — yield buffered chunks
+                    # All tool calls allowed - yield buffered chunks
                     yield from buffered_chunks
                     buffered_chunks.clear()
                     tool_calls.clear()
             else:
-                # Text or non-tool chunk — pass through immediately
+                # Text or non-tool chunk - pass through immediately
                 yield chunk
 
     return _StreamProxy(stream, _generate())
@@ -189,7 +189,7 @@ def guard_anthropic_stream(
                         current_tool_json += getattr(delta, "partial_json", "")
 
                 elif event_type == "content_block_stop":
-                    # Tool block complete — guard it
+                    # Tool block complete - guard it
                     try:
                         tool_args = json.loads(current_tool_json) if current_tool_json else {}
                     except (json.JSONDecodeError, TypeError):
@@ -218,7 +218,7 @@ def guard_anthropic_stream(
                             response=result,
                         )
 
-                    # Allowed — yield buffered events
+                    # Allowed - yield buffered events
                     yield from buffered_events
                     in_tool_block = False
                     buffered_events = []
@@ -227,7 +227,7 @@ def guard_anthropic_stream(
 
                 continue
 
-            # Non-tool event — pass through immediately
+            # Non-tool event - pass through immediately
             yield event
 
     return _StreamProxy(stream, _generate())

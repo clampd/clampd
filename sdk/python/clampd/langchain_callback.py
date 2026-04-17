@@ -1,4 +1,4 @@
-"""LangChain CallbackHandler — guards ALL tools in any chain/agent.
+"""LangChain CallbackHandler - guards ALL tools in any chain/agent.
 
 Used internally by ``clampd.langchain()``. You don't need to import this directly.
 """

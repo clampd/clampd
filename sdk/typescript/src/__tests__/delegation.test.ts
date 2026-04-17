@@ -34,7 +34,7 @@ describe("delegation context", () => {
     expect(getCallerAgentId()).toBeUndefined();
   });
 
-  it("single agent — chain has 1 entry", () => {
+  it("single agent - chain has 1 entry", () => {
     withDelegation("agent-a", () => {
       const ctx = getDelegation();
       expect(ctx).toBeDefined();
@@ -44,7 +44,7 @@ describe("delegation context", () => {
     });
   });
 
-  it("two agents same process — auto-detects A -> B", () => {
+  it("two agents same process - auto-detects A -> B", () => {
     withDelegation("agent-a", () => {
       withDelegation("agent-b", () => {
         const ctx = getDelegation();
@@ -54,7 +54,7 @@ describe("delegation context", () => {
     });
   });
 
-  it("three agents — chain A -> B -> C", () => {
+  it("three agents - chain A -> B -> C", () => {
     withDelegation("agent-a", () => {
       const outerCtx = getDelegation();
       withDelegation("agent-b", () => {
@@ -69,7 +69,7 @@ describe("delegation context", () => {
     });
   });
 
-  it("cycle detection — A -> B -> A throws", () => {
+  it("cycle detection - A -> B -> A throws", () => {
     withDelegation("agent-a", () => {
       withDelegation("agent-b", () => {
         expect(() =>
@@ -81,7 +81,7 @@ describe("delegation context", () => {
     });
   });
 
-  it("max depth exceeded — throws", () => {
+  it("max depth exceeded - throws", () => {
     const buildNested = (depth: number, fn: () => void): (() => void) => {
       if (depth === 0) return fn;
       return () => withDelegation(`agent-${depth}`, buildNested(depth - 1, fn));
@@ -229,7 +229,7 @@ describe("guard() delegation integration", () => {
       expect(outerBody.params._delegation.caller_agent_id).toBeUndefined();
     }
 
-    // Second call (inner) sends chain [agent-a, agent-b] — no caller_agent_id
+    // Second call (inner) sends chain [agent-a, agent-b] - no caller_agent_id
     // (gateway computes caller from the chain)
     const innerBody = JSON.parse(fetchCalls[1]);
     expect(innerBody.params._delegation).toBeDefined();
@@ -258,7 +258,7 @@ describe("guard() delegation integration", () => {
 
     const body = JSON.parse(fetchCalls[0]);
     // Single agent in delegation context sends chain (gateway appends current agent from JWT)
-    // No caller_agent_id — gateway computes it from the complete chain
+    // No caller_agent_id - gateway computes it from the complete chain
     if (body.params._delegation) {
       expect(body.params._delegation.delegation_chain).toBeDefined();
       expect(body.params._delegation.caller_agent_id).toBeUndefined();

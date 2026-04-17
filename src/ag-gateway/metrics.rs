@@ -1,6 +1,6 @@
 //! Lightweight Prometheus-compatible metrics using atomics.
 //!
-//! No external crate needed — renders text exposition format directly.
+//! No external crate needed - renders text exposition format directly.
 //! All counters use `AtomicU64` with `Relaxed` ordering (monotonic counters
 //! don't need stronger guarantees).
 

@@ -1,14 +1,14 @@
-# Clampd Control Plane — Our Cloud
+# Clampd Control Plane - Our Cloud
 #
 # Runs the Dashboard (API + Web + Migrations) with its own PostgreSQL and Redis.
 # NO ag-* runtime services, NO ClickHouse, NO OPA.
-# NATS is optional — set NATS_URL to connect to the proxy cluster's NATS for
+# NATS is optional - set NATS_URL to connect to the proxy cluster's NATS for
 # real-time risk events. The dashboard degrades gracefully if NATS is unavailable.
 #
 # Usage (with local infra):
 #   docker compose -f docker-compose.control.yml --profile local-infra up -d
 #
-# Usage (with managed databases — Neon + Upstash):
+# Usage (with managed databases - Neon + Upstash):
 #   Set DATABASE_URL and REDIS_URL in .env, then:
 #   docker compose -f docker-compose.control.yml up -d
 
@@ -69,7 +69,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd_dev}@postgres:5432/clampd}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NATS_URL: ${NATS_URL:-nats://${NATS_TOKEN}@clampd-nats-1:4222}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
       CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:-}
       DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3000}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

@@ -1,5 +1,5 @@
 /**
- * Gateway communication — classifies tool calls, scans input/output,
+ * Gateway communication - classifies tool calls, scans input/output,
  * and validates responses through ag-gateway.
  *
  * This is the security boundary: every MCP tool call passes through here
@@ -157,7 +157,7 @@ export async function classifyToolCall(
   const endpoint = dryRun ? "/v1/verify" : "/v1/proxy";
   const url = `${baseUrl(gatewayUrl)}${endpoint}`;
 
-  // MCP proxy handles upstream forwarding itself — use evaluate-only
+  // MCP proxy handles upstream forwarding itself - use evaluate-only
   // mode (empty target_url) so the gateway runs stages 1-6 and returns
   // the allow/deny verdict without attempting to forward to mcp://.
   const body: Record<string, unknown> = {
@@ -180,7 +180,7 @@ export async function classifyToolCall(
     body.tool_params_schema = toolParamsSchema;
   }
 
-  log("debug", `POST ${url} — tool=${toolName}`);
+  log("debug", `POST ${url} - tool=${toolName}`);
 
   const resp = await fetch(url, {
     method: "POST",
@@ -223,7 +223,7 @@ export async function scanInput(
 ): Promise<ScanResult> {
   const url = `${baseUrl(gatewayUrl)}/v1/scan-input`;
 
-  log("debug", `POST ${url} — scan-input (${text.length} chars)`);
+  log("debug", `POST ${url} - scan-input (${text.length} chars)`);
 
   const resp = await fetch(url, {
     method: "POST",
@@ -259,7 +259,7 @@ export async function scanOutput(
 ): Promise<ScanResult> {
   const url = `${baseUrl(gatewayUrl)}/v1/scan-output`;
 
-  log("debug", `POST ${url} — scan-output (${text.length} chars)`);
+  log("debug", `POST ${url} - scan-output (${text.length} chars)`);
 
   const body: Record<string, unknown> = { text };
   if (requestId) body.request_id = requestId;
@@ -302,7 +302,7 @@ export async function inspectResponse(
 ): Promise<InspectResult> {
   const url = `${baseUrl(gatewayUrl)}/v1/inspect`;
 
-  log("debug", `POST ${url} — inspect response for ${toolName}`);
+  log("debug", `POST ${url} - inspect response for ${toolName}`);
 
   const body: Record<string, unknown> = {
     tool: toolName,
@@ -348,7 +348,7 @@ export interface RegisterToolsResult {
  * each tool with benign empty params. This triggers the shadow event pipeline
  * in ag-gateway, which ag-control picks up to auto-capture tool descriptors
  * into the `tool_descriptors` table. If the org has `auto_trust` enabled,
- * tools are auto-approved and their scopes synced to Redis — preventing
+ * tools are auto-approved and their scopes synced to Redis - preventing
  * `tool_not_registered` (422) errors on subsequent real calls.
  *
  * Requests run in parallel with a concurrency cap to avoid overwhelming
@@ -399,7 +399,7 @@ export async function registerTools(
 
         if (!resp.ok) {
           const text = await resp.text().catch(() => `HTTP ${resp.status}`);
-          // 422 tool_not_registered is expected when auto_trust is off —
+          // 422 tool_not_registered is expected when auto_trust is off -
           // the shadow event was still emitted, so discovery still works.
           if (resp.status === 422) {
             result.registered++;

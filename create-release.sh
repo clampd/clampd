@@ -37,7 +37,7 @@ if [[ -f "$CLI_BIN" ]]; then
     rm "$RELEASE_DIR/clampd-linux-amd64"
     echo "  clampd CLI: $(du -h "$RELEASE_DIR/clampd-linux-amd64.tar.gz" | cut -f1)"
 else
-    echo "  WARN: CLI binary not found at $CLI_BIN — skipping"
+    echo "  WARN: CLI binary not found at $CLI_BIN - skipping"
 fi
 
 # Guard binary
@@ -52,7 +52,7 @@ if [[ -f "$GUARD_BIN" ]]; then
     rm "$RELEASE_DIR/clampd-guard-linux-amd64"
     echo "  clampd-guard: $(du -h "$RELEASE_DIR/clampd-guard-linux-amd64.tar.gz" | cut -f1)"
 else
-    echo "  WARN: Guard binary not found at $GUARD_BIN — skipping"
+    echo "  WARN: Guard binary not found at $GUARD_BIN - skipping"
 fi
 
 # Compose files + setup script
@@ -79,7 +79,7 @@ gh release create "$VERSION" \
     --notes "$(cat <<'EOF'
 ## Install
 
-**Docker — Proxy (security pipeline):**
+**Docker - Proxy (security pipeline):**
 ```bash
 curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.proxy.yml -o docker-compose.yml
 curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
@@ -87,7 +87,7 @@ curl -sL https://github.com/clampd/clampd/raw/main/docker/setup.sh | sh
 docker compose --profile local-infra up -d
 ```
 
-**Docker — Dashboard (control plane):**
+**Docker - Dashboard (control plane):**
 ```bash
 curl -sL https://github.com/clampd/clampd/raw/main/docker/docker-compose.control.yml -o docker-compose.control.yml
 docker compose -f docker-compose.control.yml --profile local-infra up -d

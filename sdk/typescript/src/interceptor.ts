@@ -1,14 +1,14 @@
 /**
- * Generic interceptor for Clampd — wraps ANY tool or function call
+ * Generic interceptor for Clampd - wraps ANY tool or function call
  * through the Clampd security proxy pipeline.
  *
  * Three interception patterns:
  *
- *   A. `wrapFunction`    — wrap any async function
- *   B. `wrapOpenAITools`  — wrap OpenAI / Vercel AI SDK tool definitions
- *   C. `ClampdGuard`     — middleware for any framework (check + execute)
+ *   A. `wrapFunction`    - wrap any async function
+ *   B. `wrapOpenAITools`  - wrap OpenAI / Vercel AI SDK tool definitions
+ *   C. `ClampdGuard`     - middleware for any framework (check + execute)
  *
- * No external dependencies — pure TypeScript.
+ * No external dependencies - pure TypeScript.
  */
 
 import { ClampdClient, type ProxyResponse } from "./client.js";
@@ -35,7 +35,7 @@ import { setScopeToken, withScopeToken } from "./tool-verify.js";
  * ```
  *
  * The `execute` field is optional in the OpenAI spec but required for
- * interception — if a tool has no `execute` it is passed through as-is.
+ * interception - if a tool has no `execute` it is passed through as-is.
  */
 export interface OpenAIToolFunction {
   name: string;
@@ -183,7 +183,7 @@ export function wrapFunction<TArgs extends unknown[], TReturn>(
       throw new ClampdBlockedError(proxyRes);
     }
 
-    // Allowed (or blockOnDeny=false) — execute the original function.
+    // Allowed (or blockOnDeny=false) - execute the original function.
     if (proxyRes.allowed && proxyRes.scope_token) {
       setScopeToken(proxyRes.scope_token);
       return withScopeToken(proxyRes.scope_token, () => fn(...args));

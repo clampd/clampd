@@ -1,7 +1,7 @@
 """Full SDK + Dashboard API workflow E2E tests.
 
 Tests every SDK method and every admin workflow through the real stack.
-NO raw proxy() calls — uses the actual SDK surface customers use:
+NO raw proxy() calls - uses the actual SDK surface customers use:
   - clampd.guard() decorator
   - clampd.openai() wrapper
   - clampd.anthropic() wrapper
@@ -133,7 +133,7 @@ def client():
 
 
 # ═══════════════════════════════════════════════════════════════
-# 1. @clampd.guard() DECORATOR — the primary SDK interface
+# 1. @clampd.guard() DECORATOR - the primary SDK interface
 # ═══════════════════════════════════════════════════════════════
 
 class TestGuardDecorator:
@@ -188,7 +188,7 @@ class TestGuardDecorator:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 2. client.scan_input() — PII/secrets in agent prompts
+# 2. client.scan_input() - PII/secrets in agent prompts
 # ═══════════════════════════════════════════════════════════════
 
 class TestScanInput:
@@ -221,7 +221,7 @@ class TestScanInput:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 3. client.scan_output() — PII/secrets in LLM responses
+# 3. client.scan_output() - PII/secrets in LLM responses
 # ═══════════════════════════════════════════════════════════════
 
 class TestScanOutput:
@@ -251,7 +251,7 @@ class TestScanOutput:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 4. client.inspect() — post-response scope token verification
+# 4. client.inspect() - post-response scope token verification
 # ═══════════════════════════════════════════════════════════════
 
 class TestInspect:
@@ -286,7 +286,7 @@ class TestInspect:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 5. client.verify() — pre-execution authorization check
+# 5. client.verify() - pre-execution authorization check
 # ═══════════════════════════════════════════════════════════════
 
 class TestVerify:
@@ -396,7 +396,7 @@ class TestRugPull:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 8. Kill Switch — Dashboard API + SDK verification
+# 8. Kill Switch - Dashboard API + SDK verification
 # ═══════════════════════════════════════════════════════════════
 
 class TestKillSwitch:
@@ -441,7 +441,7 @@ class TestKillSwitch:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 9. Scope Exemption — Dashboard creates, SDK verifies
+# 9. Scope Exemption - Dashboard creates, SDK verifies
 # ═══════════════════════════════════════════════════════════════
 
 class TestScopeExemption:
@@ -469,7 +469,7 @@ class TestScopeExemption:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 10. Tool Descriptors — Dashboard approves, SDK uses
+# 10. Tool Descriptors - Dashboard approves, SDK uses
 # ═══════════════════════════════════════════════════════════════
 
 class TestToolDescriptors:
@@ -490,7 +490,7 @@ class TestToolDescriptors:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 11. EMA Behavior — risk accumulation visible via SDK
+# 11. EMA Behavior - risk accumulation visible via SDK
 # ═══════════════════════════════════════════════════════════════
 
 class TestEMABehavior:
@@ -573,7 +573,7 @@ class TestDetectionRules:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 14. clampd.openai() — Mocked LLM, real gateway
+# 14. clampd.openai() - Mocked LLM, real gateway
 # ═══════════════════════════════════════════════════════════════
 
 def _make_openai_tool_call(name: str, args: str):
@@ -662,7 +662,7 @@ class TestOpenAIWrapper:
             print(f"  scan_input blocked PII: {e}")
 
     def test_multiple_tool_calls_all_checked(self):
-        """LLM returns 2 tool calls — one safe, one dangerous → blocked."""
+        """LLM returns 2 tool calls - one safe, one dangerous → blocked."""
         tc_safe = _make_openai_tool_call("db.query", '{"sql": "SELECT 1"}')
         tc_bad = _make_openai_tool_call("shell.exec", '{"command": "rm -rf /"}')
         oai, _ = _make_openai_client(tool_calls=[tc_safe, tc_bad])
@@ -673,7 +673,7 @@ class TestOpenAIWrapper:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 15. clampd.anthropic() — Mocked LLM, real gateway
+# 15. clampd.anthropic() - Mocked LLM, real gateway
 # ═══════════════════════════════════════════════════════════════
 
 def _make_anthropic_tool_use(name: str, input_data: dict):

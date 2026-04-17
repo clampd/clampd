@@ -137,7 +137,7 @@ async function guardToolCall(
  *    Per-tool-call buffers would either lose chunks (only store in one)
  *    or duplicate them (store in all, yield the same chunk N times).
  *
- * 2. Parallel tool calls in the same LLM response are atomic — if the
+ * 2. Parallel tool calls in the same LLM response are atomic - if the
  *    model says "call weather AND calendar", both must be approved before
  *    either executes. If one is denied, the entire response is blocked.
  *    Partial release of one tool call's chunks would give the consumer
@@ -159,7 +159,7 @@ export function guardOpenAIStream(
       const choice = chunk.choices?.[0];
 
       if (!choice?.delta?.tool_calls?.length) {
-        // No tool call data — yield text/other chunks immediately
+        // No tool call data - yield text/other chunks immediately
         // But only if we haven't started accumulating tool calls,
         // or if this is a non-tool chunk interleaved
         if (!hasToolCalls) {
@@ -197,7 +197,7 @@ export function guardOpenAIStream(
         continue;
       }
 
-      // Tool call deltas present — buffer them
+      // Tool call deltas present - buffer them
       hasToolCalls = true;
       for (const tcDelta of choice.delta.tool_calls) {
         const idx = tcDelta.index;
@@ -220,7 +220,7 @@ export function guardOpenAIStream(
       bufferedChunks.push(chunk);
     }
 
-    // Stream ended — guard any remaining tool calls
+    // Stream ended - guard any remaining tool calls
     if (pending.size > 0) {
       for (const [, tc] of pending) {
         const argsStr = tc.argumentFragments.join("");
@@ -279,7 +279,7 @@ export function guardAnthropicStream(
               bufferedEvents: [event],
             };
           } else {
-            // Text block start — pass through
+            // Text block start - pass through
             yield event;
           }
           break;
@@ -293,7 +293,7 @@ export function guardAnthropicStream(
             }
             currentToolCall.bufferedEvents.push(event);
           } else {
-            // Text delta — pass through
+            // Text delta - pass through
             yield event;
           }
           break;
@@ -301,7 +301,7 @@ export function guardAnthropicStream(
 
         case "content_block_stop": {
           if (currentToolCall && event.index === currentToolCall.blockIndex) {
-            // Tool block complete — guard it
+            // Tool block complete - guard it
             currentToolCall.bufferedEvents.push(event);
             const argsStr = currentToolCall.jsonFragments.join("");
             let toolArgs: Record<string, unknown>;
@@ -313,20 +313,20 @@ export function guardAnthropicStream(
 
             await guardToolCall(client, currentToolCall.name, toolArgs, opts);
 
-            // Allowed — release buffered events
+            // Allowed - release buffered events
             for (const buffered of currentToolCall.bufferedEvents) {
               yield buffered;
             }
             currentToolCall = null;
           } else {
-            // Text block stop — pass through
+            // Text block stop - pass through
             yield event;
           }
           break;
         }
 
         default:
-          // message_start, message_delta, message_stop, ping — pass through
+          // message_start, message_delta, message_stop, ping - pass through
           yield event;
           break;
       }

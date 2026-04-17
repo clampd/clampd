@@ -1,5 +1,5 @@
 """
-Test Clampd Python SDK against REAL gateway — fresh account, genuine attacks.
+Test Clampd Python SDK against REAL gateway - fresh account, genuine attacks.
 Uses only public SDK API: init(), guard(), agent(), scan_input(), scan_output().
 
 Strategy: Safe tests run first with main agent. Attack tests use a sacrificial agent
@@ -27,7 +27,7 @@ API_KEY = "ag_live_upXLd-YkQmjGKM8402x09wH0xPIcpaKZr77xOuVaLos"
 AGENT_ID = "fdf1cf75-5e89-42b4-bbca-338e6bf369a2"
 AGENT_SECRET = "ags_w-QcKnT-GM6jio1QzIkkDwa36yYxIBHFJddMWcTg"
 
-# Attacker agent (sacrificial — will get killed by anomaly detector)
+# Attacker agent (sacrificial - will get killed by anomaly detector)
 ATTACKER_ID = "98509cc5-58ef-40f4-892a-99050b0f32e2"
 ATTACKER_SECRET = "ags_3VgBRAvJJnkJ-AwRFETmKkKbuHWuAEVbrVDTSP4q"
 
@@ -45,7 +45,7 @@ WRITER_SECRET = "ags_HRgpZIX7MvAocihqvU7WPkEUAW6Yj2zt2C6nFBQP"
 def check(name, condition, detail=""):
     status = PASS if condition else FAIL
     results.append(condition)
-    print(f"  [{status}] {name}" + (f" — {detail}" if detail else ""))
+    print(f"  [{status}] {name}" + (f" - {detail}" if detail else ""))
 
 
 def main():
@@ -76,8 +76,8 @@ def main():
     )
     check("init returns client", client is not None)
 
-    # ── 2. guard() — safe tool ────────────────────────────────────
-    print("\n2. guard() — safe tool call")
+    # ── 2. guard() - safe tool ────────────────────────────────────
+    print("\n2. guard() - safe tool call")
 
     @clampd.guard("db.query")
     def query_db(sql: str) -> str:
@@ -91,24 +91,24 @@ def main():
     except Exception as e:
         check("safe call allowed", False, str(e))
 
-    # ── 3. scan_input — benign ────────────────────────────────────
-    print("\n3. scan_input() — benign prompt")
+    # ── 3. scan_input - benign ────────────────────────────────────
+    print("\n3. scan_input() - benign prompt")
     try:
         scan = client.scan_input("What's the weather forecast for Tokyo this weekend?")
         check("clean prompt accepted", scan.allowed, f"risk={scan.risk_score:.3f}")
     except Exception as e:
         check("clean prompt", False, str(e))
 
-    # ── 4. scan_output — clean ────────────────────────────────────
-    print("\n4. scan_output() — clean response")
+    # ── 4. scan_output - clean ────────────────────────────────────
+    print("\n4. scan_output() - clean response")
     try:
         scan = client.scan_output("Tokyo forecast: sunny, high of 24°C this Saturday.")
         check("clean output accepted", scan.allowed, f"risk={scan.risk_score:.3f}")
     except Exception as e:
         check("clean output", False, str(e))
 
-    # ── 5. agent() + guard() — delegation ─────────────────────────
-    print("\n5. agent() + guard() — A2A delegation")
+    # ── 5. agent() + guard() - delegation ─────────────────────────
+    print("\n5. agent() + guard() - A2A delegation")
 
     @clampd.guard("web.search", agent_id=RESEARCH_ID)
     def search_web(query: str) -> dict:
@@ -123,8 +123,8 @@ def main():
     except Exception as e:
         check("delegation", False, f"{type(e).__name__}: {e}")
 
-    # ── 6. guard(check_response) — clean data ─────────────────────
-    print("\n6. guard(check_response=True) — clean response data")
+    # ── 6. guard(check_response) - clean data ─────────────────────
+    print("\n6. guard(check_response=True) - clean response data")
 
     @clampd.guard("product.search", check_response=True)
     def product_search(query: str) -> dict:
@@ -144,8 +144,8 @@ def main():
     except Exception as e:
         check("clean response", False, f"{type(e).__name__}: {e}")
 
-    # ── 7. guard(check_response) — response contains PII ─────────
-    print("\n7. guard(check_response=True) — SQL tool returns real PII")
+    # ── 7. guard(check_response) - response contains PII ─────────
+    print("\n7. guard(check_response=True) - SQL tool returns real PII")
 
     @clampd.guard("customer.lookup", agent_id=ANALYSIS_ID, check_response=True)
     def customer_lookup(customer_id: str) -> dict:
@@ -186,15 +186,15 @@ def main():
         check("PII in response", False, f"{type(e).__name__}: {e}")
 
     # ── 8. inspect() ──────────────────────────────────────────────
-    print("\n8. inspect() — response inspection")
+    print("\n8. inspect() - response inspection")
     try:
         resp = client.inspect("db.query", {"rows": [{"name": "Alice", "email": "alice@test.com"}]})
         check("inspect works", resp is not None, f"allowed={resp.allowed}, risk={resp.risk_score:.3f}")
     except Exception as e:
         check("inspect", False, str(e))
 
-    # ── 9. guard(check_response) — delegation + response scan ─────
-    print("\n9. agent() + guard(check_response) — delegation with response scan")
+    # ── 9. guard(check_response) - delegation + response scan ─────
+    print("\n9. agent() + guard(check_response) - delegation with response scan")
 
     @clampd.guard("doc.write", agent_id=WRITER_ID, check_response=True)
     def write_doc(content: str) -> str:
@@ -212,7 +212,7 @@ def main():
     # ══════════════════════════════════════════════════════════════
     print("\n\n═══ PART B: Attack Detection ═══\n")
 
-    # ── 10-13. scan_input — genuine injection attacks ─────────────
+    # ── 10-13. scan_input - genuine injection attacks ─────────────
     attacks = [
         (
             "DAN jailbreak",
@@ -243,7 +243,7 @@ def main():
     ]
 
     for i, (label, payload) in enumerate(attacks, 10):
-        print(f"{i}. scan_input() — {label}")
+        print(f"{i}. scan_input() - {label}")
         try:
             scan = client.scan_input(payload)
             detected = not scan.allowed or scan.risk_score > 0.5
@@ -254,8 +254,8 @@ def main():
         except Exception as e:
             check(label, False, str(e))
 
-    # ── 14. scan_output — real PII leak ───────────────────────────
-    print("\n14. scan_output() — real PII data")
+    # ── 14. scan_output - real PII leak ───────────────────────────
+    print("\n14. scan_output() - real PII data")
     try:
         scan = client.scan_output(
             "Here are the customer records you requested:\n"
@@ -271,8 +271,8 @@ def main():
     except Exception as e:
         check("PII leak", False, str(e))
 
-    # ── 15. scan_output — secrets leak ────────────────────────────
-    print("\n15. scan_output() — secrets in response")
+    # ── 15. scan_output - secrets leak ────────────────────────────
+    print("\n15. scan_output() - secrets in response")
     try:
         scan = client.scan_output(
             "Sure, here's the configuration:\n"
@@ -288,8 +288,8 @@ def main():
     except Exception as e:
         check("secrets leak", False, str(e))
 
-    # ── 16. guard() — dangerous tool (attacker agent) ─────────────
-    print("\n16. guard() — dangerous tool (drop_table) via attacker agent")
+    # ── 16. guard() - dangerous tool (attacker agent) ─────────────
+    print("\n16. guard() - dangerous tool (drop_table) via attacker agent")
 
     @clampd.guard("drop_table", agent_id=ATTACKER_ID)
     def drop_it(table: str) -> str:
@@ -303,8 +303,8 @@ def main():
     except Exception as e:
         check("blocked tool", False, f"{type(e).__name__}: {e}")
 
-    # ── 17. guard() — shell exec (attacker agent) ─────────────────
-    print("\n17. guard() — shell execution attempt")
+    # ── 17. guard() - shell exec (attacker agent) ─────────────────
+    print("\n17. guard() - shell execution attempt")
 
     @clampd.guard("exec_shell", agent_id=ATTACKER_ID)
     def run_shell(cmd: str) -> str:

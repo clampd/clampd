@@ -25,7 +25,7 @@ def make_agent_jwt(
     """Create a JWT with ``sub`` = *agent_id*.
 
     Uses HMAC-SHA256 when *secret* or ``JWT_SECRET`` env var is set.
-    Raises ``ValueError`` if no signing secret is available — unsigned JWTs
+    Raises ``ValueError`` if no signing secret is available - unsigned JWTs
     (alg: none) are NOT supported.
     """
     raw_secret = secret or os.environ.get("JWT_SECRET", "")

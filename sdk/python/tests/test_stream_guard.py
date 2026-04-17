@@ -1,4 +1,4 @@
-"""Tests for clampd.stream_guard — streaming tool call interception."""
+"""Tests for clampd.stream_guard - streaming tool call interception."""
 
 from unittest.mock import MagicMock, patch
 

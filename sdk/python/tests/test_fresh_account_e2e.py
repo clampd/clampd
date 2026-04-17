@@ -1,4 +1,4 @@
-"""Fresh account E2E — creates everything from scratch via APIs only.
+"""Fresh account E2E - creates everything from scratch via APIs only.
 
 No Redis hacking. No Postgres inserts. No seed data.
 Tests the EXACT flow a new customer would follow:
@@ -229,7 +229,7 @@ def _setup_fresh_account():
     try:
         dash.signup(f"E2E {RUN_ID}", TEST_EMAIL, TEST_PASSWORD, f"E2E Org {RUN_ID}")
     except Exception:
-        # Already exists — login instead
+        # Already exists - login instead
         dash.login(TEST_EMAIL, TEST_PASSWORD)
     print(f"  [Setup] Authenticated. Token: {dash.token[:20]}...")
 
@@ -309,7 +309,7 @@ def clean_sdk() -> ClampdClient:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 1: First calls — tools auto-discovered
+# STEP 1: First calls - tools auto-discovered
 # ═══════════════════════════════════════════════════════════════
 
 class TestFirstCalls:
@@ -342,7 +342,7 @@ class TestToolApproval:
 
         if not tools:
             # Tools may already be approved from a prior run, or discovery hasn't happened yet
-            print("  No pending tools found — may already be approved or not yet discovered")
+            print("  No pending tools found - may already be approved or not yet discovered")
             return
 
         scope_map = {
@@ -366,7 +366,7 @@ class TestToolApproval:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 3: Detection rules — positive + negative
+# STEP 3: Detection rules - positive + negative
 # ═══════════════════════════════════════════════════════════════
 
 class TestDetection:
@@ -410,8 +410,8 @@ class TestScopeToken:
             if r.scope_granted:
                 assert r.scope_token and "." in r.scope_token, "Scope-granted call must have token"
             else:
-                # Tool scopes not yet registered — scope_token will be None
-                print("  scope_granted=None (tool not approved with scopes yet) — token skipped")
+                # Tool scopes not yet registered - scope_token will be None
+                print("  scope_granted=None (tool not approved with scopes yet) - token skipped")
 
     def test_blocked_has_no_scope_token(self, sdk):
         r = sdk.verify("database.query", {"sql": "DROP TABLE users"})
@@ -605,7 +605,7 @@ class TestAuth:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 13: Scope Exemptions — create, verify override, delete
+# STEP 13: Scope Exemptions - create, verify override, delete
 # ═══════════════════════════════════════════════════════════════
 
 class TestScopeExemptions:
@@ -624,7 +624,7 @@ class TestScopeExemptions:
             print(f"  Created exemption {eid} for {rule_id}")
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 500:
-                # May already exist from previous run — list and find it
+                # May already exist from previous run - list and find it
                 existing = dash.http.get(f"{dash.base}/v1/orgs/{dash.org_id}/scope-exemptions",
                     headers=dash._h(), timeout=10).json()
                 eid = existing[0]["id"] if existing else ""
@@ -651,7 +651,7 @@ class TestScopeExemptions:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 14: Custom Rules — create, test, verify detection
+# STEP 14: Custom Rules - create, test, verify detection
 # ═══════════════════════════════════════════════════════════════
 
 class TestCustomRules:
@@ -690,7 +690,7 @@ class TestCustomRules:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 15: Keywords — create, verify detection
+# STEP 15: Keywords - create, verify detection
 # ═══════════════════════════════════════════════════════════════
 
 class TestKeywords:
@@ -724,7 +724,7 @@ class TestKeywords:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 16: Thresholds — view defaults, create override
+# STEP 16: Thresholds - view defaults, create override
 # ═══════════════════════════════════════════════════════════════
 
 class TestThresholds:
@@ -761,7 +761,7 @@ class TestThresholds:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 17: A2A Delegation — link agents, approve, graph
+# STEP 17: A2A Delegation - link agents, approve, graph
 # ═══════════════════════════════════════════════════════════════
 
 class TestA2ADelegationDashboard:
@@ -833,7 +833,7 @@ class TestTaskReplay:
 
 class TestCrossBoundaryDelegation:
     def test_real_delegated_proxy_call(self, dash):
-        """Agent A delegates to Agent B via actual proxy() call — observed in Redis."""
+        """Agent A delegates to Agent B via actual proxy() call - observed in Redis."""
         import subprocess
 
         # Create a second agent for delegation target
@@ -850,7 +850,7 @@ class TestCrossBoundaryDelegation:
             secret=b_secret, session_id=f"e2e-deleg-{RUN_ID}",
         )
 
-        # Agent A delegates to Agent B — use proxy() not verify()
+        # Agent A delegates to Agent B - use proxy() not verify()
         ctx, tok = enter_delegation(_agent_id)
         try:
             r = client_b.proxy("database.query", {"sql": "SELECT name FROM users"})
@@ -927,7 +927,7 @@ class TestRuleLifecycle:
         print("  Waiting for rule sync...", end="", flush=True)
         time.sleep(15)  # ag-control polls every 10s, ag-intent reloads
 
-        # 4. SDK call with the unique pattern — should be blocked by new rule
+        # 4. SDK call with the unique pattern - should be blocked by new rule
         sdk = ClampdClient(
             gateway_url=GATEWAY_URL, agent_id=_agent_id, api_key=_api_key,
             secret=_agent_secret, session_id=f"e2e-ruletest-{RUN_ID}",
@@ -935,10 +935,10 @@ class TestRuleLifecycle:
         r = sdk.verify("database.query", {"sql": f"SELECT * FROM {unique_pattern}"})
         print(f" result: allowed={r.allowed}, risk={r.risk_score:.2f}, rules={r.matched_rules}")
 
-        # The rule may or may not have synced yet — this tests the pipeline
+        # The rule may or may not have synced yet - this tests the pipeline
         # In production, sync happens within 10-15s
         if not r.allowed and r.matched_rules:
-            print("  CUSTOM RULE DETECTED — full lifecycle works!")
+            print("  CUSTOM RULE DETECTED - full lifecycle works!")
         else:
             print("  Rule may not have synced yet (timing dependent)")
 
@@ -946,7 +946,7 @@ class TestRuleLifecycle:
         r2 = sdk.verify("database.query", {"sql": "SELECT name FROM users WHERE id = 1"})
         print(f"  Normal call: allowed={r2.allowed}")
 
-        # 6. Cleanup — delete the rule
+        # 6. Cleanup - delete the rule
         if rule_id:
             dash.http.delete(f"{dash.base}/v1/orgs/{dash.org_id}/rules/{rule_id}", headers=dash._h(), timeout=10)
             print(f"  Deleted rule {rule_id}")
@@ -956,7 +956,7 @@ class TestRuleLifecycle:
         # 1. Create a very strict threshold for shell tools
         override = {
             "toolPattern": "shell.*",
-            "blockThreshold": 0.10,  # Very strict — almost anything blocks
+            "blockThreshold": 0.10,  # Very strict - almost anything blocks
             "flagThreshold": 0.05,
             "reason": "e2e test: ultra-strict shell threshold",
         }
@@ -971,7 +971,7 @@ class TestRuleLifecycle:
         dash.http.post(f"{dash.base}/v1/orgs/{dash.org_id}/thresholds/sync", json={}, headers=dash._h(), timeout=10)
         time.sleep(10)  # Wait for sync
 
-        # 3. Test — even "ls" should now be blocked due to ultra-strict threshold
+        # 3. Test - even "ls" should now be blocked due to ultra-strict threshold
         sdk = ClampdClient(
             gateway_url=GATEWAY_URL, agent_id=_agent_id, api_key=_api_key,
             secret=_agent_secret, session_id=f"e2e-threshold-{RUN_ID}",
@@ -1001,7 +1001,7 @@ class TestRuleLifecycle:
 
         time.sleep(10)  # Wait for sync
 
-        # Test — call containing the keyword should have higher risk
+        # Test - call containing the keyword should have higher risk
         sdk = ClampdClient(
             gateway_url=GATEWAY_URL, agent_id=_agent_id, api_key=_api_key,
             secret=_agent_secret, session_id=f"e2e-kwtest-{RUN_ID}",
@@ -1072,7 +1072,7 @@ class TestTaskReplayDetection:
             assert r1.request_id != r2.request_id, "Each call must get unique request_id"
 
     def test_rapid_identical_calls_all_evaluated(self, sdk):
-        """5 rapid identical calls — all should be evaluated independently."""
+        """5 rapid identical calls - all should be evaluated independently."""
         results = []
         for _ in range(5):
             r = sdk.verify("database.query", {"sql": "SELECT name FROM users WHERE id = 1"})
@@ -1083,7 +1083,7 @@ class TestTaskReplayDetection:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 23: Agent Shadowing — shadow events published for all calls
+# STEP 23: Agent Shadowing - shadow events published for all calls
 # ═══════════════════════════════════════════════════════════════
 
 class TestAgentShadowing:
@@ -1091,7 +1091,7 @@ class TestAgentShadowing:
         """Blocked calls should still generate shadow events for audit."""
         r = sdk.proxy("database.query", {"sql": "DROP TABLE users"})
         assert not r.allowed
-        # Shadow event is fire-and-forget — verify via latency (non-zero = processed)
+        # Shadow event is fire-and-forget - verify via latency (non-zero = processed)
         assert r.latency_ms > 0, "Blocked call should report processing latency"
         assert r.matched_rules or r.denial_reason, "Blocked call must have rules or reason"
 
@@ -1109,7 +1109,7 @@ class TestAgentShadowing:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 24: Contagion Alert — high-risk delegation contact
+# STEP 24: Contagion Alert - high-risk delegation contact
 # If agent A has high risk and delegates to B, B should inherit risk
 # ═══════════════════════════════════════════════════════════════
 
@@ -1149,7 +1149,7 @@ class TestContagionAlert:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 25: Delegation Enforcement — lock graph, check blocking
+# STEP 25: Delegation Enforcement - lock graph, check blocking
 # ═══════════════════════════════════════════════════════════════
 
 class TestDelegationEnforcement:
@@ -1184,7 +1184,7 @@ class TestDelegationEnforcement:
             secret=c_secret, session_id=f"e2e-enforce-{RUN_ID}",
         )
 
-        # Agent A delegates to unapproved C — should be blocked
+        # Agent A delegates to unapproved C - should be blocked
         ctx, tok = enter_delegation(_agent_id)
         try:
             r = client_c.proxy("database.query", {"sql": "SELECT 1"})
@@ -1206,7 +1206,7 @@ class TestDelegationEnforcement:
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 26: Cross-Org Isolation — agent from org A can't call org B
+# STEP 26: Cross-Org Isolation - agent from org A can't call org B
 # ═══════════════════════════════════════════════════════════════
 
 class TestCrossOrgIsolation:

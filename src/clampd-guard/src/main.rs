@@ -1,4 +1,4 @@
-//! clampd-guard — runtime security guard for AI coding tools.
+//! clampd-guard - runtime security guard for AI coding tools.
 //!
 //! Single binary that serves as:
 //!   - PreToolUse hook (blocks dangerous tool calls before execution)

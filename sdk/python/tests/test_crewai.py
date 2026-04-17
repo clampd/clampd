@@ -1,4 +1,4 @@
-"""Tests for clampd.crewai_callback — CrewAI guard."""
+"""Tests for clampd.crewai_callback - CrewAI guard."""
 
 from unittest.mock import MagicMock, patch
 

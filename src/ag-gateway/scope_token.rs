@@ -6,7 +6,7 @@
 //! The gateway mints tokens after an ALLOW decision. Tools verify them using
 //! the public key from `GET /.well-known/jwks.json`.
 //!
-//! Extracted from proxy.rs for testability — pure crypto, no I/O.
+//! Extracted from proxy.rs for testability - pure crypto, no I/O.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::{Signature, Signer, Verifier, SigningKey, VerifyingKey};
@@ -168,7 +168,7 @@ mod tests {
         let (sk, vk) = test_keypair();
         let input = default_mint_input();
         let token = mint(&sk, &input);
-        // Verify at exactly exp time (300s later) — should still be valid (exp == now, not now > exp)
+        // Verify at exactly exp time (300s later) - should still be valid (exp == now, not now > exp)
         let result = verify(&token, &vk, input.now + 300);
         assert!(result.is_ok(), "Token should be valid at exactly exp time");
     }
@@ -251,13 +251,13 @@ mod tests {
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // ADVERSARIAL TESTS — Red team against scope tokens
+    // ADVERSARIAL TESTS - Red team against scope tokens
     // ══════════════════════════════════════════════════════════════════
 
     #[test]
     fn adversarial_binding_hash_collision() {
         // tool_name="adb" + params_hash="c" vs tool_name="a" + params_hash="dbc"
-        // Both produce SHA256("adbc") — identical binding hash
+        // Both produce SHA256("adbc") - identical binding hash
         let (signing_key, verifying_key) = test_keypair();
         let token1 = mint(&signing_key, &MintInput {
             agent_id: "agent-1", scope_granted: "db:read",
@@ -274,7 +274,7 @@ mod tests {
         // These SHOULD be different bindings (different tool+params)
         // BUG: they're identical because format!("{}{}", "adb", "c") == format!("{}{}", "a", "dbc")
         assert_ne!(claims1.binding, claims2.binding,
-            "VULNERABILITY: Different tool+params produce same binding hash — needs delimiter");
+            "VULNERABILITY: Different tool+params produce same binding hash - needs delimiter");
     }
 
     #[test]

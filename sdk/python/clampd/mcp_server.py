@@ -209,7 +209,7 @@ class ClampdMCPProxy:
         contextvars and includes it in the request body.
         """
         # MCP proxy handles downstream forwarding itself, so we use
-        # evaluate-only mode (empty target_url) — same as the SDK.
+        # evaluate-only mode (empty target_url) - same as the SDK.
         # A non-empty target_url pushes the gateway into Stages 7-8
         # (token exchange + HTTP forward) which fails for mcp:// URLs.
         target_url = ""
@@ -445,7 +445,7 @@ _DANGEROUS_EXTENSIONS = frozenset({
     ".env", ".conf", ".cfg", ".ini", ".toml", ".log",
 })
 
-# MCP tools that write/modify file content — their content fields must be scanned
+# MCP tools that write/modify file content - their content fields must be scanned
 _FILE_WRITE_TOOLS = {
     "write_file": "content",
     "create_file": "content",
@@ -454,7 +454,7 @@ _FILE_WRITE_TOOLS = {
     "insert_text": "text",
 }
 
-# MCP tools that move/copy files — risk tags should propagate
+# MCP tools that move/copy files - risk tags should propagate
 _FILE_MOVE_TOOLS = {"move_file", "rename_file", "copy_file"}
 
 # Tools that may leak runtime/system metadata
@@ -487,7 +487,7 @@ async def _scan_file_content(
     if not content or not isinstance(content, str):
         return None
 
-    # Check file extension — scan ALL extensions in the filename (double-ext bypass fix)
+    # Check file extension - scan ALL extensions in the filename (double-ext bypass fix)
     file_path = arguments.get("path", arguments.get("file_path", ""))
     has_dangerous_ext = False
     if file_path and "." in file_path:

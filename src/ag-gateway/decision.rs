@@ -1,7 +1,7 @@
-//! Decision gate — the core ALLOW/DENY logic for every proxy request.
+//! Decision gate - the core ALLOW/DENY logic for every proxy request.
 //!
 //! Extracted from proxy.rs into a pure function for testability.
-//! No I/O, no Redis, no gRPC — takes primitive inputs, returns a decision.
+//! No I/O, no Redis, no gRPC - takes primitive inputs, returns a decision.
 //!
 //! Priority chain:
 //!   (0) suspicion > 0.8 → auto-deny (behavioral anomaly override)
@@ -13,7 +13,7 @@
 
 use ag_common::models::RejectionType;
 
-/// Inputs to the decision gate — all the signals from upstream stages.
+/// Inputs to the decision gate - all the signals from upstream stages.
 #[derive(Debug, Clone)]
 pub struct DecisionInput {
     /// Suspicion score from ag-risk (Redis hot-path read). Range: 0.0-1.0.
@@ -59,11 +59,11 @@ const POLICY_DENY: i32 = 2;
 /// Evaluate the decision gate.
 ///
 /// This is the ONLY place that decides ALLOW vs DENY for proxy requests.
-/// Pure function — no I/O, fully deterministic, fully testable.
+/// Pure function - no I/O, fully deterministic, fully testable.
 pub fn evaluate(input: &DecisionInput) -> DecisionOutput {
     // Assessed risk = intent classification risk + AP2 modifier only.
     // Suspicion is a separate signal used for the BLOCK decision but must NOT
-    // inflate assessed_risk — otherwise it feeds back into the EMA via the
+    // inflate assessed_risk - otherwise it feeds back into the EMA via the
     // shadow event and creates a death spiral (one bad call → high suspicion →
     // assessed_risk inflated → EMA rises → suspicion stays high forever).
     let assessed_risk = (input.assessed_risk + input.ap2_risk_modifier).clamp(0.0, 1.0);

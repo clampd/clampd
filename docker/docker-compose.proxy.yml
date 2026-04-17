@@ -1,4 +1,4 @@
-# Clampd Proxy Runtime — Security Pipeline
+# Clampd Proxy Runtime - Security Pipeline
 #
 # Runs the 9-service security pipeline. Requires shared infrastructure
 # from docker-compose.infra.yml (Postgres, Redis, NATS, ClickHouse).
@@ -6,7 +6,7 @@
 # Usage (with local infrastructure):
 #   docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml up -d
 #
-# Usage (with managed databases — Neon, Upstash, etc.):
+# Usage (with managed databases - Neon, Upstash, etc.):
 #   Set DATABASE_URL, REDIS_URL, NATS_URL in .env, then:
 #   docker compose -f docker-compose.proxy.yml up -d
 #
@@ -14,7 +14,7 @@
 # Leave CLAMPD_SAAS_URL empty for standalone mode (no cloud connection).
 
 x-license: &license
-  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required — set it in .env}
+  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required - set it in .env}
   AG_INTERNAL_SECRET: ${AG_INTERNAL_SECRET:-}
 
 x-rust-defaults: &rust-defaults
@@ -34,7 +34,7 @@ services:
   # ── Runtime Security Layer ─────────────────────────────────────
   # All services connect to shared infra via clampd-shared network.
   # Infrastructure (Postgres, Redis, NATS, ClickHouse) is defined
-  # in docker-compose.infra.yml — start that first.
+  # in docker-compose.infra.yml - start that first.
 
   ag-registry:
     image: ghcr.io/clampd/ag-registry:${CLAMPD_VERSION:-v0.9.0}
@@ -147,7 +147,7 @@ services:
       POLICY_URL: http://ag-policy:50051
       TOKEN_URL: http://ag-token:50051
       KILL_URL: http://ag-kill:50055
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
       RUST_LOG: "info,ag_gateway=debug"
     networks:
       - clampd-shared
@@ -269,7 +269,7 @@ services:
       CLAMPD_SAAS_URL: ${CLAMPD_SAAS_URL:-}
       CLAMPD_LICENSE_TOKEN: ${CLAMPD_LICENSE_TOKEN:-}
       CLAMPD_SHARED_DB: ${CLAMPD_SHARED_DB:-true}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
       CLAMPD_POLL_INTERVAL: "5"
       RUST_LOG: "info,ag_control=debug"
     networks:

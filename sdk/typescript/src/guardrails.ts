@@ -22,7 +22,7 @@ export { scanForSchemaInjection } from "./schema-injection.js";
  * Inspect a tool response for anomalies, scope violations, and sensitive data.
  *
  * Calls `client.inspect()` which forwards to the gateway's `/v1/inspect` endpoint.
- * PII/secrets detection is handled server-side by the gateway — no separate
+ * PII/secrets detection is handled server-side by the gateway - no separate
  * `scanOutput()` call needed for tool responses.
  *
  * Throws `ClampdBlockedError` if the check fails (unless `failOpen` is true,

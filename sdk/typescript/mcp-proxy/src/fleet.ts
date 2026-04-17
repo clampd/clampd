@@ -1,5 +1,5 @@
 /**
- * Fleet orchestrator — runs multiple MCP proxy instances from a single config.
+ * Fleet orchestrator - runs multiple MCP proxy instances from a single config.
  *
  * Each proxy wraps a different upstream MCP server with a different agent identity,
  * enabling multi-agent demos showing scope isolation, delegation chains, and
@@ -141,7 +141,7 @@ export async function startFleet(configPath: string): Promise<void> {
   const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", `http://localhost:${config.dashboardPort}`);
 
-    // GET / — Fleet dashboard
+    // GET / - Fleet dashboard
     if (url.pathname === "/" && req.method === "GET") {
       const html = renderFleetDashboard(fleetEvents, config);
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
@@ -149,7 +149,7 @@ export async function startFleet(configPath: string): Promise<void> {
       return;
     }
 
-    // GET /events — Fleet SSE stream
+    // GET /events - Fleet SSE stream
     if (url.pathname === "/events" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
       res.write(`data: ${JSON.stringify({ type: "connected", total: fleetEvents.length })}\n\n`);
@@ -158,7 +158,7 @@ export async function startFleet(configPath: string): Promise<void> {
       return;
     }
 
-    // GET /health — Fleet health
+    // GET /health - Fleet health
     if (url.pathname === "/health" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
@@ -180,7 +180,7 @@ export async function startFleet(configPath: string): Promise<void> {
       log("info", `  ${agent.name}: http://localhost:${agent.port}/sse (MCP) | http://localhost:${agent.port}/ (dashboard)`);
     }
     log("info", "");
-    log("info", "Claude Desktop config — add each agent as a separate MCP server:");
+    log("info", "Claude Desktop config - add each agent as a separate MCP server:");
     log("info", JSON.stringify({
       mcpServers: Object.fromEntries(
         config.agents.map((a) => [

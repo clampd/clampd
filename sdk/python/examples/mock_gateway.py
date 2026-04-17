@@ -1,5 +1,5 @@
 """
-Mock Clampd Gateway — drop-in replacement for testing without a real gateway.
+Mock Clampd Gateway - drop-in replacement for testing without a real gateway.
 
 Usage:
     from mock_gateway import install_mock_gateway, remove_mock_gateway

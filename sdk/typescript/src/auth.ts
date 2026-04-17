@@ -2,7 +2,7 @@
  * JWT helper for Clampd agent authentication.
  *
  * Uses HMAC-SHA256 when `secret` is provided or `JWT_SECRET` env var is set.
- * Throws an error if no signing secret is available — unsigned JWTs
+ * Throws an error if no signing secret is available - unsigned JWTs
  * (alg: none) are NOT supported.
  */
 

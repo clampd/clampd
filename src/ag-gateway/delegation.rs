@@ -199,7 +199,7 @@ pub async fn is_enforcement_enabled(redis_pool: &Pool<RedisConnectionManager>, o
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Redis unavailable for enforcement check: {e} — defaulting to learning mode");
+            warn!("Redis unavailable for enforcement check: {e} - defaulting to learning mode");
             return false;
         }
     };
@@ -254,7 +254,7 @@ pub async fn check_delegation_approved(
                 (true, vec![]) // can't parse = permissive
             }
         }
-        // No cached entry — in enforcement mode, unknown relationships are blocked
+        // No cached entry - in enforcement mode, unknown relationships are blocked
         None => (false, vec![]),
     }
 }
@@ -444,7 +444,7 @@ mod tests {
         assert_eq!(ctx.chain, vec!["body-agent-1", "body-agent-2"]);
         assert_eq!(ctx.trace_id, Some("trace-123".into()));
         assert_eq!(ctx.purpose, Some("data lookup".into()));
-        // Body present → declared (not verified — no crypto proof)
+        // Body present → declared (not verified - no crypto proof)
         assert_eq!(ctx.confidence, "declared");
     }
 
@@ -477,16 +477,16 @@ mod tests {
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // ADVERSARIAL TESTS — Red team against delegation enforcement
+    // ADVERSARIAL TESTS - Red team against delegation enforcement
     // ══════════════════════════════════════════════════════════════════
 
     #[test]
     fn adversarial_cycle_detection_case_bypass() {
-        // Same agent with different casing — should detect cycle
+        // Same agent with different casing - should detect cycle
         let chain = vec!["Agent-A".to_string(), "agent-a".to_string()];
         let result = validate_chain(&chain);
         assert!(result.is_err(),
-            "VULNERABILITY: Case variation bypasses cycle detection — 'Agent-A' and 'agent-a' are the same agent");
+            "VULNERABILITY: Case variation bypasses cycle detection - 'Agent-A' and 'agent-a' are the same agent");
     }
 
     #[test]
@@ -498,7 +498,7 @@ mod tests {
 
     #[test]
     fn adversarial_max_depth_boundary() {
-        // Chain at exactly MAX_DELEGATION_DEPTH — should be allowed
+        // Chain at exactly MAX_DELEGATION_DEPTH - should be allowed
         let chain: Vec<String> = (0..*MAX_DELEGATION_DEPTH).map(|i| format!("agent-{}", i)).collect();
         let result = validate_chain(&chain);
         assert!(result.is_ok(), "Chain at exactly max depth should be allowed");
@@ -521,7 +521,7 @@ mod tests {
     fn adversarial_unicode_in_chain() {
         let chain = vec!["agent-\u{200B}a".to_string(), "agent-a".to_string()];
         let result = validate_chain(&chain);
-        // Zero-width space makes these different strings — no cycle detected
+        // Zero-width space makes these different strings - no cycle detected
         assert!(result.is_ok(), "Unicode variation creates different agent IDs (no cycle)");
     }
 
@@ -564,7 +564,7 @@ mod tests {
         );
         let ctx = ctx.expect("Should extract delegation from body");
         assert_eq!(ctx.confidence, "declared",
-            "Body-provided delegation should be 'declared', not 'verified' — no crypto proof");
+            "Body-provided delegation should be 'declared', not 'verified' - no crypto proof");
     }
 
     #[test]

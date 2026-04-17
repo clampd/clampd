@@ -109,7 +109,7 @@ const MAX_EVENTS = 1000;
 /** Active SSE subscribers for the /events dashboard stream */
 const dashboardSubscribers = new Set<ServerResponse>();
 
-/** Fleet event callback — set by startProxy when opts.onEvent is provided */
+/** Fleet event callback - set by startProxy when opts.onEvent is provided */
 let fleetCallback: ((event: ProxyEvent & { agentName?: string }) => void) | null = null;
 let fleetAgentName: string | undefined;
 
@@ -327,7 +327,7 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
   }>();
 
   // ── File write content scanning ──────────────────────────────────────
-  // Tools that write file content — the content field must be scanned
+  // Tools that write file content - the content field must be scanned
   // separately to catch SQL injection, shell commands, etc. embedded in files.
   // This mirrors the Python SDK's _scan_file_content() defense.
   const FILE_WRITE_TOOLS: Record<string, string> = {
@@ -354,7 +354,7 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
     const content = toolArgs[contentField];
     if (!content || typeof content !== "string") return null;
 
-    // Check file extension — scan ALL extensions (double-ext bypass fix)
+    // Check file extension - scan ALL extensions (double-ext bypass fix)
     const filePath = String(toolArgs.path ?? toolArgs.file_path ?? "");
     let hasDangerousExt = false;
     if (filePath.includes(".")) {
@@ -543,12 +543,12 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
       { capabilities: { tools: {} } },
     );
 
-    // ListTools — mirror upstream
+    // ListTools - mirror upstream
     server.setRequestHandler(mcp.ListToolsRequestSchema, async () => {
       return { tools: upstreamTools };
     });
 
-    // CallTool — full security pipeline
+    // CallTool - full security pipeline
     server.setRequestHandler(
       mcp.CallToolRequestSchema,
       async (request: { params: { name: string; arguments?: Record<string, unknown> } }) => {
@@ -580,13 +580,13 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", `http://localhost:${opts.port}`);
 
-    // GET / — Live dashboard
+    // GET / - Live dashboard
     if (url.pathname === "/" && req.method === "GET") {
       serveDashboard(req, res, eventLog, { ...opts, sessionStats });
       return;
     }
 
-    // GET /events — Dashboard SSE stream
+    // GET /events - Dashboard SSE stream
     if (url.pathname === "/events" && req.method === "GET") {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -602,7 +602,7 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
       return;
     }
 
-    // GET /sse — MCP SSE endpoint (client connects here)
+    // GET /sse - MCP SSE endpoint (client connects here)
     if (url.pathname === "/sse" && req.method === "GET") {
       log("info", "MCP client connecting via SSE");
       const transport = new mcp.SSEServerTransport("/messages", res);
@@ -622,7 +622,7 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
       return;
     }
 
-    // POST /messages — MCP message endpoint (SSE transport posts here)
+    // POST /messages - MCP message endpoint (SSE transport posts here)
     if (url.pathname === "/messages" && req.method === "POST") {
       const sessionId = url.searchParams.get("sessionId");
       const entry = sessionId ? activeTransports.get(sessionId) : undefined;
@@ -635,7 +635,7 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
       return;
     }
 
-    // POST /demo/attack — Run a demo attack through the pipeline
+    // POST /demo/attack - Run a demo attack through the pipeline
     if (url.pathname === "/demo/attack" && req.method === "POST") {
       let body = "";
       req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
@@ -669,7 +669,7 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
       return;
     }
 
-    // GET /health — Health check
+    // GET /health - Health check
     if (url.pathname === "/health" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(

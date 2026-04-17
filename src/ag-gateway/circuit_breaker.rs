@@ -21,11 +21,11 @@ const STATE_HALF_OPEN: u8 = 2;
 /// Observable circuit state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitState {
-    /// Normal operation — requests pass through.
+    /// Normal operation - requests pass through.
     Closed,
     /// All requests fail immediately; apply degradation mode.
     Open,
-    /// Trial period — allow a limited number of test requests.
+    /// Trial period - allow a limited number of test requests.
     HalfOpen,
 }
 
@@ -150,7 +150,7 @@ impl CircuitBreaker {
             STATE_HALF_OPEN => {
                 let prev = self.half_open_successes.fetch_add(1, Ordering::AcqRel);
                 if prev + 1 >= self.config.half_open_max {
-                    // All test requests succeeded — close the breaker.
+                    // All test requests succeeded - close the breaker.
                     if self
                         .state
                         .compare_exchange(
@@ -168,7 +168,7 @@ impl CircuitBreaker {
             }
             STATE_CLOSED => {
                 // Optionally decay failure count on success. For simplicity,
-                // we just leave the windowed counter alone — it will be reset
+                // we just leave the windowed counter alone - it will be reset
                 // when the breaker trips and recovers.
             }
             _ => {}
@@ -217,7 +217,7 @@ impl CircuitBreaker {
                 }
             }
             _ => {
-                // Already open — nothing to do.
+                // Already open - nothing to do.
             }
         }
     }
@@ -254,7 +254,7 @@ fn current_epoch_ms() -> i64 {
 pub enum UpstreamCallResult<T> {
     /// Call succeeded.
     Success(T),
-    /// Circuit breaker is open — call was not attempted.
+    /// Circuit breaker is open - call was not attempted.
     CircuitOpen,
     /// Circuit was closed/half-open, but the gRPC call failed.
     Failed(String),
@@ -620,7 +620,7 @@ mod tests {
             half_open_max: 1,
         });
 
-        // More failures than the threshold — should stay Open.
+        // More failures than the threshold - should stay Open.
         for _ in 0..10 {
             cb.record_failure();
         }

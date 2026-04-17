@@ -1,5 +1,5 @@
 /**
- * Example: clampd.anthropic() — Wrap an Anthropic/Claude client.
+ * Example: clampd.anthropic() - Wrap an Anthropic/Claude client.
  *
  * Run: npx tsx examples/03-anthropic.ts
  *
@@ -13,7 +13,7 @@ import clampd from "../src/index.js";
 
 installMockGateway();
 
-// Mock Anthropic client — replace with `new Anthropic()` for real usage
+// Mock Anthropic client - replace with `new Anthropic()` for real usage
 const mockAnthropic = {
   messages: {
     create: async (params: Record<string, unknown>) => ({

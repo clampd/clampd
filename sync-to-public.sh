@@ -1,14 +1,14 @@
 #!/bin/bash
-# sync-to-public.sh — Selective sync: private repo → public distribution repo
+# sync-to-public.sh - Selective sync: private repo → public distribution repo
 #
 # What ships publicly:
-#   1. SDKs (full source, Apache 2.0)        — Python + TypeScript
-#   2. clampd-guard (full source, BSL 1.1)   — Claude Code / Cursor hook
-#   3. ag-gateway (partial source, BSL 1.1)  — request pipeline (no detection IP)
-#   4. ag-shadow (full source, BSL 1.1)      — audit pipeline + PII masker
-#   5. Proto (full, Apache 2.0)              — gRPC API contracts
-#   6. Docker compose + config               — deployment files
-#   7. Pre-built binaries                    — clampd CLI + clampd-guard
+#   1. SDKs (full source, Apache 2.0)        - Python + TypeScript
+#   2. clampd-guard (full source, BSL 1.1)   - Claude Code / Cursor hook
+#   3. ag-gateway (partial source, BSL 1.1)  - request pipeline (no detection IP)
+#   4. ag-shadow (full source, BSL 1.1)      - audit pipeline + PII masker
+#   5. Proto (full, Apache 2.0)              - gRPC API contracts
+#   6. Docker compose + config               - deployment files
+#   7. Pre-built binaries                    - clampd CLI + clampd-guard
 #
 # Everything else ships as Docker images only (ghcr.io/clampd/*).
 
@@ -41,7 +41,7 @@ copy_files() {
     for f in "$@"; do cp "$src_dir/$f" "$dst_dir/" 2>/dev/null || true; done
 }
 
-# ── 1. SDKs (Apache 2.0 — full source) ──────────────────────
+# ── 1. SDKs (Apache 2.0 - full source) ──────────────────────
 echo "[1/7] SDKs"
 copy_dir "$PRIVATE_ROOT/sdk/python" "$PUBLIC_ROOT/sdk/python"
 copy_dir "$PRIVATE_ROOT/sdk/typescript" "$PUBLIC_ROOT/sdk/typescript"
@@ -52,11 +52,11 @@ if ! $DRY_RUN; then
     find "$PUBLIC_ROOT/sdk" \( -name '.env' -o -name '.env.local' -o -name '.env.backup' \) -delete 2>/dev/null || true
 fi
 
-# ── 2. Proto (Apache 2.0 — full) ────────────────────────────
+# ── 2. Proto (Apache 2.0 - full) ────────────────────────────
 echo "[2/7] Proto"
 copy_dir "$PRIVATE_ROOT/proto" "$PUBLIC_ROOT/proto"
 
-# ── 3. Docker (Apache 2.0 — deployment files only) ──────────
+# ── 3. Docker (Apache 2.0 - deployment files only) ──────────
 echo "[3/7] Docker"
 if ! $DRY_RUN; then
     mkdir -p "$PUBLIC_ROOT/docker"
@@ -80,21 +80,21 @@ if ! $DRY_RUN; then
     fi
 fi
 
-# ── 4. ag-gateway (BSL 1.1 — partial: pipeline, no detection IP) ──
-echo "[4/7] ag-gateway (partial — 15 pipeline files)"
+# ── 4. ag-gateway (BSL 1.1 - partial: pipeline, no detection IP) ──
+echo "[4/7] ag-gateway (partial - 15 pipeline files)"
 copy_files "$SVC/ag-gateway/src" "$PUBLIC_ROOT/src/ag-gateway" \
     main.rs proxy.rs middleware.rs extractor.rs normalize.rs \
     decision.rs delegation.rs scan.rs shadow.rs session.rs \
     metrics.rs otel.rs scope_token.rs rate_limiter.rs circuit_breaker.rs
 $DRY_RUN || cp "$SVC/ag-gateway/Cargo.toml" "$PUBLIC_ROOT/src/ag-gateway/"
 
-# ── 5. ag-shadow (BSL 1.1 — full: audit pipeline + PII masker) ──
-echo "[5/7] ag-shadow (full — data handling transparency)"
+# ── 5. ag-shadow (BSL 1.1 - full: audit pipeline + PII masker) ──
+echo "[5/7] ag-shadow (full - data handling transparency)"
 copy_files "$SVC/ag-shadow/src" "$PUBLIC_ROOT/src/ag-shadow" \
     main.rs consumer.rs writer.rs pii_masker.rs enricher.rs lib.rs
 $DRY_RUN || cp "$SVC/ag-shadow/Cargo.toml" "$PUBLIC_ROOT/src/ag-shadow/"
 
-# ── 6. clampd-guard (BSL 1.1 — full source + tests) ─────────
+# ── 6. clampd-guard (BSL 1.1 - full source + tests) ─────────
 echo "[6/7] clampd-guard (full source)"
 if ! $DRY_RUN; then
     mkdir -p "$PUBLIC_ROOT/src/clampd-guard/src" "$PUBLIC_ROOT/src/clampd-guard/tests"
@@ -138,7 +138,7 @@ if ! $DRY_RUN; then
     fi
 fi
 
-# ── Verify — leak scanner ───────────────────────────────────
+# ── Verify - leak scanner ───────────────────────────────────
 echo ""
 echo "Verifying (deep scan)..."
 LEAKED=false
@@ -158,11 +158,11 @@ done
 
 # Old services/ directory should not have crates
 if [[ -d "$PUBLIC_ROOT/services/crates" ]]; then
-    echo "  WARN: old services/crates/ directory still exists — remove it!"
+    echo "  WARN: old services/crates/ directory still exists - remove it!"
     LEAKED=true
 fi
 
-# RSA private key — CRITICAL
+# RSA private key - CRITICAL
 PRIV_KEYS=$(find "$PUBLIC_ROOT" -name "*priv*" -o -name "private*.pem" 2>/dev/null || true)
 if [[ -n "$PRIV_KEYS" ]]; then
     echo "  CRITICAL: RSA private key found!"
@@ -197,15 +197,15 @@ for unexpected in dashboard deploy terraform .claude memory documents license-se
     fi
 done
 
-# .rs file count — should be low (guard:8, gateway:15, shadow:6 + tests)
+# .rs file count - should be low (guard:8, gateway:15, shadow:6 + tests)
 RS_COUNT=$(find "$PUBLIC_ROOT/src" -name "*.rs" -type f 2>/dev/null | wc -l)
 if [[ "$RS_COUNT" -gt 50 ]]; then
-    echo "  WARN: ${RS_COUNT} .rs files in src/ — expected ~30, possible leak"
+    echo "  WARN: ${RS_COUNT} .rs files in src/ - expected ~30, possible leak"
     LEAKED=true
 fi
 
 $LEAKED && echo "  ABORT: Fix issues before pushing." && exit 1
-echo "  OK — clean (${RS_COUNT} .rs files in src/)"
+echo "  OK - clean (${RS_COUNT} .rs files in src/)"
 
 # ── Summary ──────────────────────────────────────────────────
 echo ""
@@ -214,9 +214,9 @@ echo ""
 echo "  OPEN SOURCE:"
 echo "    sdk/python/             Python SDK (Apache 2.0)"
 echo "    sdk/typescript/         TypeScript SDK (Apache 2.0)"
-echo "    src/clampd-guard/       Claude Code & Cursor guard — full source (BSL 1.1)"
-echo "    src/ag-gateway/         Request pipeline — 15 files, partial (BSL 1.1)"
-echo "    src/ag-shadow/          Audit + PII masking — full source (BSL 1.1)"
+echo "    src/clampd-guard/       Claude Code & Cursor guard - full source (BSL 1.1)"
+echo "    src/ag-gateway/         Request pipeline - 15 files, partial (BSL 1.1)"
+echo "    src/ag-shadow/          Audit + PII masking - full source (BSL 1.1)"
 echo "    proto/                  gRPC contracts (Apache 2.0)"
 echo ""
 echo "  BINARY ONLY (Docker images at ghcr.io/clampd/*):"

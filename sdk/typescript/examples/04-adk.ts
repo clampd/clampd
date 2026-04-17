@@ -1,5 +1,5 @@
 /**
- * Example: clampd.adk() — Google ADK (Agent Development Kit) integration.
+ * Example: clampd.adk() - Google ADK (Agent Development Kit) integration.
  *
  * Run: npx tsx examples/04-adk.ts
  *
@@ -19,7 +19,7 @@ installMockGateway();
 async function main() {
   clampd.init({ agentId: "adk-demo-agent" });
 
-  // Get ADK callbacks — beforeTool + afterTool (with checkResponse)
+  // Get ADK callbacks - beforeTool + afterTool (with checkResponse)
   const callbacks = clampd.adk({
     checkResponse: true,
     failOpen: false,

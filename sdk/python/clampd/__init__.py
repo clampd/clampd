@@ -1,4 +1,4 @@
-"""Clampd Python SDK — Guard AI agent tool calls in 1 line.
+"""Clampd Python SDK - Guard AI agent tool calls in 1 line.
 
 Usage:
     import clampd
@@ -413,7 +413,7 @@ def guard(
     return decorator
 
 
-# ── clampd.openai() — wrap OpenAI client ──────────────────────────────
+# ── clampd.openai() - wrap OpenAI client ──────────────────────────────
 
 
 def openai(
@@ -433,7 +433,7 @@ def openai(
 
         import openai, clampd
         client = clampd.openai(openai.OpenAI(), agent_id="my-agent")
-        # Use client.chat.completions.create() as normal — tool calls are guarded
+        # Use client.chat.completions.create() as normal - tool calls are guarded
 
     Set ``check_response=True`` to also inspect tool responses for PII or anomalies.
     Returns a drop-in replacement that intercepts tool execution.
@@ -444,7 +444,7 @@ def openai(
     def guarded_create(*args: Any, **kwargs: Any) -> Any:
         _authorized_tools = _extract_openai_tool_names(kwargs)
 
-        # Streaming requests — intercept tool calls only when guard_stream=True
+        # Streaming requests - intercept tool calls only when guard_stream=True
         if kwargs.get("stream"):
             if scan_input:
                 _scan_input_openai(clampd_client, kwargs, fail_open)
@@ -460,7 +460,7 @@ def openai(
                     )
                 else:
                     logger.warning(
-                        "guard_stream explicitly disabled — streaming tool calls are not guarded."
+                        "guard_stream explicitly disabled - streaming tool calls are not guarded."
                     )
             return raw_stream
 
@@ -576,7 +576,7 @@ def openai(
     return client
 
 
-# ── clampd.anthropic() — wrap Anthropic client ───────────────────────
+# ── clampd.anthropic() - wrap Anthropic client ───────────────────────
 
 
 def anthropic(
@@ -595,7 +595,7 @@ def anthropic(
 
         import anthropic, clampd
         client = clampd.anthropic(anthropic.Anthropic(), agent_id="my-agent")
-        # Use client.messages.create() as normal — tool_use blocks are guarded
+        # Use client.messages.create() as normal - tool_use blocks are guarded
 
     Set ``check_response=True`` to also inspect tool responses for PII or anomalies.
     Returns a drop-in replacement that intercepts tool_use blocks.
@@ -621,7 +621,7 @@ def anthropic(
                     )
                 else:
                     logger.warning(
-                        "guard_stream explicitly disabled — streaming tool calls are not guarded."
+                        "guard_stream explicitly disabled - streaming tool calls are not guarded."
                     )
             return raw_stream
 
@@ -734,7 +734,7 @@ def anthropic(
     return client
 
 
-# ── clampd.langchain() — callback handler ────────────────────────────
+# ── clampd.langchain() - callback handler ────────────────────────────
 
 
 def langchain(
@@ -765,7 +765,7 @@ def langchain(
     )
 
 
-# ── clampd.adk() — Google ADK before_tool_callback ───────────────────
+# ── clampd.adk() - Google ADK before_tool_callback ───────────────────
 
 
 def adk(
@@ -821,7 +821,7 @@ def adk(
     return before_tool
 
 
-# ── clampd.crewai() — CrewAI step callback guard ────────────────────
+# ── clampd.crewai() - CrewAI step callback guard ────────────────────
 
 
 def crewai(

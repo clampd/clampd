@@ -1,5 +1,5 @@
 #!/bin/sh
-# Clampd CLI installer — downloads prebuilt binary from GitHub Releases.
+# Clampd CLI installer - downloads prebuilt binary from GitHub Releases.
 # Usage: curl -fsSL https://clampd.dev/install.sh | sh
 set -e
 

@@ -1,4 +1,4 @@
-"""Tests for the 1-line SDK API — clampd.openai(), clampd.anthropic(), clampd.guard()."""
+"""Tests for the 1-line SDK API - clampd.openai(), clampd.anthropic(), clampd.guard()."""
 
 from unittest.mock import MagicMock, patch
 
@@ -409,7 +409,7 @@ class TestLangchainOnToolEnd:
             # Simulate on_tool_start
             handler.on_tool_start({"name": "db.query"}, '{"sql": "SELECT 1"}')
 
-            # Simulate on_tool_end — only inspect is called, PII detection
+            # Simulate on_tool_end - only inspect is called, PII detection
             # is handled server-side by the gateway's /v1/inspect endpoint
             handler.on_tool_end("result: 42")
 

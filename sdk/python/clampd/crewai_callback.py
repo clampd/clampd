@@ -1,4 +1,4 @@
-"""Clampd guard for CrewAI agents — intercepts tool calls via step callback."""
+"""Clampd guard for CrewAI agents - intercepts tool calls via step callback."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ class ClampdCrewAIGuard:
     def wrap_tool(self, tool: Any) -> Any:
         """Wrap a CrewAI tool's _run method with Clampd guard.
 
-        Returns a shallow copy — the original tool is not modified.
+        Returns a shallow copy - the original tool is not modified.
         """
         original_run = tool._run
         guard = self

@@ -1,4 +1,4 @@
-"""Comprehensive feature E2E tests — validates ALL sellable features through the SDK.
+"""Comprehensive feature E2E tests - validates ALL sellable features through the SDK.
 
 Covers:
   - Rule detection (SQL, command, path, SSRF, XSS, prompt injection)
@@ -56,14 +56,14 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def client_a():
-    """Client for ATTACK tests — session accumulates risk flags."""
+    """Client for ATTACK tests - session accumulates risk flags."""
     return ClampdClient(gateway_url=GATEWAY_URL, agent_id=AGENT_A, api_key=API_KEY,
                         secret=AGENT_SECRET, session_id="e2e-attack-session")
 
 
 @pytest.fixture
 def clean_client():
-    """Client for SAFE tests — clean session, no accumulated risk."""
+    """Client for SAFE tests - clean session, no accumulated risk."""
     return ClampdClient(gateway_url=GATEWAY_URL, agent_id=AGENT_A, api_key=API_KEY,
                         secret=AGENT_SECRET, session_id="e2e-clean-session")
 
@@ -75,7 +75,7 @@ def client_b():
 
 
 # ═══════════════════════════════════════════════════════════════
-# 1. RULE DETECTION — positive (blocked) + negative (allowed)
+# 1. RULE DETECTION - positive (blocked) + negative (allowed)
 # ═══════════════════════════════════════════════════════════════
 
 class TestRuleDetection:
@@ -137,7 +137,7 @@ class TestRuleDetection:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 2. ENCODING EVASION — normalizer catches encoded attacks
+# 2. ENCODING EVASION - normalizer catches encoded attacks
 # ═══════════════════════════════════════════════════════════════
 
 class TestEncodingEvasion:
@@ -151,7 +151,7 @@ class TestEncodingEvasion:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 3. SCOPE TOKEN — proof of authorization
+# 3. SCOPE TOKEN - proof of authorization
 # ═══════════════════════════════════════════════════════════════
 
 class TestScopeToken:
@@ -167,7 +167,7 @@ class TestScopeToken:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 4. KILL SWITCH — kill agent, verify blocked, revive, verify unblocked
+# 4. KILL SWITCH - kill agent, verify blocked, revive, verify unblocked
 # ═══════════════════════════════════════════════════════════════
 
 class TestKillSwitch:
@@ -212,7 +212,7 @@ class TestKillSwitch:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 5. EMA SCORING — repeated attacks → suspicion rises
+# 5. EMA SCORING - repeated attacks → suspicion rises
 # ═══════════════════════════════════════════════════════════════
 
 class TestEMAScoring:
@@ -232,17 +232,17 @@ class TestEMAScoring:
             r = client_a.proxy("shell.exec", {"command": f"rm -rf /important_{i}"})
             risks.append(r.risk_score)
         # Later attacks should have higher reported risk (EMA accumulation)
-        # We compare first vs last — EMA should be rising
+        # We compare first vs last - EMA should be rising
         assert risks[-1] >= risks[0], f"Risk should rise over time: {risks}"
 
 
 # ═══════════════════════════════════════════════════════════════
-# 6. A2A DELEGATION — chain tracking, cycle detection, depth limit
+# 6. A2A DELEGATION - chain tracking, cycle detection, depth limit
 # ═══════════════════════════════════════════════════════════════
 
 class TestA2ADelegation:
     def test_delegation_chain_tracked(self, client_a, client_b):
-        """Agent A delegates to Agent B — chain should be tracked."""
+        """Agent A delegates to Agent B - chain should be tracked."""
         ctx, token = enter_delegation(AGENT_A)
         try:
             r = client_b.proxy("database.query", {"sql": "SELECT name FROM users WHERE id = 1"})
@@ -288,7 +288,7 @@ class TestA2ADelegation:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 7. RUG-PULL DETECTION — tool descriptor hash mismatch
+# 7. RUG-PULL DETECTION - tool descriptor hash mismatch
 # ═══════════════════════════════════════════════════════════════
 
 class TestRugPull:
@@ -323,7 +323,7 @@ class TestRugPull:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 8. SCAN INPUT / OUTPUT — PII + secrets detection
+# 8. SCAN INPUT / OUTPUT - PII + secrets detection
 # ═══════════════════════════════════════════════════════════════
 
 class TestScanEndpoints:
@@ -349,7 +349,7 @@ class TestScanEndpoints:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 9. SESSION PATTERNS — session_flags in response
+# 9. SESSION PATTERNS - session_flags in response
 # ═══════════════════════════════════════════════════════════════
 
 class TestSessionPatterns:
@@ -369,7 +369,7 @@ class TestSessionPatterns:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 10. TOOL AUTHORIZATION — locked tool set
+# 10. TOOL AUTHORIZATION - locked tool set
 # ═══════════════════════════════════════════════════════════════
 
 class TestToolAuthorization:
@@ -385,7 +385,7 @@ class TestToolAuthorization:
         assert r1.allowed, f"Authorized tool must work: {r1.denial_reason}"
 
         # Second call with an unauthorized tool should be rejected
-        # (if session is persisted across calls — depends on session ID)
+        # (if session is persisted across calls - depends on session ID)
         # This test validates the SDK sends the header correctly
 
 
@@ -448,12 +448,12 @@ class TestResponseMetadata:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 13. INSPECT ENDPOINT — post-response verification
+# 13. INSPECT ENDPOINT - post-response verification
 # ═══════════════════════════════════════════════════════════════
 
 class TestInspect:
     def test_inspect_clean_response(self, clean_client):
-        """Inspect a clean tool response — should pass."""
+        """Inspect a clean tool response - should pass."""
         proxy_r = clean_client.proxy("database.query", {"sql": "SELECT name FROM users WHERE id = 1"})
         if not proxy_r.allowed or not proxy_r.scope_token:
             pytest.skip("Need successful proxy call with scope_token")
@@ -467,7 +467,7 @@ class TestInspect:
         assert inspect_r.allowed, f"Clean response should pass inspect: {inspect_r.denial_reason}"
 
     def test_inspect_pii_in_response(self, clean_client):
-        """Inspect a response containing PII — should be flagged."""
+        """Inspect a response containing PII - should be flagged."""
         proxy_r = clean_client.proxy("database.query", {"sql": "SELECT name FROM users WHERE id = 1"})
         if not proxy_r.allowed or not proxy_r.scope_token:
             pytest.skip("Need successful proxy call")

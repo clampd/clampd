@@ -19,7 +19,7 @@ import { fileURLToPath } from "url";
 import { installMockGateway } from "./mock-gateway.js";
 import clampd, { ClampdBlockedError } from "../src/index.js";
 
-// Load .env — check examples/ dir first, then project root
+// Load .env - check examples/ dir first, then project root
 const __exDir = resolve(fileURLToPath(import.meta.url), "..");
 config({ path: resolve(__exDir, ".env") });
 config({ path: resolve(__exDir, "..", ".env") });
@@ -50,7 +50,7 @@ clampd.init({
 
 });
 
-// ── Guarded tools — each has its own agentId ─────────────────────
+// ── Guarded tools - each has its own agentId ─────────────────────
 // The SDK builds the delegation chain automatically:
 //   orchestrator -> research-agent -> web.search
 //   orchestrator -> analysis-agent -> data.analyze
@@ -97,7 +97,7 @@ const deleteFiles = clampd.guard(
   { agentId: "rogue-agent", toolName: "shell.exec" },
 );
 
-// ── Orchestrator — just use clampd.agent() for the scope ─────────
+// ── Orchestrator - just use clampd.agent() for the scope ─────────
 
 async function main() {
   console.log("=== A2A Workflow Demo ===\n");

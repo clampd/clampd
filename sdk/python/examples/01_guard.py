@@ -1,5 +1,5 @@
 """
-Example: @clampd.guard() — Wrap any function with security.
+Example: @clampd.guard() - Wrap any function with security.
 
 Run: python examples/01_guard.py
 

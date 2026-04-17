@@ -1,5 +1,5 @@
 /**
- * Example: clampd.guard() — Wrap any async function with security.
+ * Example: clampd.guard() - Wrap any async function with security.
  *
  * Run: npx tsx examples/01-guard.ts
  *
@@ -19,7 +19,7 @@ async function queryDatabase(params: { sql: string }): Promise<string> {
   return `Results for: ${params.sql}`;
 }
 
-// Wrap it — every call is now guarded
+// Wrap it - every call is now guarded
 const safeQuery = clampd.guard(queryDatabase, {
   toolName: "db.query",
   checkResponse: true,

@@ -26,7 +26,7 @@ message ClassifyRequest {
   int32 session_total_calls = 11;
   int32 session_context_window = 12;
   string session_context_json = 13;
-  // field 14 removed (was agent_scopes — scope exemptions moved to policy layer)
+  // field 14 removed (was agent_scopes - scope exemptions moved to policy layer)
   optional string caller_agent_id = 15;
   repeated string delegation_chain = 16;
   optional string delegation_trace_id = 17;
@@ -50,5 +50,5 @@ message ClassifyResponse {
   bool schema_injection_detected = 13;   // true if R068/R069/R070 matched
   string schema_injection_type = 14;     // "xml_injection", "json_injection", "tool_steering", "constraint_weakening", or ""
   string category = 15;                  // tool category name from ag-common::categories (e.g. "Shell / Process Execution")
-  string defense_tier = 16;              // "rules", "policy", or "hybrid" — which enforcement layer handles this tool
+  string defense_tier = 16;              // "rules", "policy", or "hybrid" - which enforcement layer handles this tool
 }

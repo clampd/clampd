@@ -1,6 +1,6 @@
 # Clampd Shared Infrastructure
 #
-# Postgres, Redis, NATS, and ClickHouse — shared by both
+# Postgres, Redis, NATS, and ClickHouse - shared by both
 # the proxy pipeline and the dashboard control plane.
 #
 # Usage (all-in-one with proxy + dashboard):
@@ -10,7 +10,7 @@
 #   docker compose -f docker-compose.infra.yml -f docker-compose.proxy.yml up -d
 #
 # Skip this file entirely if you use managed databases (Neon, Upstash, etc.)
-# — just set DATABASE_URL, REDIS_URL, NATS_URL in .env.
+# - just set DATABASE_URL, REDIS_URL, NATS_URL in .env.
 
 services:
   # ── PostgreSQL ─────────────────────────────────────────────────
@@ -64,7 +64,7 @@ services:
     networks:
       - clampd-shared
 
-  # ── ClickHouse (optional — for audit analytics) ───────────────
+  # ── ClickHouse (optional - for audit analytics) ───────────────
   # Used by: ag-shadow (write), ag-control (read), dashboard-api (read)
   # Remove this if you don't need audit log analytics.
   clickhouse:

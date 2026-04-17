@@ -227,7 +227,7 @@ pub async fn load_or_create_session(
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Redis pool error for session load: {} — creating ephemeral session", e);
+            warn!("Redis pool error for session load: {} - creating ephemeral session", e);
             return SessionContext::new(*agent_id, session_id.to_string());
         }
     };
@@ -240,7 +240,7 @@ pub async fn load_or_create_session(
     {
         Ok(v) => v,
         Err(e) => {
-            warn!("Redis GET failed for session {}: {} — creating new session", key, e);
+            warn!("Redis GET failed for session {}: {} - creating new session", key, e);
             return SessionContext::new(*agent_id, session_id.to_string());
         }
     };
@@ -252,7 +252,7 @@ pub async fn load_or_create_session(
                 ctx
             }
             Err(e) => {
-                warn!("Failed to deserialize session {}: {} — creating new", key, e);
+                warn!("Failed to deserialize session {}: {} - creating new", key, e);
                 SessionContext::new(*agent_id, session_id.to_string())
             }
         },
@@ -297,7 +297,7 @@ pub async fn save_session(
     let mut conn = match redis_pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            warn!("Redis pool error for session save: {} — session state lost", e);
+            warn!("Redis pool error for session save: {} - session state lost", e);
             return;
         }
     };
@@ -311,7 +311,7 @@ pub async fn save_session(
         .await;
 
     if let Err(e) = result {
-        warn!("Redis SET failed for session {}: {} — session state lost", key, e);
+        warn!("Redis SET failed for session {}: {} - session state lost", key, e);
     } else {
         debug!(session_id = %session.session_id, "Session saved to Redis");
     }
@@ -705,7 +705,7 @@ mod tests {
         lock_tool_set(&mut session, vec!["db.query".to_string()]);
 
         let scopes = vec!["*".to_string()];
-        // Wildcard scope should bypass tool lock — any tool allowed
+        // Wildcard scope should bypass tool lock - any tool allowed
         assert!(check_tool_authorized(&session, "db.query", &scopes).is_ok());
         assert!(check_tool_authorized(&session, "move_file", &scopes).is_ok());
         assert!(check_tool_authorized(&session, "admin.delete", &scopes).is_ok());
@@ -856,13 +856,13 @@ mod tests {
     fn test_extract_tables_deduplicates() {
         let params = serde_json::json!({"table": "users", "query": "SELECT * FROM users"});
         let tables = extract_tables_from_params("database.users.query", &params);
-        // "users" appears from table param, SQL FROM, and tool name — should be deduped.
+        // "users" appears from table param, SQL FROM, and tool name - should be deduped.
         let user_count = tables.iter().filter(|t| *t == "users").count();
         assert_eq!(user_count, 1);
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // ADVERSARIAL TESTS — Red team against session management
+    // ADVERSARIAL TESTS - Red team against session management
     // ══════════════════════════════════════════════════════════════════
 
     #[test]
@@ -907,13 +907,13 @@ mod tests {
 
     #[test]
     fn adversarial_fingerprint_deterministic() {
-        // DefaultHasher is deterministic — same input always produces same fingerprint
+        // DefaultHasher is deterministic - same input always produces same fingerprint
         let mut headers = hyper::header::HeaderMap::new();
         headers.insert("x-forwarded-for", "1.2.3.4".parse().unwrap());
         headers.insert("user-agent", "TestBot/1.0".parse().unwrap());
         let fp1 = extract_client_fingerprint(&headers);
         let fp2 = extract_client_fingerprint(&headers);
-        assert_eq!(fp1, fp2, "DefaultHasher is deterministic — fingerprint predictable");
+        assert_eq!(fp1, fp2, "DefaultHasher is deterministic - fingerprint predictable");
         assert_eq!(fp1.len(), 32, "Fingerprint should be 32 hex chars");
     }
 
@@ -935,7 +935,7 @@ mod tests {
 
     #[test]
     fn adversarial_session_hash_weak() {
-        // compute_session_hash uses DefaultHasher — non-cryptographic
+        // compute_session_hash uses DefaultHasher - non-cryptographic
         // Two different inputs could collide in 64-bit space
         let h1 = compute_session_hash("input1");
         let h2 = compute_session_hash("input2");
@@ -945,7 +945,7 @@ mod tests {
     }
 
     // ── #10: Session blocking fail-open ────────────────────────────
-    // Note: is_session_blocked() returns false on Redis error — documented
+    // Note: is_session_blocked() returns false on Redis error - documented
     // Cannot unit-test Redis failure without mock, but documenting the behavior
 
     #[test]

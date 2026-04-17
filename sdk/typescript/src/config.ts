@@ -147,7 +147,7 @@ export function init(opts: InitOptions): ClampdClient {
   return defaultClient;
 }
 
-// ── clampd._reset() — clear global state (for testing) ─────────────
+// ── clampd._reset() - clear global state (for testing) ─────────────
 
 /**
  * Reset all global SDK state. Intended for test isolation.

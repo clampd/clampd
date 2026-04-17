@@ -4,7 +4,7 @@ LangGraph A2A Attack Simulation with Clampd guardrails.
 Three agents in a LangGraph workflow:
   - Analyst:  reads data, delegates to others
   - DevOps:   runs shell commands, HTTP calls
-  - Redteam:  adversarial — tries to exploit delegation
+  - Redteam:  adversarial - tries to exploit delegation
 
 The graph: Analyst → Router → (DevOps | Redteam) → End
 
@@ -310,7 +310,7 @@ if __name__ == "__main__":
                 print(f"\n  📋 Result: ✅ ALLOWED")
         except Exception as e:
             results["error"] += 1
-            print(f"\n  📋 Result: ❌ ERROR — {e}")
+            print(f"\n  📋 Result: ❌ ERROR - {e}")
 
     print(f"\n{'=' * 60}")
     print(f"  Summary: {results['allowed']} allowed, {results['blocked']} blocked, {results['error']} errors")

@@ -1,5 +1,5 @@
 /**
- * Live dashboard — serves an HTML page at GET / with a real-time event log
+ * Live dashboard - serves an HTML page at GET / with a real-time event log
  * of all tool calls flowing through the proxy.
  *
  * Features:
@@ -67,7 +67,7 @@ function renderDashboard(events: ProxyEvent[], opts: ProxyOptions & { demoPanel?
   const allowed = events.filter((e) => e.status === "allowed").length;
   const errors = events.filter((e) => e.status === "error").length;
   const total = events.length;
-  const threatRate = total > 0 ? (((blocked + flagged) / total) * 100).toFixed(1) : "—";
+  const threatRate = total > 0 ? (((blocked + flagged) / total) * 100).toFixed(1) : "-";
   const avgLatency = total > 0 ? Math.round(events.reduce((s, e) => s + e.latency_ms, 0) / total) : 0;
   const totalRulesFired = events.reduce((s, e) => s + (e.matched_rules?.length ?? 0), 0);
 
@@ -254,7 +254,7 @@ function renderDashboard(events: ProxyEvent[], opts: ProxyOptions & { demoPanel?
     </table>
   </div>
   <script>
-    // SSE — track new event count, show badge on refresh button
+    // SSE - track new event count, show badge on refresh button
     const evtSource = new EventSource('/events');
     let newCount = 0;
     evtSource.onmessage = function() {
@@ -466,7 +466,7 @@ function renderSparkline(events: ProxyEvent[]): string {
 function renderSessionSummary(stats: SessionStats): string {
   const duration = stats.firstCallAt && stats.lastCallAt
     ? formatDuration(new Date(stats.lastCallAt).getTime() - new Date(stats.firstCallAt).getTime())
-    : "—";
+    : "-";
   const avgRisk = stats.toolCallCount > 0 ? (stats.totalRisk / stats.toolCallCount).toFixed(2) : "0.00";
   const topRules = Object.entries(stats.rulesTriggered)
     .sort(([, a], [, b]) => b - a)
@@ -481,8 +481,8 @@ function renderSessionSummary(stats: SessionStats): string {
   return `<div class="session-panel">
     <div class="session-block"><span class="session-title">Session Duration</span><span class="session-val">${duration}</span></div>
     <div class="session-block"><span class="session-title">Avg Risk</span><span class="session-val">${avgRisk}</span></div>
-    <div class="session-block"><span class="session-title">Unique Tools (${stats.uniqueTools.length})</span><span class="session-val">${stats.uniqueTools.slice(0, 8).map((t) => escapeHtml(t)).join(", ") || "—"}</span></div>
-    <div class="session-block"><span class="session-title">Top Rules</span><span class="session-val">${topRules || "—"}</span></div>
+    <div class="session-block"><span class="session-title">Unique Tools (${stats.uniqueTools.length})</span><span class="session-val">${stats.uniqueTools.slice(0, 8).map((t) => escapeHtml(t)).join(", ") || "-"}</span></div>
+    <div class="session-block"><span class="session-title">Top Rules</span><span class="session-val">${topRules || "-"}</span></div>
     ${indicators.length ? `<div class="session-block"><span class="session-title">Alerts</span><span class="session-val">${indicators.join(" ")}</span></div>` : ""}
   </div>`;
 }
@@ -557,12 +557,12 @@ function generateReport(events: ProxyEvent[], opts: ProxyOptions): string {
 ## Rules Triggered
 | Rule | Count |
 |------|-------|
-${ruleRows || "| — | — |"}
+${ruleRows || "| - | - |"}
 
 ## Blocked Calls
 | Time | Tool | Risk | Rules | Reason |
 |------|------|------|-------|--------|
-${blockedRows || "| — | — | — | — | — |"}
+${blockedRows || "| - | - | - | - | - |"}
 `;
 }
 

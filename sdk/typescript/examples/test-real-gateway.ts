@@ -1,5 +1,5 @@
 /**
- * Test Clampd TypeScript SDK against REAL gateway — fresh account, genuine attacks.
+ * Test Clampd TypeScript SDK against REAL gateway - fresh account, genuine attacks.
  * Uses only public SDK API: init(), guard(), agent(), scanInput(), scanOutput().
  *
  * Strategy: Safe tests first (main agent), attack tests last (sacrificial agent).
@@ -20,7 +20,7 @@ const API_KEY = "ag_live_upXLd-YkQmjGKM8402x09wH0xPIcpaKZr77xOuVaLos";
 const AGENT_ID = "fdf1cf75-5e89-42b4-bbca-338e6bf369a2";
 const AGENT_SECRET = "ags_w-QcKnT-GM6jio1QzIkkDwa36yYxIBHFJddMWcTg";
 
-// Attacker agent (sacrificial — will get flagged/killed)
+// Attacker agent (sacrificial - will get flagged/killed)
 const ATTACKER_ID = "98509cc5-58ef-40f4-892a-99050b0f32e2";
 const ATTACKER_SECRET = "ags_3VgBRAvJJnkJ-AwRFETmKkKbuHWuAEVbrVDTSP4q";
 
@@ -37,7 +37,7 @@ const WRITER_SECRET = "ags_HRgpZIX7MvAocihqvU7WPkEUAW6Yj2zt2C6nFBQP";
 function check(name: string, condition: boolean, detail = "") {
   results.push(condition);
   const status = condition ? PASS : FAIL;
-  console.log(`  [${status}] ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`  [${status}] ${name}${detail ? ` - ${detail}` : ""}`);
 }
 
 async function main() {
@@ -68,8 +68,8 @@ async function main() {
   });
   check("init succeeded", true);
 
-  // ── 2. guard() — safe tool ────────────────────────────────────
-  console.log("\n2. guard() — safe tool call");
+  // ── 2. guard() - safe tool ────────────────────────────────────
+  console.log("\n2. guard() - safe tool call");
   const safeQuery = clampd.guard(
     async (p: { sql: string }) => `Results for: ${p.sql}`,
     { toolName: "db.query" },
@@ -93,8 +93,8 @@ async function main() {
     secret: AGENT_SECRET,
   });
 
-  // ── 3. scanInput — benign ─────────────────────────────────────
-  console.log("\n3. scanInput() — benign prompt");
+  // ── 3. scanInput - benign ─────────────────────────────────────
+  console.log("\n3. scanInput() - benign prompt");
   try {
     const scan = await scanClient.scanInput("What's the weather forecast for Tokyo this weekend?");
     check("clean prompt accepted", scan.allowed, `risk=${scan.risk_score.toFixed(3)}`);
@@ -102,8 +102,8 @@ async function main() {
     check("clean prompt", false, e.message);
   }
 
-  // ── 4. scanOutput — clean ─────────────────────────────────────
-  console.log("\n4. scanOutput() — clean response");
+  // ── 4. scanOutput - clean ─────────────────────────────────────
+  console.log("\n4. scanOutput() - clean response");
   try {
     const scan = await scanClient.scanOutput("Tokyo forecast: sunny, high of 24°C this Saturday.");
     check("clean output accepted", scan.allowed, `risk=${scan.risk_score.toFixed(3)}`);
@@ -111,8 +111,8 @@ async function main() {
     check("clean output", false, e.message);
   }
 
-  // ── 5. agent() + guard() — delegation ─────────────────────────
-  console.log("\n5. agent() + guard() — A2A delegation");
+  // ── 5. agent() + guard() - delegation ─────────────────────────
+  console.log("\n5. agent() + guard() - A2A delegation");
   const searchWeb = clampd.guard(
     async (p: { query: string }) => ({ results: ["result1", "result2", "result3"] }),
     { agentId: RESEARCH_ID, toolName: "web.search" },
@@ -130,8 +130,8 @@ async function main() {
     }
   }
 
-  // ── 6. guard(checkResponse) — clean data ──────────────────────
-  console.log("\n6. guard({ checkResponse }) — clean response data");
+  // ── 6. guard(checkResponse) - clean data ──────────────────────
+  console.log("\n6. guard({ checkResponse }) - clean response data");
   const productSearch = clampd.guard(
     async (p: { query: string }) => ({
       products: [
@@ -153,8 +153,8 @@ async function main() {
     }
   }
 
-  // ── 7. guard(checkResponse) — response contains PII ───────────
-  console.log("\n7. guard({ checkResponse }) — SQL tool returns real PII");
+  // ── 7. guard(checkResponse) - response contains PII ───────────
+  console.log("\n7. guard({ checkResponse }) - SQL tool returns real PII");
   const customerLookup = clampd.guard(
     async (p: { customerId: string }) => ({
       customer_id: p.customerId,
@@ -199,7 +199,7 @@ async function main() {
   }
 
   // ── 8. inspect() ──────────────────────────────────────────────
-  console.log("\n8. inspect() — response inspection");
+  console.log("\n8. inspect() - response inspection");
   try {
     const client = new ClampdClient({
       agentId: AGENT_ID,
@@ -214,7 +214,7 @@ async function main() {
   }
 
   // ── 9. delegation + response scan ─────────────────────────────
-  console.log("\n9. agent() + guard({ checkResponse }) — delegation with response scan");
+  console.log("\n9. agent() + guard({ checkResponse }) - delegation with response scan");
   const writeDoc = clampd.guard(
     async (p: { content: string }) => `Document saved: ${p.content}`,
     { agentId: WRITER_ID, toolName: "doc.write", checkResponse: true },
@@ -233,7 +233,7 @@ async function main() {
   // ══════════════════════════════════════════════════════════════
   console.log("\n\n═══ PART B: Attack Detection ═══\n");
 
-  // ── 10-13. scanInput — genuine injection attacks ──────────────
+  // ── 10-13. scanInput - genuine injection attacks ──────────────
   const attacks: [string, string][] = [
     [
       "DAN jailbreak",
@@ -265,7 +265,7 @@ async function main() {
 
   let testNum = 10;
   for (const [label, payload] of attacks) {
-    console.log(`${testNum}. scanInput() — ${label}`);
+    console.log(`${testNum}. scanInput() - ${label}`);
     try {
       const scan = await scanClient.scanInput(payload);
       const detected = !scan.allowed || scan.risk_score > 0.5;
@@ -277,8 +277,8 @@ async function main() {
     testNum++;
   }
 
-  // ── 14. scanOutput — real PII leak ────────────────────────────
-  console.log(`\n14. scanOutput() — real PII data`);
+  // ── 14. scanOutput - real PII leak ────────────────────────────
+  console.log(`\n14. scanOutput() - real PII data`);
   try {
     const scan = await scanClient.scanOutput(
       "Here are the customer records you requested:\n" +
@@ -296,8 +296,8 @@ async function main() {
     check("PII leak", false, e.message);
   }
 
-  // ── 15. scanOutput — secrets leak ─────────────────────────────
-  console.log(`\n15. scanOutput() — secrets in response`);
+  // ── 15. scanOutput - secrets leak ─────────────────────────────
+  console.log(`\n15. scanOutput() - secrets in response`);
   try {
     const scan = await scanClient.scanOutput(
       "Sure, here's the configuration:\n" +
@@ -315,8 +315,8 @@ async function main() {
     check("secrets leak", false, e.message);
   }
 
-  // ── 16. guard() — dangerous tool (attacker agent) ─────────────
-  console.log(`\n16. guard() — dangerous tool (drop_table) via attacker agent`);
+  // ── 16. guard() - dangerous tool (attacker agent) ─────────────
+  console.log(`\n16. guard() - dangerous tool (drop_table) via attacker agent`);
   const dropIt = clampd.guard(
     async (p: { table: string }) => `Dropped ${p.table}`,
     { agentId: ATTACKER_ID, toolName: "drop_table" },
@@ -332,8 +332,8 @@ async function main() {
     }
   }
 
-  // ── 17. guard() — shell exec (attacker agent) ─────────────────
-  console.log(`\n17. guard() — shell execution attempt`);
+  // ── 17. guard() - shell exec (attacker agent) ─────────────────
+  console.log(`\n17. guard() - shell execution attempt`);
   const runShell = clampd.guard(
     async (p: { cmd: string }) => `Executed: ${p.cmd}`,
     { agentId: ATTACKER_ID, toolName: "exec_shell" },
@@ -350,7 +350,7 @@ async function main() {
   }
 
   // ── 18. schema injection scan (client-side) ───────────────────
-  console.log("\n18. scanForSchemaInjection() — client-side detection");
+  console.log("\n18. scanForSchemaInjection() - client-side detection");
   try {
     const { scanForSchemaInjection } = await import("../src/schema-injection.js");
     const warnings = scanForSchemaInjection([

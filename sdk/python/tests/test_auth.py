@@ -1,4 +1,4 @@
-"""Tests for clampd.auth — JWT generation."""
+"""Tests for clampd.auth - JWT generation."""
 
 import base64
 import hashlib
@@ -13,7 +13,7 @@ from clampd.auth import make_agent_jwt
 
 
 class TestUnsignedJWT:
-    """Since C3 fix, unsigned JWTs are rejected — must raise ValueError."""
+    """Since C3 fix, unsigned JWTs are rejected - must raise ValueError."""
 
     def test_unsigned_jwt_raises_without_secret(self):
         saved = os.environ.pop("JWT_SECRET", None)

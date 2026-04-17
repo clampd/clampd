@@ -1,5 +1,5 @@
 /**
- * Example: clampd.vercelAI() — Vercel AI SDK integration.
+ * Example: clampd.vercelAI() - Vercel AI SDK integration.
  *
  * Run: npx tsx examples/05-vercel-ai.ts
  *
@@ -34,7 +34,7 @@ async function main() {
     },
   };
 
-  // Wrap all tools — execute functions are now guarded
+  // Wrap all tools - execute functions are now guarded
   const safeTools = clampd.vercelAI(myTools, {});
 
   // Call an allowed tool

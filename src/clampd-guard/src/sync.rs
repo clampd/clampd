@@ -1,4 +1,4 @@
-//! Tool sync — discovers available tools from Claude Code / Cursor configs
+//! Tool sync - discovers available tools from Claude Code / Cursor configs
 //! and MCP servers, then sends a ping request per tool through /v1/proxy
 //! to trigger the existing tool descriptor discovery pipeline.
 //!

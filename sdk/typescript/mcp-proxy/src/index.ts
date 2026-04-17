@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Clampd MCP Proxy — standalone proxy that wraps any MCP server with
+ * Clampd MCP Proxy - standalone proxy that wraps any MCP server with
  * Clampd's full security pipeline.
  *
  * Users connect Claude Desktop (or any MCP client) to this proxy via SSE.
@@ -55,7 +55,7 @@ function parseCli() {
     process.exit(0);
   }
 
-  // Fleet mode — start multiple proxies from config file
+  // Fleet mode - start multiple proxies from config file
   if (values["fleet-config"]) {
     return { fleetConfig: values["fleet-config"], verbose: values.verbose! };
   }
@@ -106,7 +106,7 @@ function parseCli() {
 
 function printUsage(): void {
   console.log(`
-Clampd MCP Proxy — wraps any MCP server with Clampd security
+Clampd MCP Proxy - wraps any MCP server with Clampd security
 
 Usage:
   clampd-mcp-proxy --upstream <command> --agent-id <uuid> [options]

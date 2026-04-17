@@ -1,9 +1,9 @@
 /**
- * Example: scanForSchemaInjection() — Detect prompt-level attacks.
+ * Example: scanForSchemaInjection() - Detect prompt-level attacks.
  *
  * Run: npx tsx examples/06-schema-injection.ts
  *
- * This works 100% locally — no gateway needed.
+ * This works 100% locally - no gateway needed.
  */
 import { scanForSchemaInjection } from "../src/index.js";
 

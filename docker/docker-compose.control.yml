@@ -1,4 +1,4 @@
-# Clampd Dashboard — Control Plane
+# Clampd Dashboard - Control Plane
 #
 # Runs the Dashboard (API + Web + Migrations).
 # Requires shared infrastructure from docker-compose.infra.yml
@@ -9,7 +9,7 @@
 #                  -f docker-compose.proxy.yml \
 #                  -f docker-compose.control.yml up -d
 #
-# Usage (with managed databases — Neon, Upstash):
+# Usage (with managed databases - Neon, Upstash):
 #   Set DATABASE_URL, REDIS_URL, NATS_URL in .env, then:
 #   docker compose -f docker-compose.proxy.yml -f docker-compose.control.yml up -d
 #
@@ -41,16 +41,16 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      # Shared Postgres — same database as ag-registry, ag-token, ag-kill, ag-control
+      # Shared Postgres - same database as ag-registry, ag-token, ag-kill, ag-control
       DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD}@postgres:5432/clampd}
-      # Shared Redis — same instance as all ag-* services
+      # Shared Redis - same instance as all ag-* services
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
-      # Shared NATS — receives risk events, kill/revive notifications
+      # Shared NATS - receives risk events, kill/revive notifications
       NATS_URL: ${NATS_URL:-nats://${NATS_TOKEN}@nats:4222}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
       CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:-}
       DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3000}
-      # ClickHouse (optional — for audit log queries)
+      # ClickHouse (optional - for audit log queries)
       CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://clickhouse:8123}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
@@ -62,7 +62,7 @@ services:
       STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      # Set to "true" for self-hosted/local — skips email verification on signup
+      # Set to "true" for self-hosted/local - skips email verification on signup
       CLAMPD_AUTO_VERIFY_EMAIL: ${CLAMPD_AUTO_VERIFY_EMAIL:-true}
     networks:
       - clampd-shared

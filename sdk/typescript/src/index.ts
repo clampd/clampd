@@ -1,5 +1,5 @@
 /**
- * Clampd TypeScript SDK — Guard AI agent tool calls in 1 line.
+ * Clampd TypeScript SDK - Guard AI agent tool calls in 1 line.
  *
  * @example
  * ```ts
@@ -52,7 +52,7 @@ function deepFreeze(obj: Record<string, unknown>): void {
   }
 }
 
-// ── clampd.guard() — wrap any async function ──────────────────────
+// ── clampd.guard() - wrap any async function ──────────────────────
 
 function guard<TArgs extends unknown[], TReturn>(
   fn: (...args: TArgs) => Promise<TReturn>,
@@ -89,7 +89,7 @@ function guard<TArgs extends unknown[], TReturn>(
         if (!res.allowed) {
           // Gateway errors with failOpen: skip enforcement
           if (failOpen && res._gatewayError) {
-            // fall through — allow execution
+            // fall through - allow execution
           } else {
             throw new ClampdBlockedError(res);
           }
@@ -126,7 +126,7 @@ function guard<TArgs extends unknown[], TReturn>(
   };
 }
 
-// ── clampd.tools() — wrap OpenAI tool definitions ─────────────────
+// ── clampd.tools() - wrap OpenAI tool definitions ─────────────────
 
 function tools(
   toolDefs: OpenAITool[],
@@ -156,7 +156,7 @@ function tools(
           scopeToken = res.scope_token ?? "";
           if (!res.allowed) {
             if (failOpen && res._gatewayError) {
-              // fall through — allow execution
+              // fall through - allow execution
             } else {
               throw new ClampdBlockedError(res);
             }
@@ -215,7 +215,7 @@ interface AnthropicMessageResponse {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK wrapper must accept any client shape
 type AnyFunction = (...args: any[]) => Promise<unknown>;
 
-// ── clampd.openai() — wrap OpenAI client ──────────────────────────
+// ── clampd.openai() - wrap OpenAI client ──────────────────────────
 
 function openai<T extends { chat: { completions: { create: AnyFunction } } }>(
   client: T,
@@ -255,7 +255,7 @@ function openai<T extends { chat: { completions: { create: AnyFunction } } }>(
             authorizedTools: _authorizedTools,
           });
         } else {
-          console.warn("[clampd] guardStream explicitly disabled — streaming tool calls are not guarded.");
+          console.warn("[clampd] guardStream explicitly disabled - streaming tool calls are not guarded.");
         }
       }
       return stream;
@@ -349,7 +349,7 @@ function openai<T extends { chat: { completions: { create: AnyFunction } } }>(
   });
 }
 
-// ── clampd.anthropic() — wrap Anthropic client ────────────────────
+// ── clampd.anthropic() - wrap Anthropic client ────────────────────
 
 function anthropic<T extends { messages: { create: AnyFunction } }>(
   client: T,
@@ -388,7 +388,7 @@ function anthropic<T extends { messages: { create: AnyFunction } }>(
             authorizedTools: _authorizedTools,
           });
         } else {
-          console.warn("[clampd] guardStream explicitly disabled — streaming tool calls are not guarded.");
+          console.warn("[clampd] guardStream explicitly disabled - streaming tool calls are not guarded.");
         }
       }
       return stream;
@@ -449,7 +449,7 @@ function anthropic<T extends { messages: { create: AnyFunction } }>(
   });
 }
 
-// ── clampd.adk() — Google ADK callbacks ─────────────────────────
+// ── clampd.adk() - Google ADK callbacks ─────────────────────────
 
 interface AdkOptions {
   agentId?: string;
@@ -532,7 +532,7 @@ function adk(opts: AdkOptions): AdkCallbacks {
   return result;
 }
 
-// ── clampd.vercelAI() — wrap Vercel AI SDK tools ────────────────
+// ── clampd.vercelAI() - wrap Vercel AI SDK tools ────────────────
 
 interface VercelAITool {
   description?: string;
@@ -611,13 +611,13 @@ function vercelAI<T extends Record<string, VercelAITool>>(
   return wrapped as T;
 }
 
-// ── clampd.agent() — auto-delegation scope ──────────────────────
+// ── clampd.agent() - auto-delegation scope ──────────────────────
 
 /**
  * Run a function within an agent's delegation scope.
  *
  * Instead of manually using `withDelegation()`, wrap your agent logic
- * with `clampd.agent()` — all `guard()` calls inside automatically
+ * with `clampd.agent()` - all `guard()` calls inside automatically
  * inherit the delegation chain.
  *
  * @example

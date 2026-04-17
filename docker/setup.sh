@@ -1,5 +1,5 @@
 #!/bin/sh
-# Clampd Quick Setup — generates .env with all required secrets.
+# Clampd Quick Setup - generates .env with all required secrets.
 # Usage: curl -fsSL https://clampd.dev/setup.sh | sh
 #   or:  ./setup.sh
 set -e
@@ -27,7 +27,7 @@ NATS_TOKEN=$(gen_hex 32)
 AG_TOKEN_ENCRYPTION_KEY=$(gen_hex 32)
 
 cat > "$ENV_FILE" <<EOF
-# Clampd v0.9.0 — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
+# Clampd v0.9.0 - generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
 # Docs: https://clampd.dev/docs
 
 # ── License (required) ────────────────────────────────────────

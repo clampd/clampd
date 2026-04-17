@@ -172,7 +172,7 @@ async fn handle_post(config: &GuardConfig, tool_name: &str, tool_output: &str) {
             block(&reason);
         }
         Err(_) => {
-            // PostToolUse: tool already ran. Always fail-open — blocking output
+            // PostToolUse: tool already ran. Always fail-open - blocking output
             // just hides it. Log the error but don't break UX.
             allow();
         }

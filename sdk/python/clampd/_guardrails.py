@@ -26,7 +26,7 @@ from clampd.delegation import (
 logger = logging.getLogger("clampd")
 
 # Import the SINGLE scope token context var from __init__ to avoid duplicate instances.
-# Lazy import to avoid circular dependency — resolved at call time.
+# Lazy import to avoid circular dependency - resolved at call time.
 def _get_scope_token_var() -> contextvars.ContextVar[str]:
     import clampd
     return clampd._scope_token_var
@@ -237,7 +237,7 @@ def extract_anthropic_tool_names(kwargs: dict[str, Any]) -> list[str] | None:
 # Gateway error denial reasons that indicate a transient failure (not a policy denial)
 _GATEWAY_ERROR_REASONS = frozenset({
     "gateway_timeout", "gateway_unreachable", "gateway_error",
-    # NOTE: "circuit_breaker_open" intentionally excluded — sustained outage
+    # NOTE: "circuit_breaker_open" intentionally excluded - sustained outage
     # should not allow failOpen bypass indefinitely.
 })
 
@@ -255,8 +255,8 @@ def guard_tool_callback(
     Enters delegation, calls proxy, stores scope token.
 
     Returns (error_dict | None, scope_token).
-    - None means allowed — proceed with execution.
-    - {error: ...} means blocked — return to framework.
+    - None means allowed - proceed with execution.
+    - {error: ...} means blocked - return to framework.
     """
     ctx, delegation_token = enter_delegation(client.agent_id)
     try:
@@ -278,7 +278,7 @@ def guard_tool_callback(
             _get_scope_token_var().set(scope_token)
             return None, scope_token
 
-        # Not allowed — check if this is a gateway error with fail_open
+        # Not allowed - check if this is a gateway error with fail_open
         if fail_open and result.denial_reason in _GATEWAY_ERROR_REASONS:
             logger.warning("Clampd gateway error (fail-open): %s", result.denial_reason)
             return None, ""
@@ -303,7 +303,7 @@ def inspect_response_callback(
 
     Calls inspect() for anomaly detection, scope validation, and PII detection.
     PII/secrets scanning is handled server-side by the gateway's /v1/inspect
-    endpoint — no separate scan_output() call needed here.
+    endpoint - no separate scan_output() call needed here.
 
     Returns error_dict or None.
     """

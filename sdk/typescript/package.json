@@ -1,7 +1,7 @@
 {
   "name": "@clampd/sdk",
   "version": "0.10.6",
-  "description": "Runtime security SDK for AI agents — guard tool calls in 1 line",
+  "description": "Runtime security SDK for AI agents - guard tool calls in 1 line",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

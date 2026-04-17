@@ -28,7 +28,7 @@ class DelegationContext:
         return len(self.chain) != len(set(self.chain))
 
 
-# Per-request delegation context — propagates through async/await automatically
+# Per-request delegation context - propagates through async/await automatically
 _delegation_ctx: contextvars.ContextVar[DelegationContext | None] = contextvars.ContextVar(
     'clampd_delegation', default=None
 )
@@ -43,14 +43,14 @@ def enter_delegation(agent_id: str) -> tuple[DelegationContext, contextvars.Toke
     """Enter a delegation scope. Returns context and reset token."""
     parent = _delegation_ctx.get()
     if parent is not None:
-        # Nested call — extend the chain
+        # Nested call - extend the chain
         ctx = DelegationContext(
             trace_id=parent.trace_id,
             chain=parent.chain + [agent_id],
             confidence=parent.confidence,
         )
     else:
-        # Root call — start a new chain
+        # Root call - start a new chain
         ctx = DelegationContext(
             trace_id=uuid.uuid4().hex[:16],
             chain=[agent_id],

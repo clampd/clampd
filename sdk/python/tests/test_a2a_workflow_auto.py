@@ -1,4 +1,4 @@
-"""A2A Auto-Delegation E2E tests — SDK public API only.
+"""A2A Auto-Delegation E2E tests - SDK public API only.
 
 Uses clampd.init(), clampd.guard(), clampd.agent(), and clampd.openai()
 with a mocked OpenAI client. The SDK internally auto-detects delegation
@@ -128,12 +128,12 @@ def _skip_if_gateway_down():
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Tests — SDK public API only (guard, agent, openai)
+# Tests - SDK public API only (guard, agent, openai)
 # ═══════════════════════════════════════════════════════════════════════
 
 
 def test_single_agent_guard():
-    """Single agent @clampd.guard() — proxy hits live gateway, no delegation."""
+    """Single agent @clampd.guard() - proxy hits live gateway, no delegation."""
     _skip_if_gateway_down()
     _setup()
     try:
@@ -149,7 +149,7 @@ def test_single_agent_guard():
         result = query_db("SELECT 1")
         print(f"  Single guard: {result}")
 
-        # Outside guard — no delegation
+        # Outside guard - no delegation
         assert get_delegation() is None
     except ClampdBlockedError as e:
         print(f"  Blocked by policy (ok): {e}")
@@ -172,7 +172,7 @@ def test_a2a_auto_two_agent_guard():
             captured["caller"] = ctx.caller_agent_id if ctx else None
             return f"results for: {query}"
 
-        # Orch scope wraps worker call — auto A2A
+        # Orch scope wraps worker call - auto A2A
         with clampd.agent(ORCH_ID):
             try:
                 result = worker_search("latest news")
@@ -209,7 +209,7 @@ def test_a2a_auto_three_agent_guard():
 
         @clampd.guard("data.process", agent_id=WORKER_ID)
         def worker_process(data: str) -> str:
-            # Worker calls auditor — extends chain to 3 hops
+            # Worker calls auditor - extends chain to 3 hops
             try:
                 auditor_log("process_complete", "ok")
             except ClampdBlockedError:
@@ -245,7 +245,7 @@ def test_a2a_auto_cycle_blocked():
 
         @clampd.guard("search.web", agent_id=WORKER_ID)
         def worker_with_callback(query: str) -> str:
-            # Worker calls back to orch — cycle!
+            # Worker calls back to orch - cycle!
             orch_callback("SELECT 1")
             return f"results: {query}"
 
@@ -258,7 +258,7 @@ def test_a2a_auto_cycle_blocked():
                     cycle_blocked = True
                     print(f"  Cycle blocked: {e}")
                 else:
-                    # Blocked by policy before cycle — also acceptable
+                    # Blocked by policy before cycle - also acceptable
                     print(f"  Blocked by policy: {e}")
                     cycle_blocked = True  # policy caught it
 
@@ -275,7 +275,7 @@ def test_a2a_auto_openai_mock():
         mock_oai = _make_mock_openai()
         guarded_oai = clampd.openai(mock_oai, agent_id=ORCH_ID)
 
-        # Call the mocked OpenAI — Clampd intercepts tool calls
+        # Call the mocked OpenAI - Clampd intercepts tool calls
         resp = guarded_oai.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": "What is 2+2?"}],
@@ -289,7 +289,7 @@ def test_a2a_auto_openai_mock():
             }],
         )
         print(f"  OpenAI mock response: {resp.id}")
-        # The mock returns a tool_call — Clampd gateway evaluates it
+        # The mock returns a tool_call - Clampd gateway evaluates it
         assert resp.choices[0].message.tool_calls is not None
     except ClampdBlockedError as e:
         print(f"  OpenAI mock blocked by policy (ok): {e}")
@@ -298,7 +298,7 @@ def test_a2a_auto_openai_mock():
 
 
 def test_a2a_auto_openai_multi_agent():
-    """Two agents using clampd.openai() in nested scopes — auto A2A."""
+    """Two agents using clampd.openai() in nested scopes - auto A2A."""
     _skip_if_gateway_down()
     _setup()
     try:
@@ -346,7 +346,7 @@ def test_a2a_auto_headers_propagated():
     _setup()
     try:
         with clampd.agent(ORCH_ID):
-            # Single agent — no delegation headers
+            # Single agent - no delegation headers
             h1 = clampd.delegation_headers()
             assert h1 == {}, f"Single agent should have empty headers: {h1}"
 
@@ -363,7 +363,7 @@ def test_a2a_auto_headers_propagated():
                     assert AUDITOR_ID in h3["X-Clampd-Delegation-Chain"]
                     print(f"  3-hop headers: chain={h3['X-Clampd-Delegation-Chain']}")
 
-        # Outside — clean
+        # Outside - clean
         assert clampd.delegation_headers() == {}
     finally:
         _teardown()

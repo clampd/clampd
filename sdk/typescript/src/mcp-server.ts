@@ -1,5 +1,5 @@
 /**
- * ClampdMCPProxy — MCP proxy server that routes all tool calls through
+ * ClampdMCPProxy - MCP proxy server that routes all tool calls through
  * the Clampd 9-stage security pipeline before reaching the downstream
  * MCP tool server.
  *
@@ -325,7 +325,7 @@ export class ClampdMCPProxy {
       },
     );
 
-    // 4. Register listTools handler — mirror downstream tools
+    // 4. Register listTools handler - mirror downstream tools
     this.mcpServer.setRequestHandler(
       mcp.ListToolsRequestSchema,
       async () => {
@@ -333,7 +333,7 @@ export class ClampdMCPProxy {
       },
     );
 
-    // 5. Register callTool handler — intercept via Clampd gateway
+    // 5. Register callTool handler - intercept via Clampd gateway
     const client = this.mcpClient;
     const proxyRef = this;
     this.mcpServer.setRequestHandler(
@@ -490,7 +490,7 @@ export class ClampdMCPProxy {
     const url = `${this.gatewayUrl}${endpoint}`;
 
     // MCP proxy handles downstream forwarding itself (Stage C below),
-    // so we use evaluate-only mode (empty target_url) — same as the SDK.
+    // so we use evaluate-only mode (empty target_url) - same as the SDK.
     // A non-empty target_url would push the gateway into Stages 7-8
     // (token exchange + HTTP forward to "mcp://downstream/...") which fails.
     const body: Record<string, unknown> = {

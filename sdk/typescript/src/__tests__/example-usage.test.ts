@@ -1,6 +1,6 @@
 /**
  * End-to-end usage tests demonstrating real-world SDK patterns.
- * All gateway calls are mocked — no running gateway needed.
+ * All gateway calls are mocked - no running gateway needed.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import clampd, { ClampdBlockedError, scanForSchemaInjection } from "../index.js";
