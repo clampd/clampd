@@ -6,6 +6,7 @@ import "agentguard/common.proto";
 
 service PolicyService {
   rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+  rpc EvaluatePayment(EvaluatePaymentRequest) returns (EvaluatePaymentResponse);
 }
 
 enum PolicyAction {
@@ -37,6 +38,43 @@ message EvaluateRequest {
   optional string delegation_trace_id = 19;
   optional string delegation_confidence = 20; // "verified", "inferred", "declared"
   string org_id = 21;                        // agent's org (for multi-org enforcement lookup)
+  // Payment context (populated for payment.* tools)
+  optional int64 payment_amount_cents = 22;
+  optional string payment_recipient = 23;
+  optional string payment_network = 24;
+  optional string payment_currency = 25;
+  optional bool payment_vendor_approved = 26; // pre-checked by gateway against approved_vendors
+  // Delegation context (enriched by gateway)
+  optional bool delegation_approved = 27;
+}
+
+// Payment-specific policy evaluation (x402 post-response + AP2 mandates).
+// Called by the gateway when it intercepts a payment flow and needs a policy decision.
+// Goes directly to Cedar — no intent classification or rules engine.
+message EvaluatePaymentRequest {
+  string agent_id = 1;
+  string org_id = 2;
+  string protocol = 3;                    // "x402" or "ap2"
+  int64 amount_cents = 4;                 // transaction amount in cents (0 = unverifiable)
+  string currency = 5;                    // "USDC", "WBTC", "USD", etc.
+  string recipient = 6;                   // wallet address or payee ID
+  string network = 7;                     // "base", "ethereum", etc.
+  repeated string agent_scopes = 8;       // agent's allowed scopes
+  double agent_risk_score = 9;            // current assessed risk score
+  int64 max_payment_per_tx_cents = 10;    // agent boundary: per-tx limit (0 = no limit)
+  int64 max_payment_per_hour_cents = 11;  // agent boundary: hourly cap (0 = no limit)
+  bool vendor_approved = 12;              // pre-checked: recipient in approved_vendors?
+  // AP2-specific
+  optional bool human_present = 13;
+  optional bool merchant_signed = 14;
+  optional string mandate_type = 15;      // "cart" or "intent"
+}
+
+message EvaluatePaymentResponse {
+  bool allowed = 1;
+  string deny_reason = 2;
+  double risk_modifier = 3;
+  repeated string matched_policies = 4;
 }
 
 message EvaluateResponse {
@@ -48,4 +86,55 @@ message EvaluateResponse {
   optional string boundary_violation = 6;
   // Per-call scope token TTL in seconds (from scope exemption config)
   uint32 token_ttl_seconds = 8;
+  // Structured reason codes for this decision (#32). Every deny or
+  // downscope response carries >= 1 code; Allow responses may carry
+  // advisory codes (e.g. flagged anomalies that did not block).
+  // Clients should prefer these over parsing `reason`.
+  repeated ReasonCode reason_codes = 9;
+  // v0.11.0 trust model: serialized TrustLevel ("Trusted" | "Unknown" |
+  // "Suspect" | "Blocked"). Computed by BoundaryEvaluator on every
+  // request; threaded through ag-gateway into ag-intent (P4) and Cedar
+  // context (P6). Empty string = no trust data (pre-v0.11 server).
+  string trust_level = 10;
+  // v0.11.0: serialized BoundaryReason for the trust assignment
+  // (e.g. "AllowListMatch", "NoListConfigured"). Empty when no
+  // boundary evaluated.
+  string boundary_reason = 11;
+  // v0.11.0: matched boundary rule ID (e.g. "B-005"). Empty when none.
+  string boundary_matched_rule = 12;
+}
+
+// Structured reason codes (#32). Surfaces the typed detector signal
+// that drove the policy decision so dashboard reviewers and the
+// FP-feedback loop can attribute outcomes without parsing free-text.
+//
+// Values map to existing detectors — no new logic, only surfacing.
+enum ReasonCode {
+  REASON_CODE_UNSPECIFIED = 0;
+
+  // ag-risk baseline / anomaly detectors
+  UNUSUAL_VELOCITY = 1;      // calls/min deviates from per-agent baseline
+  NEW_SCOPE = 2;             // scope requested is not in the agent's known set
+  OFF_HOURS = 3;             // call outside configured active-hours window
+  VOLUME_SPIKE = 4;          // records-per-query / bytes-per-hour spike
+  POST_CONTACT_DRIFT = 5;    // behavior drift after external contact
+  SEMANTIC_DRIFT = 6;        // prompt / intent embedding drift vs. baseline
+  CAPABILITY_DRIFT = 7;      // new tool+action pair outside baseline set
+
+  // ag-intent / risk classification
+  HIGH_RISK_INTENT = 10;     // intent classified Suspicious / Dangerous
+  CHAIN_DETECTED = 11;       // multi-agent delegation chain observed
+
+  // Hard denies from the policy engine (Layer 1)
+  HARD_DENY_SUSPENDED = 20;    // P-DENY-001 — agent_state != active
+  HARD_DENY_MALICIOUS = 21;    // P-DENY-002 — intent == Malicious
+  HARD_DENY_KILL_LISTED = 22;  // P-DENY-003 — kill_listed session flag
+
+  // Session-aware downscoping (Layer 3)
+  SESSION_BULK_READ = 30;      // P-SESSION-001
+  SESSION_EXTERNAL_SEND = 31;  // P-SESSION-002
+  SESSION_SCOPE_PROBING = 32;  // P-SESSION-003
+
+  // Custom / dashboard-authored policies
+  CEDAR_POLICY_MATCH = 40;     // Cedar forbid rule fired
 }

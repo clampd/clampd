@@ -26,12 +26,18 @@ message ClassifyRequest {
   int32 session_total_calls = 11;
   int32 session_context_window = 12;
   string session_context_json = 13;
-  // field 14 removed (was agent_scopes - scope exemptions moved to policy layer)
+  // field 14 removed (was agent_scopes — scope exemptions moved to policy layer)
   optional string caller_agent_id = 15;
   repeated string delegation_chain = 16;
   optional string delegation_trace_id = 17;
   optional string delegation_confidence = 18; // "verified", "inferred", "declared"
   string tool_descriptor_hash = 19; // SHA-256 hex from SDK (64 chars), empty if not provided
+  // v0.11.0 trust model: serialized TrustLevel from boundary evaluation.
+  // ag-gateway populates when boundary runs before classify. Values:
+  // "Trusted" | "Unknown" | "Suspect" | "Blocked" | "" (treat empty
+  // as Unknown for rolling-deploy safety). P4 consumes this to skip
+  // LLM Judge / R-rules when value == "Trusted".
+  string trust_level = 20;
 }
 
 message ClassifyResponse {
@@ -50,5 +56,5 @@ message ClassifyResponse {
   bool schema_injection_detected = 13;   // true if R068/R069/R070 matched
   string schema_injection_type = 14;     // "xml_injection", "json_injection", "tool_steering", "constraint_weakening", or ""
   string category = 15;                  // tool category name from ag-common::categories (e.g. "Shell / Process Execution")
-  string defense_tier = 16;              // "rules", "policy", or "hybrid" - which enforcement layer handles this tool
+  string defense_tier = 16;              // "rules", "policy", or "hybrid" — which enforcement layer handles this tool
 }
