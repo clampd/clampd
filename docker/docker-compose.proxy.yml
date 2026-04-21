@@ -37,7 +37,7 @@ services:
   # in docker-compose.infra.yml - start that first.
 
   ag-registry:
-    image: ghcr.io/clampd/ag-registry:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-registry:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -59,7 +59,7 @@ services:
         condition: service_healthy
 
   ag-intent:
-    image: ghcr.io/clampd/ag-intent:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-intent:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 3
@@ -80,7 +80,7 @@ services:
         condition: service_healthy
 
   ag-policy:
-    image: ghcr.io/clampd/ag-policy:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-policy:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -101,7 +101,7 @@ services:
         condition: service_healthy
 
   ag-token:
-    image: ghcr.io/clampd/ag-token:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-token:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -125,7 +125,7 @@ services:
         condition: service_healthy
 
   ag-gateway:
-    image: ghcr.io/clampd/ag-gateway:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-gateway:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     ports:
       - "8080:8080"
@@ -168,7 +168,7 @@ services:
         condition: service_healthy
 
   ag-shadow:
-    image: ghcr.io/clampd/ag-shadow:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-shadow:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -192,7 +192,7 @@ services:
         condition: service_healthy
 
   ag-kill:
-    image: ghcr.io/clampd/ag-kill:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-kill:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -220,7 +220,7 @@ services:
         condition: service_started
 
   ag-risk:
-    image: ghcr.io/clampd/ag-risk:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-risk:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -247,7 +247,7 @@ services:
         condition: service_started
 
   ag-control:
-    image: ghcr.io/clampd/ag-control:${CLAMPD_VERSION:-v0.9.0}
+    image: ghcr.io/clampd/ag-control:${CLAMPD_VERSION:-v0.13.2}
     <<: *rust-defaults
     deploy:
       replicas: 2
