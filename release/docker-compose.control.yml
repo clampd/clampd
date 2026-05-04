@@ -48,7 +48,7 @@ services:
   # ── Migrations (runs once, then exits) ─────────────────────────
 
   dashboard-migrate:
-    image: ghcr.io/clampd/dashboard-api:${CLAMPD_VERSION:-v0.13.2}
+    image: ghcr.io/clampd/dashboard-api:${CLAMPD_VERSION:-v0.16.10}
     command: ["node", "dist/db/migrate.js"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd_dev}@postgres:5432/clampd}
@@ -57,7 +57,7 @@ services:
   # ── Application ────────────────────────────────────────────────
 
   dashboard-api:
-    image: ghcr.io/clampd/dashboard-api:${CLAMPD_VERSION:-v0.13.2}
+    image: ghcr.io/clampd/dashboard-api:${CLAMPD_VERSION:-v0.16.10}
     restart: on-failure
     ports:
       - "3001:3001"
@@ -91,7 +91,7 @@ services:
         condition: service_completed_successfully
 
   dashboard-web:
-    image: ghcr.io/clampd/dashboard-web:${CLAMPD_VERSION:-v0.13.2}
+    image: ghcr.io/clampd/dashboard-web:${CLAMPD_VERSION:-v0.16.10}
     build:
       context: ../dashboard/web
       args:
