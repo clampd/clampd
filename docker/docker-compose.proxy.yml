@@ -169,6 +169,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       IDP_PROVIDER: "none"
+      AG_TOKEN_ENCRYPTION_KEY: ${AG_TOKEN_ENCRYPTION_KEY:?AG_TOKEN_ENCRYPTION_KEY is required — set it in .env}
       RUST_LOG: "info,ag_token=debug"
     depends_on:
       nats:
@@ -201,6 +202,17 @@ services:
       TOKEN_URL: http://ag-token:50051
       KILL_URL: http://ag-kill:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      CLAMPD_LLM_JUDGE_ENABLED: ${CLAMPD_LLM_JUDGE_ENABLED:-false}
+      CLAMPD_LLM_JUDGE_PROVIDER: ${CLAMPD_LLM_JUDGE_PROVIDER:-openai}
+      CLAMPD_LLM_JUDGE_MODEL: ${CLAMPD_LLM_JUDGE_MODEL:-gpt-4o-mini}
+      CLAMPD_LLM_JUDGE_API_KEY: ${CLAMPD_LLM_JUDGE_API_KEY:-}
+      CLAMPD_LLM_JUDGE_BASE_URL: ${CLAMPD_LLM_JUDGE_BASE_URL:-}
+      CLAMPD_LLM_JUDGE_TIMEOUT_MS: ${CLAMPD_LLM_JUDGE_TIMEOUT_MS:-3000}
+      CLAMPD_LLM_JUDGE_FAIL_OPEN: ${CLAMPD_LLM_JUDGE_FAIL_OPEN:-true}
+      CLAMPD_LLM_JUDGE_MAX_RPM: ${CLAMPD_LLM_JUDGE_MAX_RPM:-60}
+      CLAMPD_LLM_JUDGE_LOW: ${CLAMPD_LLM_JUDGE_LOW:-0.2}
+      CLAMPD_LLM_JUDGE_HIGH: ${CLAMPD_LLM_JUDGE_HIGH:-0.75}
+      CLAMPD_DELEGATION_SIGNATURES: ${CLAMPD_DELEGATION_SIGNATURES:-off}
       RUST_LOG: "info,ag_gateway=debug"
     depends_on:
       ag-registry:
@@ -235,6 +247,7 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
       PII_NER_ENABLED: "true"
       PII_TOKENIZATION_ENABLED: "false"
+      CLICKHOUSE_ENABLED: ${CLICKHOUSE_ENABLED:-true}
       RUST_LOG: "info,ag_shadow=debug"
     depends_on:
       nats:
