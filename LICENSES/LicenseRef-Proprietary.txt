@@ -1,0 +1,26 @@
+Clampd Proprietary License
+
+Copyright (c) 2026 Clampd Inc. All rights reserved.
+
+The files covered by this license contain proprietary detection rules,
+keyword dictionaries, compound signal definitions, and compliance mappings
+developed by Clampd Inc.
+
+These files are provided as interface stubs in the public repository for
+transparency and auditability. The full implementations are included only
+in official Clampd Docker images and binary distributions.
+
+PERMISSIONS:
+- You MAY read these stub files to understand the public API interface.
+- You MAY write code that calls these interfaces via the Clampd SDK.
+
+RESTRICTIONS:
+- You MAY NOT use, copy, modify, or distribute the full implementations.
+- You MAY NOT reverse-engineer the compiled binaries to extract rule content.
+
+The full rule library, keyword dictionaries, and signal definitions are
+available through Clampd's commercial offerings:
+  - Docker images: ghcr.io/clampd/ag-engine:<version>
+  - Managed service: https://clampd.dev
+
+For licensing inquiries: license@clampd.dev

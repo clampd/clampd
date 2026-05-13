@@ -1,0 +1,23 @@
+title: OS Command Injection
+id: sigma-command-injection
+description: Detects shell command injection in tool parameters
+references:
+    - https://owasp.org/Top10/A03_2021-Injection/
+tags:
+    - attack.execution
+    - attack.t1059.004
+logsource:
+    category: shell
+detection:
+    selection:
+        input|contains:
+            - 'rm -rf'
+            - 'curl | sh'
+            - 'wget | bash'
+            - '; cat /etc'
+            - '$(whoami)'
+            - '| nc '
+            - 'mkfifo'
+            - 'bash -i >& /dev/tcp'
+    condition: selection
+level: critical

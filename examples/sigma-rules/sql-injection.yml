@@ -1,0 +1,25 @@
+title: SQL Injection Attempt
+id: sigma-sql-injection
+description: Detects SQL injection patterns in agent tool calls
+references:
+    - https://owasp.org/Top10/A03_2021-Injection/
+tags:
+    - attack.initial_access
+    - attack.t1190
+logsource:
+    category: database
+detection:
+    selection:
+        input|contains:
+            - 'UNION SELECT'
+            - 'OR 1=1'
+            - 'DROP TABLE'
+            - "'; DELETE"
+            - "1'; EXEC"
+            - 'WAITFOR DELAY'
+            - 'BENCHMARK('
+            - 'SLEEP('
+            - 'information_schema'
+            - 'pg_catalog'
+    condition: selection
+level: critical

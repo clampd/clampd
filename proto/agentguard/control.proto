@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package agentguard.control;
+
+service ControlService {
+  // Get control plane status (leader, license, versions, health).
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  // Get cluster-wide health report.
+  rpc GetClusterHealth(GetClusterHealthRequest) returns (GetClusterHealthResponse);
+  // Get current license info.
+  rpc GetLicenseStatus(GetLicenseStatusRequest) returns (GetLicenseStatusResponse);
+}
+
+message GetStatusRequest {}
+
+message GetStatusResponse {
+  string leader_id = 1;
+  bool is_leader = 2;
+  string license_status = 3;
+  string license_tier = 4;
+  uint32 rules_version = 5;
+  uint32 policy_version = 6;
+  string last_heartbeat = 7;
+  string uptime = 8;
+}
+
+message GetClusterHealthRequest {}
+
+message GetClusterHealthResponse {
+  string overall_status = 1;
+  repeated ServiceHealth services = 2;
+  string license_status = 3;
+  uint32 rules_version = 4;
+  string nats_status = 5;
+  string redis_status = 6;
+  string postgres_status = 7;
+  string checked_at = 8;
+}
+
+message ServiceHealth {
+  string name = 1;
+  bool healthy = 2;
+  string status = 3;
+  uint32 latency_ms = 4;
+}
+
+message GetLicenseStatusRequest {}
+
+message GetLicenseStatusResponse {
+  string status = 1;
+  string tier = 2;
+  uint32 max_agents = 3;
+  uint32 max_rps = 4;
+  repeated string features = 5;
+  string expires_at = 6;
+  uint32 grace_hours_remaining = 7;
+  string last_heartbeat = 8;
+}

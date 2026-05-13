@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package agentguard.risk;
+
+service RiskService {
+  // Get current cumulative risk score for an agent.
+  rpc GetAgentRisk(GetAgentRiskRequest) returns (GetAgentRiskResponse);
+  // Get risk scores for all agents (dashboard feed).
+  rpc GetAllRisks(GetAllRisksRequest) returns (GetAllRisksResponse);
+  // Get risk history for an agent.
+  rpc GetRiskHistory(GetRiskHistoryRequest) returns (GetRiskHistoryResponse);
+}
+
+message GetAgentRiskRequest {
+  string agent_id = 1;
+}
+
+message GetAgentRiskResponse {
+  string agent_id = 1;
+  double ema_score = 2;
+  string classification = 3;
+  string updated_at = 4;
+  uint32 events_processed = 5;
+}
+
+message GetAllRisksRequest {
+  // Optional: filter to a specific org.
+  string org_id = 1;
+  // Only return agents above this threshold.
+  double min_score = 2;
+}
+
+message GetAllRisksResponse {
+  repeated AgentRiskSummary agents = 1;
+}
+
+message AgentRiskSummary {
+  string agent_id = 1;
+  double ema_score = 2;
+  string classification = 3;
+  string updated_at = 4;
+}
+
+message GetRiskHistoryRequest {
+  string agent_id = 1;
+  uint32 limit = 2;
+}
+
+message GetRiskHistoryResponse {
+  repeated RiskEvent events = 1;
+}
+
+message RiskEvent {
+  double event_risk = 1;
+  double ema_before = 2;
+  double ema_after = 3;
+  string classification = 4;
+  string tool_name = 5;
+  string timestamp = 6;
+}

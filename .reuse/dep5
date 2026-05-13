@@ -1,0 +1,96 @@
+Format: https://www.reuse.software/spec/3.2/
+
+# ── Fully Open (Apache 2.0) ──────────────────────────────────
+Files: sdk/**
+Copyright: 2026 Clampd Inc.
+License: Apache-2.0
+
+Files: proto/**
+Copyright: 2026 Clampd Inc.
+License: Apache-2.0
+
+Files: docker/**
+Copyright: 2026 Clampd Inc.
+License: Apache-2.0
+
+Files: video/**
+Copyright: 2026 Clampd Inc.
+License: Apache-2.0
+
+Files: README.md
+Copyright: 2026 Clampd Inc.
+License: Apache-2.0
+
+Files: CHANGELOG.md
+Copyright: 2026 Clampd Inc.
+License: Apache-2.0
+
+# ── Source-Available (BSL 1.1) ────────────────────────────────
+Files: services/crates/ag-gateway/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-policy/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-risk/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-shadow/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-intent/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-control/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-common/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-token/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-kill/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-registry/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-proto/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/clampd-cli/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+Files: services/crates/ag-engine/**
+Copyright: 2026 Clampd Inc.
+License: BUSL-1.1
+
+# ── Proprietary (stubs only in public repo) ───────────────────
+Files: services/crates/ag-engine/src/builtins/**
+Copyright: 2026 Clampd Inc.
+License: LicenseRef-Proprietary
+
+Files: services/crates/ag-engine/src/dictionary/**
+Copyright: 2026 Clampd Inc.
+License: LicenseRef-Proprietary
+
+Files: services/crates/ag-engine/src/signals/**
+Copyright: 2026 Clampd Inc.
+License: LicenseRef-Proprietary
+
+Files: services/crates/ag-engine/src/compliance/**
+Copyright: 2026 Clampd Inc.
+License: LicenseRef-Proprietary

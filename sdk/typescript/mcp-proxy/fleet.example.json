@@ -1,0 +1,38 @@
+{
+  "gateway": "http://ag-gateway:8080",
+  "apiKey": "ag_test_acme_2026",
+  "secret": "",
+  "dashboardPort": 3000,
+  "dryRun": false,
+  "verbose": false,
+  "agents": [
+    {
+      "name": "HR Analyst",
+      "agentId": "b0000001-0002-0000-0000-000000000001",
+      "port": 3003,
+      "upstream": "npx -y @modelcontextprotocol/server-filesystem /data",
+      "color": "#3b82f6",
+      "scanInput": true,
+      "scanOutput": true,
+      "demoPanel": true
+    },
+    {
+      "name": "DevOps Bot",
+      "agentId": "b0000001-0003-0000-0000-000000000001",
+      "port": 3004,
+      "upstream": "npx -y @modelcontextprotocol/server-filesystem /tmp",
+      "color": "#22c55e",
+      "scanInput": true,
+      "scanOutput": true
+    },
+    {
+      "name": "DBA Bot",
+      "agentId": "b0000001-0004-0000-0000-000000000001",
+      "port": 3005,
+      "upstream": "npx -y @modelcontextprotocol/server-postgres",
+      "color": "#f59e0b",
+      "scanInput": true,
+      "scanOutput": true
+    }
+  ]
+}

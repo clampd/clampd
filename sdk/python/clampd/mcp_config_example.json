@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "filesystem-guarded": {
+      "command": "python",
+      "args": [
+        "-m", "clampd.mcp_server",
+        "--downstream", "npx -y @modelcontextprotocol/server-filesystem /tmp",
+        "--agent-id", "b0000000-0000-0000-0000-000000000001",
+        "--gateway", "http://localhost:8080"
+      ]
+    },
+    "filesystem-guarded-dryrun": {
+      "command": "python",
+      "args": [
+        "-m", "clampd.mcp_server",
+        "--downstream", "npx -y @modelcontextprotocol/server-filesystem /tmp",
+        "--agent-id", "b0000000-0000-0000-0000-000000000001",
+        "--gateway", "http://localhost:8080",
+        "--dry-run"
+      ]
+    }
+  }
+}

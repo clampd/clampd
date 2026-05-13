@@ -1,0 +1,22 @@
+title: Path Traversal Attempt
+id: sigma-path-traversal
+description: Detects directory traversal attempts to access files outside intended scope
+references:
+    - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
+tags:
+    - attack.discovery
+    - attack.t1083
+logsource:
+    category: filesystem
+detection:
+    selection:
+        input|contains:
+            - '../'
+            - '..\'
+            - '%2e%2e'
+            - '/etc/passwd'
+            - '/etc/shadow'
+            - '%00'
+            - '..;/'
+    condition: selection
+level: high

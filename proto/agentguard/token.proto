@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package agentguard.token;
+
+service TokenService {
+  rpc ExchangeToken(ExchangeRequest) returns (ExchangeResponse);
+  rpc IntrospectToken(IntrospectRequest) returns (IntrospectResponse);
+  rpc RevokeAgent(RevokeRequest) returns (RevokeResponse);
+}
+
+message ExchangeRequest {
+  string subject_token = 1;
+  string agent_id = 2;
+  repeated string requested_scopes = 3;
+  string tool_name = 4;
+  string call_binding_hash = 5;
+  string session_id = 6;
+}
+
+message ExchangeResponse {
+  string access_token = 1;
+  string token_type = 2;
+  uint32 expires_in = 3;
+  string scope = 4;
+  string jti = 5;
+}
+
+message IntrospectRequest {
+  string token = 1;
+}
+
+message IntrospectResponse {
+  bool active = 1;
+  string sub = 2;
+  string scope = 3;
+  uint64 exp = 4;
+  string tool_binding = 5;
+  optional string reason = 6;
+}
+
+message RevokeRequest {
+  string agent_id = 1;
+}
+
+message RevokeResponse {
+  uint32 tokens_revoked = 1;
+  uint32 sessions_revoked = 2;
+}

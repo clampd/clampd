@@ -1,0 +1,27 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[user]
+	name = Mehul Soni
+	email = mehul.soni89@gmail.com
+[remote "origin"]
+	url = https://github.com/clampd/clampd.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+	gh-resolved = base
+[branch "release/v0.12.0"]
+	remote = origin
+	merge = refs/heads/release/v0.12.0
+[branch "hotfix/v0.12.2"]
+	remote = origin
+	merge = refs/heads/hotfix/v0.12.2
+[branch "hotfix/v0.12.3"]
+	remote = origin
+	merge = refs/heads/hotfix/v0.12.3
+[branch "hotfix/v0.12.4"]
+	remote = origin
+	merge = refs/heads/hotfix/v0.12.4
+[branch "hotfix/v0.12.5"]
+	remote = origin
+	merge = refs/heads/hotfix/v0.12.5

@@ -1,0 +1,24 @@
+title: Data Exfiltration Attempt
+id: sigma-data-exfiltration
+description: Detects patterns indicating data exfiltration via DNS, HTTP, or file transfer
+references:
+    - https://attack.mitre.org/tactics/TA0010/
+tags:
+    - attack.exfiltration
+    - attack.t1048
+logsource:
+    category: network
+detection:
+    selection:
+        input|contains:
+            - 'base64 encode'
+            - 'nc -l'
+            - 'curl -X POST'
+            - 'webhook.site'
+            - 'requestbin'
+            - 'ngrok.io'
+            - 'pipedream.net'
+            - 'pastebin.com'
+            - 'transfer.sh'
+    condition: selection
+level: critical

@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package agentguard.common;
+
+message AgentProfile {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  string owner_user_id = 4;
+  string idp_realm = 5;
+  string declared_purpose = 6;
+  repeated string allowed_tools = 7;
+  repeated string allowed_scopes = 8;
+  string state = 9;
+  double risk_score = 10;
+  string credential_hash = 11;
+  string enforcement_mode = 12;
+  string created_at = 13;
+  string last_active_at = 14;
+  BoundaryConfig boundaries = 15;
+}
+
+message BoundaryConfig {
+  // Field numbers 4 and 10 held the legacy flat domain allowlist/blocklist.
+  // They are replaced by the scope-aware `allowlist` below (field 12) and
+  // reserved so no future field accidentally reuses them.
+  reserved 4, 10;
+  reserved "blocked_external_domains", "allowed_external_domains";
+
+  uint32 max_records_per_query = 1;
+  uint32 max_calls_per_minute = 2;
+  double max_data_volume_mb_per_hour = 3;
+  uint32 allowed_hours_start = 5;
+  uint32 allowed_hours_end = 6;
+  string allowed_hours_timezone = 7;
+  uint32 allowed_days = 8;
+  double auto_suspend_threshold = 9;
+  uint32 max_calls_per_session = 11;
+  // Per-scope allowlist entries. Empty list for a given scope means
+  // `destination_default_policy` applies — `deny` for scopes that declare one.
+  repeated BoundaryAllowlistEntry allowlist = 12;
+}
+
+// One entry in an agent's scope-aware boundary allowlist.
+// Pure allowlist — no denylist concept. Empty list for a scope with
+// `destination_default_policy = "deny"` means all requests to that scope
+// are denied (fail-closed). Mirrors the `agent_boundary_allowlist` table.
+message BoundaryAllowlistEntry {
+  // Field 4 previously held `mode` ("allow" | "deny"). Removed — pure
+  // allowlist semantics make it redundant with deny-by-default routing.
+  reserved 4;
+  reserved "mode";
+
+  string category = 1;     // taxonomy category (e.g. "comms", "net", "fs")
+  string subcategory = 2;  // taxonomy subcategory (e.g. "email", "http", "file")
+  string pattern = 3;      // destination pattern: domain, path prefix, identifier; "*" = any
+}
+
+message ShadowEvent {
+  string request_id = 1;
+  string trace_id = 2;
+  string org_id = 3;
+  string agent_id = 4;
+  string agent_name = 5;
+  string user_id = 6;
+  string tool_name = 7;
+  string tool_action = 8;
+  string params_hash = 9;
+  string prompt_hash = 10;
+  repeated string encodings_detected = 11;
+  double encoding_risk_bonus = 12;
+  double assessed_risk = 13;
+  double session_risk_factor = 14;
+  string intent_classification = 15;
+  repeated string intent_labels = 16;
+  repeated string matched_rules = 17;
+  string policy_action = 18;
+  string policy_reason = 19;
+  string boundary_violation = 20;
+  string scope_requested = 21;
+  string scope_granted = 22;
+  bool blocked = 23;
+  string denial_reason = 24;
+  string session_id = 25;
+  repeated string session_flags = 26;
+  ResponseMetadata response_metadata = 27;
+  repeated string degraded_stages = 28;
+  uint32 latency_ms = 29;
+  string timestamp = 30;
+}
+
+message ResponseMetadata {
+  uint32 status_code = 1;
+  uint64 body_size_bytes = 2;
+  uint32 records_count = 3;
+  bool contains_pii_patterns = 4;
+  bool truncated = 5;
+}
