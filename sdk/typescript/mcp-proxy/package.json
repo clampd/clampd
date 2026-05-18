@@ -1,6 +1,6 @@
 {
   "name": "@clampd/mcp-proxy",
-  "version": "0.22.1",
+  "version": "0.23.0",
   "description": "Standalone MCP proxy that wraps any MCP server with Clampd's 9-stage security pipeline",
   "type": "module",
   "main": "dist/index.js",
