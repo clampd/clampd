@@ -285,4 +285,4 @@ Detection features (Luhn credit card validation, secrets scanning, multi-layer d
 - YouTube: https://www.youtube.com/@Clampd_dev
 - PyPI: `pip install clampd`
 - npm: `npm install @clampd/sdk`
-- Docker: `ghcr.io/clampd/ag-gateway:v0.23.0`
+- Docker: `ghcr.io/clampd/ag-gateway:v0.23.1`
