@@ -1,6 +1,6 @@
 [package]
 name = "clampd-guard"
-version = "0.23.4"
+version = "0.23.5"
 edition = "2021"
 description = "Runtime security guard for AI coding tools - PreToolUse/PostToolUse hook for Claude Code"
 homepage = "https://clampd.dev"
