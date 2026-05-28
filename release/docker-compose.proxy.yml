@@ -130,6 +130,10 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_intent=debug"
+      # Eval cache around the L1 rule evaluator (defaults shown).
+      # AG_INTENT_EVAL_CACHE_TTL_SECS: "5"
+      # AG_INTENT_EVAL_CACHE_MAX: "10000"
+      # AG_INTENT_EVAL_CACHE_DISABLED: ""   # any non-empty value disables
     depends_on:
       nats:
         condition: service_healthy
