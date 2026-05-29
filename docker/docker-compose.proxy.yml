@@ -96,7 +96,7 @@ services:
   # ── Runtime Security Layer ─────────────────────────────────────
 
   ag-registry:
-    image: ghcr.io/clampd/clampd/ag-registry:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-registry:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -116,7 +116,7 @@ services:
         condition: service_healthy
 
   ag-intent:
-    image: ghcr.io/clampd/clampd/ag-intent:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-intent:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 3
@@ -130,12 +130,16 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_intent=debug"
+      # Eval cache around the L1 rule evaluator (defaults shown).
+      # AG_INTENT_EVAL_CACHE_TTL_SECS: "5"
+      # AG_INTENT_EVAL_CACHE_MAX: "10000"
+      # AG_INTENT_EVAL_CACHE_DISABLED: ""   # any non-empty value disables
     depends_on:
       nats:
         condition: service_healthy
 
   ag-policy:
-    image: ghcr.io/clampd/clampd/ag-policy:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-policy:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -154,7 +158,7 @@ services:
         condition: service_healthy
 
   ag-token:
-    image: ghcr.io/clampd/clampd/ag-token:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-token:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -176,7 +180,7 @@ services:
         condition: service_healthy
 
   ag-gateway:
-    image: ghcr.io/clampd/clampd/ag-gateway:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-gateway:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     ports:
       - "8080:8080"
@@ -231,7 +235,7 @@ services:
         condition: service_healthy
 
   ag-shadow:
-    image: ghcr.io/clampd/clampd/ag-shadow:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-shadow:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -254,7 +258,7 @@ services:
         condition: service_healthy
 
   ag-kill:
-    image: ghcr.io/clampd/clampd/ag-kill:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-kill:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -280,7 +284,7 @@ services:
         condition: service_started
 
   ag-risk:
-    image: ghcr.io/clampd/clampd/ag-risk:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-risk:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -305,7 +309,7 @@ services:
         condition: service_started
 
   ag-control:
-    image: ghcr.io/clampd/clampd/ag-control:${CLAMPD_VERSION:-v0.22.1}
+    image: ghcr.io/clampd/clampd/ag-control:${CLAMPD_VERSION:-v0.23.5}
     <<: *rust-defaults
     deploy:
       replicas: 2
