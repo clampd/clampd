@@ -264,11 +264,16 @@ pub async fn run(target: &str) {
 
     eprintln!("[clampd] Syncing {} tools to gateway...", tools.len());
 
-    let bearer = auth::load_employee_token()
-        .unwrap_or_else(|| {
-            auth::get_cached_jwt(&config.agent_id, &config.secret)
-                .unwrap_or_default()
-        });
+    let bearer = match auth::load_employee_token() {
+        Some(t) => t,
+        None => match crate::enroll::get_identity(&config.gateway_url, &config.api_key, &config.agent_id).await {
+            Ok(id) => auth::make_agent_jwt(&id.agent_id, &id.signing_key, 3600).unwrap_or_default(),
+            Err(e) => {
+                eprintln!("[clampd] enrollment failed: {e}");
+                return;
+            }
+        },
+    };
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))

@@ -52,7 +52,9 @@ mod baseline_cache;
 mod circuit_breaker;
 mod decision;
 mod delegation;
+mod denial;
 mod deny;
+mod enroll;
 mod extractor;
 mod kill_listener;
 mod license_gate;
@@ -61,6 +63,7 @@ mod middleware;
 mod register;
 mod model_escalation;
 mod normalize;
+mod oidc_attest;
 pub mod otel;
 mod proxy;
 mod rate_limiter;
@@ -120,6 +123,8 @@ pub struct AppState {
     /// v0.11.1: org + per-agent trust config cache. Consulted to gate the
     /// PII scanner when trust=Trusted + skip_pii_scan=true.
     pub trust_cache: Arc<ag_common::trust_config::TrustConfigCache>,
+    /// TTL cache of issuer JWK sets for workload OIDC attestation at enroll.
+    pub oidc_jwks_cache: Arc<crate::oidc_attest::JwksCache>,
 }
 
 #[tokio::main]
@@ -423,7 +428,7 @@ async fn main() -> Result<()> {
         token,
         redis_pool,
         nats,
-        http_client,
+        http_client: http_client.clone(),
         deny_set,
         circuit_breakers,
         degradation: config.degradation.clone(),
@@ -434,6 +439,7 @@ async fn main() -> Result<()> {
         scope_signing_key,
         scope_verifying_key,
         trust_cache,
+        oidc_jwks_cache: crate::oidc_attest::JwksCache::new(http_client.clone()),
     });
 
     // ── Connection warmup ──────────────────────────────────────────────
@@ -539,6 +545,9 @@ async fn main() -> Result<()> {
         .route("/v1/verify", post(proxy::handle_verify))
         .route("/v1/inspect", post(proxy::handle_inspect))
         .route("/v1/register", post(register::handle_register))
+        .route("/v1/enroll", post(enroll::handle_enroll))
+        .route("/v1/enroll-tokens", post(enroll::handle_mint_enroll_token))
+        .route("/v1/rekey-tokens", post(enroll::handle_mint_rekey_token))
         .route("/v1/scan-input", post(scan::handle_scan_input))
         .route("/v1/scan-output", post(scan::handle_scan_output));
     let proxy_routes = if max_concurrency > 0 {

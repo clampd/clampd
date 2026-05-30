@@ -7,7 +7,7 @@
  */
 
 import { ClampdClient, type ProxyResponse } from "./client.js";
-import { ClampdBlockedError } from "./interceptor.js";
+import { ClampdBlockedError, throwBlockedOrLoop } from "./interceptor.js";
 import { ClampdDescriptorMismatchError, ClampdUnregisteredToolError } from "./errors.js";
 import { raiseIfUnregistered, _registeredDescriptors } from "./_frameworkAdapters.js";
 import { withDelegation, getDelegation, getCallerAgentId } from "./delegation.js";
@@ -116,7 +116,7 @@ async function guardToolCall(
         if (opts.failOpen && res._gatewayError) {
           return;
         }
-        throw new ClampdBlockedError(res);
+        throwBlockedOrLoop(client, res);
       }
     } catch (e) {
       if (e instanceof ClampdBlockedError) throw e;

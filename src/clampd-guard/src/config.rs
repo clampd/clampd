@@ -18,7 +18,6 @@ pub struct GuardConfig {
     pub gateway_url: String,
     pub api_key: String,
     pub agent_id: String,
-    pub secret: String,
     #[serde(default)]
     pub skip_low_risk: bool,
     #[serde(default = "default_fail_open")]
@@ -36,7 +35,6 @@ impl Default for GuardConfig {
             gateway_url: "http://127.0.0.1:8080".into(),
             api_key: String::new(),
             agent_id: String::new(),
-            secret: String::new(),
             skip_low_risk: false,
             fail_open: true,
             timeout_ms: 2000,
@@ -111,9 +109,6 @@ impl GuardConfig {
         if let Some(v) = managed.get("agent_id").and_then(|v| v.as_str()) {
             self.agent_id = v.to_string();
         }
-        if let Some(v) = managed.get("secret").and_then(|v| v.as_str()) {
-            self.secret = v.to_string();
-        }
         if let Some(v) = managed.get("skip_low_risk").and_then(|v| v.as_bool()) {
             self.skip_low_risk = v;
         }
@@ -163,7 +158,6 @@ mod tests {
             gateway_url: "https://clampd.test".into(),
             api_key: "ag_test_key".into(),
             agent_id: "agent-123".into(),
-            secret: "ags_test".into(),
             skip_low_risk: true,
             fail_open: false,
             timeout_ms: 500,
@@ -181,7 +175,6 @@ mod tests {
             gateway_url: "https://user-gateway.test".into(),
             api_key: "user_key".into(),
             agent_id: "user-agent".into(),
-            secret: "user_secret".into(),
             skip_low_risk: false,
             fail_open: true,
             timeout_ms: 2000,
@@ -203,7 +196,6 @@ mod tests {
         // User fields preserved
         assert_eq!(cfg.api_key, "user_key");
         assert_eq!(cfg.agent_id, "user-agent");
-        assert_eq!(cfg.secret, "user_secret");
         assert!(!cfg.skip_low_risk);
     }
 
@@ -230,7 +222,6 @@ mod tests {
             "gateway_url": "https://enforced.corp",
             "api_key": "corp_key",
             "agent_id": "corp-agent",
-            "secret": "corp_secret",
             "skip_low_risk": false,
             "fail_open": false,
             "timeout_ms": 3000
@@ -241,7 +232,6 @@ mod tests {
         assert_eq!(cfg.gateway_url, "https://enforced.corp");
         assert_eq!(cfg.api_key, "corp_key");
         assert_eq!(cfg.agent_id, "corp-agent");
-        assert_eq!(cfg.secret, "corp_secret");
         assert!(!cfg.skip_low_risk);
         assert!(!cfg.fail_open);
         assert_eq!(cfg.timeout_ms, 3000);

@@ -8,6 +8,18 @@ pub(crate) static JWT_SECRET_CACHED: LazyLock<String> = LazyLock::new(|| {
     std::env::var("JWT_SECRET").unwrap_or_default()
 });
 
+/// Strict descriptor-hash enforcement. When true, a call to a tool that has a
+/// pinned (approved) descriptor hash MUST present a matching `tool_descriptor_hash`
+/// — a call that omits it is rejected, closing the "omit the hash to skip the
+/// rug-pull check" bypass. Off by default because not every client sends the hash
+/// on every call (e.g. dashboard-classified tools); enable once all clients do.
+pub(crate) static REQUIRE_DESCRIPTOR_HASH: LazyLock<bool> = LazyLock::new(|| {
+    matches!(
+        std::env::var("CLAMPD_REQUIRE_DESCRIPTOR_HASH").as_deref(),
+        Ok("true") | Ok("1")
+    )
+});
+
 use ag_common::degradation::DegradationMode;
 use ag_common::trust::{
     BoundaryOutcome, BoundaryReason, DecisionLayer, DecisionTrace, LayerDecision, TrustLevel,
@@ -86,7 +98,7 @@ async fn publish_chain_validation_denial(
         delegation_chain: chain,
         delegation_trace_id: trace_id,
         blocked: true,
-        denial_reason: Some(reason),
+        denial: Some(crate::denial::gateway_denial(format!("GATEWAY/{}", code), reason)),
         policy_action: "deny".into(),
         policy_reason: code.to_string(),
         assessed_risk: 0.85,
@@ -436,6 +448,38 @@ pub async fn handle_proxy(
         .and_then(|v| v.strip_prefix("Bearer "))
         .ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "missing_jwt", "Missing Authorization Bearer token"))?;
 
+    // ── Early kill-switch (contagion) check ─────────────────────────────
+    // A killed agent's credential is removed from Redis, so it would otherwise
+    // fail JWT validation below as a generic `invalid_jwt`/agent_shadow_attempt
+    // — masking the real reason (the agent is kill-switched) and the
+    // contagion_alert signal. Peek the unverified `sub` and deny early if it is
+    // in the deny-set. This is fail-safe: an unverified sub can only DENY here;
+    // it can never grant access (the signature is still verified below before
+    // anything is allowed).
+    if let Some(peeked) = peek_jwt_subject(jwt_token) {
+        if state.deny_set.contains(&peeked) {
+            crate::shadow::publish_event(&state, &ShadowEvent {
+                request_id,
+                org_id: api_key_info.org_id.clone(),
+                agent_id: peeked.clone(),
+                tool_name: body.tool.clone(),
+                blocked: true,
+                denial: Some(crate::denial::gateway_denial(
+                    "GATEWAY/agent_killed",
+                    "Agent is kill-switched",
+                )),
+                policy_action: "deny".into(),
+                policy_reason: "agent_killed".into(),
+                assessed_risk: 1.0,
+                rejection_type: ag_common::models::RejectionType::Security,
+                a2a_event_type: Some("contagion_alert".into()),
+                latency_ms: started_at.elapsed().as_millis() as u32,
+                ..ShadowEvent::default()
+            }).await;
+            return Err(api_error(StatusCode::FORBIDDEN, "agent_killed", "Agent is kill-switched"));
+        }
+    }
+
     // Validate JWT: per-agent credential from Redis, fallback to global JWT_SECRET
     let jwt_secret = JWT_SECRET_CACHED.clone();
     let jwt_claims = match validate_jwt_with_agent_credential(jwt_token, &jwt_secret, &state.redis_pool).await {
@@ -447,7 +491,10 @@ pub async fn handle_proxy(
                 org_id: api_key_info.org_id.clone(),
                 tool_name: body.tool.clone(),
                 blocked: true,
-                denial_reason: Some(format!("agent_shadow_attempt: {}", e)),
+                denial: Some(crate::denial::gateway_denial(
+                    "GATEWAY/invalid_jwt",
+                    format!("agent_shadow_attempt: {}", e),
+                )),
                 policy_action: "deny".into(),
                 policy_reason: "invalid_jwt".into(),
                 assessed_risk: 0.95,
@@ -461,7 +508,11 @@ pub async fn handle_proxy(
     };
     let agent_id_str = jwt_claims.sub.clone();
 
-    // Check deny set (in-memory, <0.01ms)
+    // Deny-set check on the VERIFIED sub (defense-in-depth). The early peeked
+    // check above already denies a kill-switched agent before JWT validation
+    // (handling the credential-removed case); this re-checks against the
+    // signature-verified `sub` so a kill that lands between the two points, or
+    // any agent denied while its credential still exists, is still caught.
     if state.deny_set.contains(&agent_id_str) {
         // ISSUE-023: Publish contagion_alert when a killed agent tries to call
         crate::shadow::publish_event(&state, &ShadowEvent {
@@ -470,7 +521,10 @@ pub async fn handle_proxy(
             agent_id: agent_id_str.clone(),
             tool_name: body.tool.clone(),
             blocked: true,
-            denial_reason: Some("Agent is kill-switched".into()),
+            denial: Some(crate::denial::gateway_denial(
+                "GATEWAY/agent_killed",
+                "Agent is kill-switched",
+            )),
             policy_action: "deny".into(),
             policy_reason: "agent_killed".into(),
             assessed_risk: 1.0,
@@ -725,7 +779,10 @@ pub async fn handle_proxy(
                         agent_name: "UNREGISTERED".into(),
                         tool_name: body.tool.clone(),
                         blocked: true,
-                        denial_reason: Some("agent_not_registered".into()),
+                        denial: Some(crate::denial::gateway_denial(
+                            "GATEWAY/agent_not_registered",
+                            "agent_not_registered",
+                        )),
                         policy_action: "deny".into(),
                         policy_reason: "shadow_agent_detected".into(),
                         assessed_risk: 0.85,
@@ -878,7 +935,10 @@ pub async fn handle_proxy(
                         delegation_chain: delegation_ctx.as_ref().map(|d| d.chain.clone()),
                         delegation_trace_id: delegation_ctx.as_ref().and_then(|d| d.trace_id.clone()),
                         blocked: true,
-                        denial_reason: Some(reason.clone()),
+                        denial: Some(crate::denial::gateway_denial(
+                            "GATEWAY/delegation_from_killed_agent",
+                            reason.clone(),
+                        )),
                         policy_action: "deny".into(),
                         policy_reason: "delegation_from_killed_agent".into(),
                         assessed_risk: 0.9,
@@ -1016,7 +1076,10 @@ pub async fn handle_proxy(
                                 delegation_chain: delegation_ctx.as_ref().map(|d| d.chain.clone()),
                                 delegation_trace_id: delegation_ctx.as_ref().and_then(|d| d.trace_id.clone()),
                                 blocked: true,
-                                denial_reason: Some(reason.clone()),
+                                denial: Some(crate::denial::gateway_denial(
+                                    "GATEWAY/task_replay_detected",
+                                    reason.clone(),
+                                )),
                                 policy_action: "deny".into(),
                                 policy_reason: "task_replay_detected".into(),
                                 assessed_risk: 0.9,
@@ -1143,7 +1206,10 @@ pub async fn handle_proxy(
                     agent_name: agent_profile.name.clone(),
                     tool_name: body.tool.clone(),
                     blocked: true,
-                    denial_reason: Some(format!("x402_payload_stale: {}", reason)),
+                    denial: Some(crate::denial::gateway_denial(
+                        "GATEWAY/x402_payload_stale",
+                        format!("x402_payload_stale: {}", reason),
+                    )),
                     policy_action: "deny".into(),
                     policy_reason: "x402_payload_stale".into(),
                     assessed_risk: 0.7,
@@ -1183,10 +1249,13 @@ pub async fn handle_proxy(
                         agent_name: agent_profile.name.clone(),
                         tool_name: body.tool.clone(),
                         blocked: true,
-                        denial_reason: Some(format!(
-                            "x402_signature_address_mismatch: recovered=0x{}, claimed=0x{}",
-                            hex::encode(recovered),
-                            hex::encode(claimed),
+                        denial: Some(crate::denial::gateway_denial(
+                            "GATEWAY/x402_signature_address_mismatch",
+                            format!(
+                                "x402_signature_address_mismatch: recovered=0x{}, claimed=0x{}",
+                                hex::encode(recovered),
+                                hex::encode(claimed),
+                            ),
                         )),
                         policy_action: "deny".into(),
                         policy_reason: "x402_signature_address_mismatch".into(),
@@ -1216,7 +1285,10 @@ pub async fn handle_proxy(
                         agent_name: agent_profile.name.clone(),
                         tool_name: body.tool.clone(),
                         blocked: true,
-                        denial_reason: Some(format!("x402_signature_malformed: {}", msg)),
+                        denial: Some(crate::denial::gateway_denial(
+                            "GATEWAY/x402_signature_malformed",
+                            format!("x402_signature_malformed: {}", msg),
+                        )),
                         policy_action: "deny".into(),
                         policy_reason: "x402_signature_malformed".into(),
                         assessed_risk: 0.7,
@@ -1261,9 +1333,12 @@ pub async fn handle_proxy(
                                 agent_name: agent_profile.name.clone(),
                                 tool_name: body.tool.clone(),
                                 blocked: true,
-                                denial_reason: Some(format!(
-                                    "x402_nonce_replay: nonce {} already used in last 24h",
-                                    payload.nonce
+                                denial: Some(crate::denial::gateway_denial(
+                                    "GATEWAY/x402_nonce_replay",
+                                    format!(
+                                        "x402_nonce_replay: nonce {} already used in last 24h",
+                                        payload.nonce
+                                    ),
                                 )),
                                 policy_action: "deny".into(),
                                 policy_reason: "x402_nonce_replay".into(),
@@ -1717,6 +1792,106 @@ pub async fn handle_proxy(
         None => String::new(),
     };
 
+    // ── Effect-scope least-privilege guard (Phase 3) ────────────────────
+    // The call's ACTUAL effect — derived from its params (e.g. the leading SQL
+    // verb) — must be covered by the agent's granted scopes, not just the
+    // tool's DECLARED classification. Closes the "tool declared db:query:read,
+    // but the SQL is an INSERT" gap: a read-scoped agent can no longer mutate
+    // through a read-classified tool.
+    //
+    // Purely additive and surgical: it only DENIES (never grants); only for
+    // agents that DO hold a grant (empty allowed_scopes is left to the existing
+    // default-deny path, untouched); and only when the effect is unambiguously
+    // derivable. Reuses the same allowed_scopes + scope_matches as the declared
+    // check — no new scope vocabulary, no config toggle.
+    if !agent_profile.allowed_scopes.is_empty() {
+        if let Some(effect) = ag_common::scopes::effect_scope(&tool_name, &body.params) {
+            let effect_str = effect.as_str();
+            let covered = agent_profile
+                .allowed_scopes
+                .iter()
+                .any(|g| ag_common::scopes::scope_matches(g, &effect_str));
+            if !covered {
+                let reason = format!(
+                    "effect_scope_violation: call effect '{}' exceeds the agent's granted scopes [{}]",
+                    effect_str,
+                    agent_profile.allowed_scopes.join(", ")
+                );
+                crate::shadow::publish_event(&state, &ShadowEvent {
+                    request_id,
+                    org_id: api_key_info.org_id.clone(),
+                    agent_id: agent_id_str.clone(),
+                    tool_name: body.tool.clone(),
+                    blocked: true,
+                    denial: Some(crate::denial::gateway_denial(
+                        "GATEWAY/effect_scope_violation",
+                        format!("Call effect requires scope '{effect_str}', which the agent has not been granted"),
+                    )),
+                    policy_action: "deny".into(),
+                    policy_reason: "effect_scope_violation".into(),
+                    assessed_risk: 0.9,
+                    rejection_type: ag_common::models::RejectionType::Security,
+                    latency_ms: started_at.elapsed().as_millis() as u32,
+                    ..ShadowEvent::default()
+                }).await;
+                return Err(api_error(StatusCode::FORBIDDEN, "effect_scope_violation", reason));
+            }
+        }
+    }
+
+    // ── Rug-pull guard: the tool contract must match what was approved ───
+    // If a pinned (approved) hash exists for this tool, the caller must prove it
+    // is invoking that exact contract:
+    //   - claimed hash differs from the pin  → rug-pull (advertise one schema,
+    //     serve another) → reject.
+    //   - claimed hash omitted, strict mode  → can't prove identity → reject
+    //     (closes the "omit the hash to skip the check" bypass).
+    //   - claimed hash omitted, default mode → not enforced (the call resolves
+    //     under the still-pinned approved descriptor; content scanning applies).
+    // No pin yet (migration window) → nothing to enforce.
+    if let Some(pinned_hash) = state
+        .baseline_cache
+        .resolve_pinned_descriptor_hash(&api_key_info.org_id, &tool_name)
+        .await
+    {
+        let claimed = body
+            .tool_descriptor_hash
+            .as_deref()
+            .filter(|h| h.len() == 64);
+        let (ok, reason) = match claimed {
+            Some(h) if h == pinned_hash => (true, ""),
+            Some(_) => (false, "descriptor_hash_mismatch"),
+            None if *REQUIRE_DESCRIPTOR_HASH => (false, "descriptor_hash_missing"),
+            None => (true, ""),
+        };
+        if !ok {
+            crate::shadow::publish_event(&state, &ShadowEvent {
+                request_id,
+                org_id: api_key_info.org_id.clone(),
+                agent_id: agent_id_str.clone(),
+                tool_name: body.tool.clone(),
+                tool_descriptor_hash: claimed.unwrap_or_default().to_string(),
+                blocked: true,
+                denial: Some(crate::denial::gateway_denial(
+                    "GATEWAY/descriptor_hash_mismatch",
+                    "Tool contract does not match the approved descriptor",
+                )),
+                policy_action: "deny".into(),
+                policy_reason: reason.into(),
+                assessed_risk: 1.0,
+                rejection_type: ag_common::models::RejectionType::Security,
+                a2a_event_type: Some("rug_pull_alert".into()),
+                latency_ms: started_at.elapsed().as_millis() as u32,
+                ..ShadowEvent::default()
+            }).await;
+            return Err(api_error(
+                StatusCode::FORBIDDEN,
+                reason,
+                "Tool contract does not match the approved descriptor - re-approve it in the dashboard",
+            ));
+        }
+    }
+
     // ── Confused-deputy guard: delegation chain scope intersection ───────
     // When the call is made inside a delegation chain (chain = [ancestor…, principal]),
     // every ancestor must ALSO allow the resolved_scope. Without this check
@@ -1915,7 +2090,7 @@ pub async fn handle_proxy(
     // `intent_token_ttl`: per-exemption scope-token TTL surfaced by ag-intent when
     // an exemption row matched. Forwarded into every EvaluateRequest so ag-policy
     // can echo it on the response; gateway then uses it instead of the env default.
-    let (mut assessed_risk, classification, mut intent_labels, mut matched_rules, reasoning, mut intent_action, mut has_non_exemptable_block, intent_token_ttl) =
+    let (mut assessed_risk, classification, mut intent_labels, mut matched_rules, reasoning, mut intent_action, mut has_non_exemptable_block, intent_token_ttl, mut matched_rule_correctives) =
         match classify_result {
             Some(Ok(resp)) => {
                 let r = resp.into_inner();
@@ -1929,13 +2104,14 @@ pub async fn handle_proxy(
                     r.action, // 0=PASS, 1=FLAG, 2=BLOCK
                     r.has_non_exemptable_block,
                     r.token_ttl_seconds,
+                    r.matched_rule_correctives,
                 )
             }
             Some(Err(e)) => {
                 error!("Intent service unavailable: {}", e);
                 degraded_stages.push("intent".to_string());
                 match apply_degradation_or_default(state.degradation.intent_unavailable) {
-                    Some((risk, class, labels, rules, _action)) => (risk, class, labels, rules, None, 0i32, false, 0u32), // PASS on degradation
+                    Some((risk, class, labels, rules, _action)) => (risk, class, labels, rules, None, 0i32, false, 0u32, Vec::new()), // PASS on degradation
                     None => {
                         return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "intent_unavailable", "Intent service unavailable"));
                     }
@@ -1944,7 +2120,7 @@ pub async fn handle_proxy(
             None => {
                 // Circuit breaker is open - apply degradation.
                 match apply_degradation_or_default(state.degradation.intent_unavailable) {
-                    Some((risk, class, labels, rules, _action)) => (risk, class, labels, rules, None, 0i32, false, 0u32),
+                    Some((risk, class, labels, rules, _action)) => (risk, class, labels, rules, None, 0i32, false, 0u32, Vec::new()),
                     None => {
                         return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "intent_unavailable", "Intent service unavailable (circuit open)"));
                     }
@@ -2020,6 +2196,11 @@ pub async fn handle_proxy(
                     for rule in r.matched_rules {
                         if !matched_rules.contains(&rule) {
                             matched_rules.push(rule);
+                        }
+                    }
+                    for mrc in r.matched_rule_correctives {
+                        if !matched_rule_correctives.iter().any(|x| x.rule_id == mrc.rule_id) {
+                            matched_rule_correctives.push(mrc);
                         }
                     }
                 }
@@ -2286,7 +2467,10 @@ pub async fn handle_proxy(
                                     policy_action: "deny".into(),
                                     policy_reason: "tool_not_classified".into(),
                                     blocked: true,
-                                    denial_reason: Some(denial.clone()),
+                                    denial: Some(crate::denial::gateway_denial(
+                                        "GATEWAY/tool_not_classified",
+                                        denial.clone(),
+                                    )),
                                     latency_ms: started_at.elapsed().as_millis() as u32,
                                     encodings_detected: encodings_detected.clone(),
                                     encoding_risk_bonus,
@@ -2302,6 +2486,7 @@ pub async fn handle_proxy(
                                     tool_descriptor_hash: body.tool_descriptor_hash.clone().unwrap_or_default(),
                                     tool_description: body.tool_description.clone().unwrap_or_default(),
                                     tool_params_schema: body.tool_params_schema.clone().unwrap_or_default(),
+                tool_annotations: body.tool_annotations.clone().unwrap_or_default(),
                                     active_hours_start: ah_start,
                                     active_hours_end: ah_end,
                                     rejection_type: ag_common::models::RejectionType::Config,
@@ -2369,7 +2554,14 @@ pub async fn handle_proxy(
                                 policy_action: if auto_trust { "allow_learning".into() } else { "deny".into() },
                                 policy_reason: "tool_not_registered".into(),
                                 blocked: !auto_trust,
-                                denial_reason: if auto_trust { None } else { Some(reason.clone()) },
+                                denial: if auto_trust {
+                                    None
+                                } else {
+                                    Some(crate::denial::gateway_denial(
+                                        "GATEWAY/tool_not_registered",
+                                        reason.clone(),
+                                    ))
+                                },
                                 latency_ms: started_at.elapsed().as_millis() as u32,
                                 encodings_detected: encodings_detected.clone(),
                                 encoding_risk_bonus,
@@ -2385,6 +2577,7 @@ pub async fn handle_proxy(
                                 tool_descriptor_hash: body.tool_descriptor_hash.clone().unwrap_or_default(),
                                 tool_description: body.tool_description.clone().unwrap_or_default(),
                                 tool_params_schema: body.tool_params_schema.clone().unwrap_or_default(),
+                tool_annotations: body.tool_annotations.clone().unwrap_or_default(),
                                 active_hours_start: ah_start,
                                 active_hours_end: ah_end,
                                 rejection_type: ag_common::models::RejectionType::Config,
@@ -2443,6 +2636,23 @@ pub async fn handle_proxy(
                 delegation_approved: delegation_is_approved,
                 resolved_scope: resolved_scope.clone(),
                 token_ttl_seconds: intent_token_ttl,
+                matched_rule_correctives: matched_rule_correctives
+                    .iter()
+                    .map(|m| ag_proto::agentguard::policy::MatchedRuleCorrective {
+                        rule_id: m.rule_id.clone(),
+                        corrective_json: m.corrective_json.clone(),
+                    })
+                    .collect(),
+                // v0.20 Wave 3: forward the SDK-side override (when set)
+                // to ag-policy. JSON-encoded `CorrectiveTemplate`. Empty
+                // string = no override (resolver falls through to rule
+                // defaults). Gateway does no validation here — ag-policy
+                // is the typed-deserialisation boundary.
+                sdk_corrective_override_json: body
+                    .sdk_corrective_override
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
             })
             .await;
         crate::metrics::observe_policy_eval_us(
@@ -2459,13 +2669,23 @@ pub async fn handle_proxy(
         None
     };
 
-    let (policy_action, granted_scopes, _denied_scopes, policy_reason, policy_token_ttl, matched_policies, boundary_violation_policy, trust, boundary_reason_str, boundary_matched_rule) = match policy_result {
+    let (policy_action, granted_scopes, _denied_scopes, policy_reason, policy_token_ttl, matched_policies, boundary_violation_policy, trust, boundary_reason_str, boundary_matched_rule, policy_denial_proto) = match policy_result {
         Some(Ok(resp)) => {
             let r = resp.into_inner();
             let trust = TrustLevel::from_str(&r.trust_level).unwrap_or(TrustLevel::Unknown);
             let boundary_reason_str = r.boundary_reason.clone();
-            let boundary_matched_rule = r.boundary_matched_rule.clone();
-            (r.action, r.required_scopes, r.denied_scopes, r.reason, r.token_ttl_seconds, r.matched_policies, r.boundary_violation, trust, boundary_reason_str, boundary_matched_rule)
+            // v0.20: reason, boundary_violation, boundary_matched_rule now
+            // live inside the optional StructuredDenial. Extract them here
+            // so the rest of the function keeps reading flat locals.
+            let (reason, boundary_violation, boundary_matched_rule) = match r.denial.as_ref() {
+                Some(d) => (
+                    d.violated_predicate.clone(),
+                    d.boundary_violation.clone(),
+                    d.boundary_matched_rule.clone().unwrap_or_default(),
+                ),
+                None => (String::new(), None, String::new()),
+            };
+            (r.action, r.required_scopes, r.denied_scopes, reason, r.token_ttl_seconds, r.matched_policies, boundary_violation, trust, boundary_reason_str, boundary_matched_rule, r.denial)
         }
         Some(Err(e)) => {
             error!("Policy service unavailable: {}", e);
@@ -2484,6 +2704,7 @@ pub async fn handle_proxy(
                         TrustLevel::Unknown,
                         String::new(),
                         String::new(),
+                        None,
                     )
                 }
                 _ => {
@@ -2507,6 +2728,7 @@ pub async fn handle_proxy(
                         TrustLevel::Unknown,
                         String::new(),
                         String::new(),
+                        None,
                     )
                 }
                 _ => {
@@ -2562,6 +2784,21 @@ pub async fn handle_proxy(
         let denial_reason = decision.denial_reason.unwrap_or_default();
         let rejection_type = decision.rejection_type;
 
+        // Use ag-policy's structured denial when it returned one; otherwise the
+        // block came from suspicion/risk-threshold logic in decision.rs and we
+        // synthesize a gateway-local denial.
+        let denial_json = match policy_denial_proto.as_ref() {
+            Some(d) => crate::denial::to_json(d),
+            None => crate::denial::gateway_denial(
+                if matched_rules.is_empty() {
+                    "GATEWAY/risk_threshold".to_string()
+                } else {
+                    format!("GATEWAY/{}", matched_rules[0])
+                },
+                denial_reason.clone(),
+            ),
+        };
+
         // Publish shadow event (fire and forget)
         let (ah_start, ah_end) = agent_profile.boundaries.as_ref().map_or((0, 0), |b| (b.allowed_hours_start, b.allowed_hours_end));
         crate::shadow::publish_event(&state, &ShadowEvent {
@@ -2582,7 +2819,7 @@ pub async fn handle_proxy(
             policy_reason: policy_reason.clone(),
             scope_requested: agent_profile.allowed_scopes.join(" "),
             blocked: true,
-            denial_reason: Some(denial_reason.clone()),
+            denial: Some(denial_json.clone()),
             latency_ms: started_at.elapsed().as_millis() as u32,
             encodings_detected: encodings_detected.clone(),
             encoding_risk_bonus,
@@ -2665,7 +2902,7 @@ pub async fn handle_proxy(
             risk_score: assessed_risk,
             scope_granted: None,
             tool_response: None,
-            denial_reason: Some(denial_reason),
+            denial: Some(denial_json),
             reasoning: reasoning.clone(),
             matched_rules: matched_rules.clone(),
             latency_ms,
@@ -2709,13 +2946,20 @@ pub async fn handle_proxy(
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(300)
             };
+            // Per-call binding: sha256(canonical_json({tool, params})) over the
+            // RAW tool name + RAW params the agent sent, so the tool side (and
+            // the SDKs) reproduce it byte-for-byte and reject a token replayed
+            // for a different call. Uses the raw tool name (not the canonicalized
+            // form) so both ends agree without sharing normalization rules.
+            let call_binding =
+                ag_common::contract_hash::call_binding(&raw_tool_name, &body.params);
             crate::scope_token::mint(
                 &state.scope_signing_key,
                 &crate::scope_token::MintInput {
                     agent_id: &agent_id_str,
                     scope_granted: &scope_granted,
                     tool_name: &tool_name,
-                    params_hash: &params_hash,
+                    binding: &call_binding,
                     request_id: &request_id.to_string(),
                     ttl_secs: scope_token_ttl,
                     now: chrono::Utc::now().timestamp(),
@@ -2834,7 +3078,7 @@ pub async fn handle_proxy(
             risk_score: assessed_risk,
             scope_granted: Some(scope_granted),
             tool_response: None,
-            denial_reason: None,
+            denial: None,
             reasoning,
             matched_rules: matched_rules.clone(),
             latency_ms,
@@ -3209,7 +3453,10 @@ pub async fn handle_proxy(
                             risk_score: assessed_risk,
                             scope_granted: Some(scope_granted.clone()),
                             tool_response: Some(parsed),
-                            denial_reason: decision.deny_reason,
+                            denial: Some(crate::denial::gateway_denial(
+                                "GATEWAY/x402_payment_blocked",
+                                decision.deny_reason.clone().unwrap_or_else(|| "payment not permitted".to_string()),
+                            )),
                             reasoning: Some("x402 payment blocked by boundary enforcement".to_string()),
                             matched_rules: vec![],
                             latency_ms: started_at.elapsed().as_millis() as u64,
@@ -3307,7 +3554,10 @@ pub async fn handle_proxy(
             scope_requested: agent_profile.allowed_scopes.join(" "),
             scope_granted: Some(scope_granted.clone()),
             blocked: true,
-            denial_reason: Some("agent_killed_mid_flight".into()),
+            denial: Some(crate::denial::gateway_denial(
+                "GATEWAY/agent_killed_mid_flight",
+                "agent_killed_mid_flight",
+            )),
             latency_ms: started_at.elapsed().as_millis() as u32,
             encodings_detected: encodings_detected.clone(),
             encoding_risk_bonus,
@@ -3499,7 +3749,7 @@ pub async fn handle_proxy(
         risk_score: assessed_risk,
         scope_granted: Some(scope_granted),
         tool_response,
-        denial_reason: None,
+        denial: None,
         reasoning,
         matched_rules: matched_rules.clone(),
         latency_ms,
@@ -3703,8 +3953,11 @@ pub async fn handle_verify(
         risk_score: assessed_risk,
         scope_granted: None,
         tool_response: None,
-        denial_reason: if blocked {
-            Some(format!("Risk score {:.2} exceeds threshold", assessed_risk))
+        denial: if blocked {
+            Some(crate::denial::gateway_denial(
+                "GATEWAY/risk_threshold",
+                format!("Risk score {:.2} exceeds threshold", assessed_risk),
+            ))
         } else {
             None
         },
@@ -3899,8 +4152,11 @@ pub async fn handle_inspect(
     risk_score = risk_score.clamp(0.0, 1.0);
 
     let blocked = scope_blocked || risk_score >= state.config.risk_threshold;
-    let denial_reason = if blocked {
-        Some(findings.join("; "))
+    let denial_json = if blocked {
+        Some(crate::denial::gateway_denial(
+            "GATEWAY/inspect_blocked",
+            findings.join("; "),
+        ))
     } else {
         None
     };
@@ -3924,7 +4180,7 @@ pub async fn handle_inspect(
         risk_score,
         scope_granted: None,
         tool_response: None,
-        denial_reason,
+        denial: denial_json,
         reasoning: if findings.is_empty() {
             None
         } else {
@@ -4137,44 +4393,49 @@ pub(crate) async fn validate_api_key(
     }
 }
 
-/// Per-agent JWT validation with Redis credential lookup.
+/// Peek the (unverified) `sub` claim from a JWT without verifying the
+/// signature. Used ONLY for the early kill-switch (deny-set) check, which is
+/// fail-safe: a match denies the request, and an unverified sub can never grant
+/// access (the signature is still verified in `validate_jwt_with_agent_credential`
+/// before anything is allowed). Returns None if the token is malformed.
+fn peek_jwt_subject(token: &str) -> Option<String> {
+    use base64::Engine as _;
+    let parts: Vec<&str> = token.splitn(3, '.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .ok()?;
+    let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    claims.get("sub").and_then(|v| v.as_str()).map(String::from)
+}
+
+/// Per-agent JWT validation: EdDSA signature against the enrolled public key.
 ///
 /// 1. Decode JWT (without sig check) to extract `sub` (agent_id).
-/// 2. Look up `ag:agent:cred:{agent_id}` in Redis for per-agent secret hash.
-/// 3. If found: validate JWT signature against the agent's credential hash.
-/// 4. If not found (IdP agent, dev mode): fall back to global `JWT_SECRET`.
-/// 5. If Redis is down: fall back to global `JWT_SECRET` (existing behavior).
-///
-/// This means rotating an agent's secret in the dashboard immediately
-/// invalidates JWTs signed with the old secret (once ag-control syncs the
-/// new hash to Redis, typically within ~10s).
+/// 2. Look up `ag:agent:cred:{agent_id}` in Redis — the agent's Ed25519 public
+///    key, written at enrollment and synced by ag-control.
+/// 3. If found: verify the EdDSA signature against that public key.
+/// 4. If not found: reject (fail-closed) — the agent is not enrolled. There is
+///    no shared-secret fallback.
+/// 5. If Redis is down: reject (fail-closed).
 async fn validate_jwt_with_agent_credential(
     token: &str,
-    jwt_secret: &str,
+    _jwt_secret: &str,
     redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
 ) -> Result<ag_common::models::AgentJwtClaims, String> {
-    use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm, TokenData};
+    use base64::Engine as _;
 
-    // JWT_SECRET is always required - no decode-only mode.
-    if jwt_secret.is_empty() {
-        return Err("JWT_SECRET not configured - cannot validate JWT".to_string());
+    // Step 1: Decode the payload (signature not yet trusted) to extract `sub`.
+    // We parse the payload directly rather than via jsonwebtoken so the peek is
+    // independent of the signing algorithm (the EdDSA signature is verified in
+    // Step 3 against the agent's enrolled public key).
+    let parts: Vec<&str> = token.splitn(3, '.').collect();
+    if parts.len() != 3 {
+        return Err("invalid JWT format".to_string());
     }
-
-    // Step 1: Decode without sig verification to extract agent_id (sub claim).
-    let agent_id = {
-        let mut peek_validation = Validation::default();
-        peek_validation.insecure_disable_signature_validation();
-        peek_validation.validate_exp = false; // don't reject expired yet
-        peek_validation.validate_aud = false;
-        let key = DecodingKey::from_secret(b"unused");
-        let token_data: TokenData<serde_json::Value> = decode(token, &key, &peek_validation)
-            .map_err(|e| format!("JWT decode failed: {}", e))?;
-        token_data
-            .claims
-            .get("sub")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-    };
+    let agent_id = peek_jwt_subject(token);
 
     // Step 2: Look up per-agent credential hash in Redis.
     // Redis failure = reject.  No guessing, no fail-open.
@@ -4205,29 +4466,55 @@ async fn validate_jwt_with_agent_credential(
         None
     };
 
-    // Step 3: Validate signature.  No fallback.  No second chances.
-    //
-    // - Per-agent key exists in Redis → validate ONLY against that key.
-    //   This is the credential_hash (SHA-256 of the raw ags_ secret).
-    //   The SDK signs the JWT with the same hash.  If it doesn't match,
-    //   the request is rejected - period.
-    //
-    // - No per-agent key in Redis (IdP agent, agent without clampd auth) →
-    //   validate against global JWT_SECRET.  This is the only case where
-    //   the global secret is used.
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.validate_exp = true;
-    validation.validate_aud = false;
+    // Step 3: Verify the EdDSA signature against the agent's registered public
+    // key (ed25519-dalek, mirroring ag-token's verifier). The stored credential
+    // is the raw base64url Ed25519 public key written at enrollment. No
+    // per-agent credential means the agent is not enrolled -> reject. There is
+    // no shared-secret fallback.
+    let pubkey_b64 = agent_secret.ok_or_else(|| {
+        format!(
+            "no credential for agent '{}' - not enrolled (rejecting, fail-closed)",
+            agent_id.as_deref().unwrap_or("<unknown>")
+        )
+    })?;
+    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(pubkey_b64.trim_end_matches('='))
+        .map_err(|e| format!("invalid agent public key encoding: {e}"))?;
+    let key_arr: [u8; 32] = raw
+        .as_slice()
+        .try_into()
+        .map_err(|_| format!("agent public key must be 32 bytes, got {}", raw.len()))?;
+    let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&key_arr)
+        .map_err(|e| format!("invalid agent public key: {e}"))?;
 
-    let signing_key = match agent_secret {
-        Some(ref agent_key) => agent_key.as_str(),
-        None => jwt_secret,
-    };
+    let signing_input = format!("{}.{}", parts[0], parts[1]);
+    let sig_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[2])
+        .map_err(|e| format!("invalid signature encoding: {e}"))?;
+    let signature = ed25519_dalek::Signature::from_slice(&sig_bytes)
+        .map_err(|e| format!("invalid signature: {e}"))?;
+    {
+        use ed25519_dalek::Verifier;
+        verifying_key
+            .verify(signing_input.as_bytes(), &signature)
+            .map_err(|_| "JWT signature verification failed".to_string())?;
+    }
 
-    let key = DecodingKey::from_secret(signing_key.as_bytes());
-    let token_data: TokenData<serde_json::Value> = decode(token, &key, &validation)
-        .map_err(|e| format!("JWT validation failed: {}", e))?;
-    extract_claims_from_value(&token_data.claims)
+    // Signature is valid; decode claims and enforce expiry.
+    let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .map_err(|e| format!("invalid payload encoding: {e}"))?;
+    let claims: serde_json::Value = serde_json::from_slice(&payload_bytes)
+        .map_err(|e| format!("invalid payload: {e}"))?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let exp = claims.get("exp").and_then(|v| v.as_i64()).unwrap_or(0);
+    if exp != 0 && exp < now {
+        return Err("JWT expired".to_string());
+    }
+    extract_claims_from_value(&claims)
 }
 
 /// Public wrapper for JWT validation, used by scan endpoints.
@@ -4260,6 +4547,25 @@ fn extract_claims_from_value(claims: &serde_json::Value) -> Result<ag_common::mo
 mod tests {
     use super::*;
     use serde_json::json;
+
+    // ── peek_jwt_subject (early kill-switch check) ───────────
+    #[test]
+    fn peek_subject_extracts_sub_without_verifying() {
+        use base64::Engine as _;
+        let eng = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let header = eng.encode(br#"{"alg":"EdDSA","typ":"JWT"}"#);
+        let payload = eng.encode(br#"{"sub":"agent-123","iss":"clampd-sdk"}"#);
+        // Signature is irrelevant to the peek (not verified here).
+        let token = format!("{header}.{payload}.deadbeef");
+        assert_eq!(peek_jwt_subject(&token), Some("agent-123".to_string()));
+    }
+
+    #[test]
+    fn peek_subject_returns_none_for_malformed() {
+        assert_eq!(peek_jwt_subject("not-a-jwt"), None);
+        assert_eq!(peek_jwt_subject("only.two"), None);
+        assert_eq!(peek_jwt_subject("bad!!.payload!!.sig"), None);
+    }
 
     // ── extract_claims_from_value ────────────────────────────
 
@@ -4326,13 +4632,13 @@ mod tests {
         assert!(result.unwrap_err().contains("UUID"));
     }
 
-    // ── validate_jwt_with_agent_credential: empty secret ─────
+    // ── validate_jwt_with_agent_credential: credential lookup is fail-closed ─
 
     #[tokio::test]
-    async fn validate_jwt_empty_secret_rejects() {
-        // We can't easily construct a Redis pool in unit tests,
-        // but we CAN test the early-exit path: empty JWT_SECRET → immediate error.
-        // Use a dummy pool that will never be reached.
+    async fn validate_jwt_no_credential_rejects() {
+        // EdDSA validation looks up the agent's public key in Redis. With Redis
+        // unreachable the credential can't be resolved, so the request must be
+        // rejected fail-closed (never accepted without a verified signature).
         let manager = bb8_redis::RedisConnectionManager::new("redis://127.0.0.1:1")
             .expect("manager creation");
         let pool = bb8::Pool::builder()
@@ -4342,15 +4648,20 @@ mod tests {
             .await
             .expect("pool creation");
 
+        // A decodable token (valid sub) so it reaches the credential lookup.
         let result = validate_jwt_with_agent_credential(
-            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.fake",
+            "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ0ZXN0In0.fake",
             "",
             &pool,
         )
         .await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("JWT_SECRET not configured"));
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("Redis") || err.contains("redis"),
+            "credential lookup must fail closed on Redis error: {err}"
+        );
     }
 
     // ── JWT signature validation ─────────────────────────────

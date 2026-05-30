@@ -184,6 +184,30 @@ function updateSessionStats(event: ProxyEvent): void {
   if (event.scan_details?.secrets_found?.length) sessionStats.secretsDetected = true;
 }
 
+// ── Build block-response text for the agent ──────────────────────────
+//
+// Always opaque: `[BLOCKED by Clampd]\nReference: <request_id>`.
+//
+// Reveals nothing about the detection itself: no denial reason, no rule
+// IDs, no risk score, no pipeline stage. The reference correlates with
+// the operator dashboard where the full denial detail (reason, stage,
+// matched rules, scores, corrective guidance, idempotency key) lives.
+//
+// This is a deliberate product posture: mcp-proxy is the boundary clampd
+// owns between the gateway and the calling agent, so we don't hand a
+// steering-prone or adversarial agent a gradient to calibrate against.
+// SDK integrators get the rich data on `ClampdBlockedError` and decide
+// for themselves what — if anything — to surface to the LLM.
+//
+// The dashboard / SSE stream / audit log continue to receive the full
+// rich payload from ag-gateway; this only affects the text sent back as
+// the MCP tool result.
+function formatBlockResponse(request_id?: string): string {
+  return request_id
+    ? `[BLOCKED by Clampd]\nReference: ${request_id}`
+    : `[BLOCKED by Clampd]`;
+}
+
 // ── Build enriched ProxyEvent from gateway response ──────────────────
 
 function buildEvent(
@@ -215,6 +239,7 @@ function buildEvent(
     scan_details: scanDetails,
     descriptor_hash: descriptorHash,
     scope_token: classification?.scope_token ? classification.scope_token.slice(0, 20) + "..." : undefined,
+    request_id: classification?.request_id,
   };
 }
 
@@ -408,10 +433,14 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
     // ── Step 0: File content scanning (write_file, edit_file, etc.) ──
     const contentBlock = await scanFileContent(toolName, toolArgs);
     if (contentBlock) {
+      // file-scan blocks are local — no request_id yet. The dashboard event
+      // (event.reason = contentBlock) still records the full reason for the
+      // operator; the agent sees the opaque envelope only.
+      const agentText = formatBlockResponse();
       const event = buildEvent(toolName, toolArgs, "blocked", 0.95, Date.now() - startTime, undefined, contentBlock, scanDetails, descriptorHash);
       return {
         allowed: false,
-        result: { content: [{ type: "text" as const, text: contentBlock }], isError: true },
+        result: { content: [{ type: "text" as const, text: agentText }], isError: true },
         event,
       };
     }
@@ -427,8 +456,10 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
           scanDetails = { pii_found: inputScan.pii_found, secrets_found: inputScan.secrets_found, input_risk: inputScan.risk_score };
         }
         if (!inputScan.allowed) {
-          const reason = `[input-scan] ${inputScan.denial_reason ?? "Input scan blocked"}`;
-          const event = buildEvent(toolName, toolArgs, "blocked", inputScan.risk_score, Date.now() - startTime, undefined, reason, scanDetails, descriptorHash);
+          // event.reason captures the rich detail for the dashboard; the
+          // agent gets the opaque envelope composed in the final handler.
+          const eventReason = `[input-scan] ${inputScan.denial_reason ?? "Input scan blocked"}`;
+          const event = buildEvent(toolName, toolArgs, "blocked", inputScan.risk_score, Date.now() - startTime, undefined, eventReason, scanDetails, descriptorHash);
           event.matched_rules = inputScan.matched_rules;
           return { allowed: false, event };
         }
@@ -447,6 +478,7 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
         toolName, toolArgs, opts.dryRun, descriptorHash, authorizedToolNames,
         toolDef?.description,
         toolDef?.inputSchema ? JSON.stringify(toolDef.inputSchema) : undefined,
+        toolDef?.annotations ? JSON.stringify(toolDef.annotations) : undefined,
       );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -456,8 +488,8 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
 
     // ── Step 3: If blocked ──
     if (!classification.allowed) {
-      const reason = classification.denial_reason ?? "Policy violation";
-      const event = buildEvent(toolName, toolArgs, "blocked", classification.risk_score, Date.now() - startTime, classification, reason, scanDetails, descriptorHash);
+      const eventReason = classification.denial_reason ?? "Policy violation";
+      const event = buildEvent(toolName, toolArgs, "blocked", classification.risk_score, Date.now() - startTime, classification, eventReason, scanDetails, descriptorHash);
       return { allowed: false, event };
     }
 
@@ -502,8 +534,8 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
             };
           }
           if (!outputScan.allowed) {
-            const reason = `[output-scan] ${outputScan.denial_reason ?? "Output contains sensitive data"}`;
-            const event = buildEvent(toolName, toolArgs, "blocked", outputScan.risk_score, Date.now() - startTime, classification, reason, scanDetails, descriptorHash);
+            const eventReason = `[output-scan] ${outputScan.denial_reason ?? "Output contains sensitive data"}`;
+            const event = buildEvent(toolName, toolArgs, "blocked", outputScan.risk_score, Date.now() - startTime, classification, eventReason, scanDetails, descriptorHash);
             event.matched_rules = [...(classification.matched_rules ?? []), ...(outputScan.matched_rules ?? [])];
             return { allowed: false, event };
           }
@@ -522,8 +554,8 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
           toolName, responseData, classification.request_id, classification.scope_token,
         );
         if (!inspection.allowed) {
-          const reason = `[response-check] ${inspection.denial_reason ?? "Response violates granted scope"}`;
-          const event = buildEvent(toolName, toolArgs, "blocked", inspection.risk_score, Date.now() - startTime, classification, reason, scanDetails, descriptorHash);
+          const eventReason = `[response-check] ${inspection.denial_reason ?? "Response violates granted scope"}`;
+          const event = buildEvent(toolName, toolArgs, "blocked", inspection.risk_score, Date.now() - startTime, classification, eventReason, scanDetails, descriptorHash);
           return { allowed: false, event };
         }
       } catch (err: unknown) {
@@ -561,11 +593,19 @@ export async function startProxy(opts: ProxyOptions): Promise<void> {
         pushEvent(event);
 
         if (!allowed) {
-          const reason = event.reason ?? "Blocked";
+          // Agent gets opaque envelope only. event.reason holds the rich
+          // detail (for the dashboard / SSE / audit). The agent-facing
+          // tool result carries no denial info beyond the reference.
           if (event.status === "error") {
-            return { content: [{ type: "text" as const, text: `[CLAMPD ERROR] ${reason}` }], isError: true };
+            return {
+              content: [{ type: "text" as const, text: `[CLAMPD ERROR]${event.request_id ? `\nReference: ${event.request_id}` : ""}` }],
+              isError: true,
+            };
           }
-          return { content: [{ type: "text" as const, text: `[BLOCKED by Clampd] ${reason} (risk=${event.risk_score.toFixed(2)})` }], isError: false };
+          return {
+            content: [{ type: "text" as const, text: formatBlockResponse(event.request_id) }],
+            isError: false,
+          };
         }
 
         return result ?? { content: [{ type: "text" as const, text: "OK" }] };

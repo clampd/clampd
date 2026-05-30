@@ -25,6 +25,7 @@ pub struct Metrics {
     latency_sum_us: AtomicU64,
     latency_count: AtomicU64,
     rate_limit_fail_open: AtomicU64,
+    rate_limit_fail_closed: AtomicU64,
 }
 
 impl Metrics {
@@ -40,6 +41,7 @@ impl Metrics {
             latency_sum_us: AtomicU64::new(0),
             latency_count: AtomicU64::new(0),
             rate_limit_fail_open: AtomicU64::new(0),
+            rate_limit_fail_closed: AtomicU64::new(0),
         }
     }
 }
@@ -138,6 +140,10 @@ pub fn increment_rate_limit_fail_open() {
     METRICS.rate_limit_fail_open.fetch_add(1, Ordering::Relaxed);
 }
 
+pub fn increment_rate_limit_fail_closed() {
+    METRICS.rate_limit_fail_closed.fetch_add(1, Ordering::Relaxed);
+}
+
 // ── Prometheus exposition format renderer ───────────────────────────────────
 
 pub fn render_prometheus() -> String {
@@ -151,6 +157,7 @@ pub fn render_prometheus() -> String {
     let latency_sum = METRICS.latency_sum_us.load(Ordering::Relaxed);
     let latency_count = METRICS.latency_count.load(Ordering::Relaxed);
     let rl_fail_open = METRICS.rate_limit_fail_open.load(Ordering::Relaxed);
+    let rl_fail_closed = METRICS.rate_limit_fail_closed.load(Ordering::Relaxed);
 
     let mut out = format!(
         "\
@@ -184,6 +191,9 @@ agentguard_latency_count {latency_count}
 # HELP agentguard_rate_limit_fail_open_total Rate limit checks that fell back to fail-open due to Redis unavailability.
 # TYPE agentguard_rate_limit_fail_open_total counter
 agentguard_rate_limit_fail_open_total {rl_fail_open}
+# HELP agentguard_rate_limit_fail_closed_total Rate limit checks that failed closed (denied) due to Redis unavailability.
+# TYPE agentguard_rate_limit_fail_closed_total counter
+agentguard_rate_limit_fail_closed_total {rl_fail_closed}
 # HELP agentguard_up Whether the gateway is running.
 # TYPE agentguard_up gauge
 agentguard_up 1

@@ -27,6 +27,24 @@ pub struct ShadowLogRow {
     pub scope_granted: String,
     pub blocked: u8,
     pub denial_reason: String,
+    // v0.20 corrective-action: flattened columns mirroring StructuredDenialJson.
+    pub corrective_kind: String,
+    pub corrective_data: String,
+    pub corrective_confidence: String,
+    pub corrective_source: String,
+    /// v0.23.1: the author-supplied "what went wrong / what to do"
+    /// sentence (CorrectiveAction.human_explanation). Persisted so
+    /// historical queries can show what the rule/policy author wrote.
+    pub corrective_human_explanation: String,
+    /// v0.23.1: gateway-pre-rendered string the LLM actually saw in
+    /// `tool_result.content`. Persisting this means an incident
+    /// replay can reproduce the exact LLM-facing text from history,
+    /// even if the rule's templates have since been edited.
+    pub corrective_tool_result: String,
+    /// v0.23.1: short variant label for dashboard chips ("Switch tool",
+    /// "Downscope", etc.). Persisted so analytics + replay views render
+    /// identical labels to the live dashboard.
+    pub corrective_short_label: String,
     pub latency_ms: u16,
     /// Names of fields that were PII-masked before storage.
     pub masked_fields: Vec<String>,

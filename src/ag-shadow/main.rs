@@ -19,6 +19,8 @@ use tracing::{info, warn};
 
 mod consumer;
 mod enricher;
+mod metrics;
+mod recovery;
 
 /// Ensure ClickHouse tables exist (idempotent, runs on every startup).
 async fn ensure_clickhouse_tables(client: &clickhouse::Client) -> Result<()> {
@@ -45,6 +47,10 @@ async fn ensure_clickhouse_tables(client: &clickhouse::Client) -> Result<()> {
             scope_granted String,
             blocked UInt8,
             denial_reason String,
+            corrective_kind LowCardinality(String) DEFAULT '',
+            corrective_data String DEFAULT '',
+            corrective_confidence LowCardinality(String) DEFAULT '',
+            corrective_source LowCardinality(String) DEFAULT '',
             latency_ms UInt16,
             masked_fields Array(String),
             pii_tokens Array(String),
@@ -75,6 +81,16 @@ async fn ensure_clickhouse_tables(client: &clickhouse::Client) -> Result<()> {
     // Migration: add a2a_event_type column to existing tables
     let _ = client.query("ALTER TABLE shadow_logs ADD COLUMN IF NOT EXISTS a2a_event_type LowCardinality(String) DEFAULT ''")
         .execute().await;
+    // v0.20 corrective-action migration: flat columns for dashboard filtering
+    // without parsing the JSON `denial` payload.
+    let _ = client.query("ALTER TABLE shadow_logs ADD COLUMN IF NOT EXISTS corrective_kind LowCardinality(String) DEFAULT ''")
+        .execute().await;
+    let _ = client.query("ALTER TABLE shadow_logs ADD COLUMN IF NOT EXISTS corrective_data String DEFAULT ''")
+        .execute().await;
+    let _ = client.query("ALTER TABLE shadow_logs ADD COLUMN IF NOT EXISTS corrective_confidence LowCardinality(String) DEFAULT ''")
+        .execute().await;
+    let _ = client.query("ALTER TABLE shadow_logs ADD COLUMN IF NOT EXISTS corrective_source LowCardinality(String) DEFAULT ''")
+        .execute().await;
 
     client.query(
         "CREATE TABLE IF NOT EXISTS shadow_quarantine (
@@ -100,6 +116,51 @@ mod retry;
 mod tokenizer;
 mod writer;
 
+/// Minimal Prometheus exposition server for ag-shadow. Mirrors
+/// `ag-policy::serve_metrics` — responds to ANY request on the
+/// `AG_SHADOW_METRICS_PORT` (default 9092) with the text-format
+/// counters from `crate::metrics`.
+///
+/// Exposed counters:
+/// - `agentguard_corrective_retry_succeeded_total{kind, source}` — MOAT metric
+/// - `agentguard_corrective_retry_followed_total{kind, source}`
+/// - `agentguard_corrective_retry_timed_out_total{kind, source}`
+/// - `agentguard_shadow_up` — liveness gauge
+async fn serve_metrics(port: u16) {
+    use tokio::io::AsyncWriteExt;
+
+    let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await {
+        Ok(l) => {
+            info!(port, "ag-shadow metrics server listening");
+            l
+        }
+        Err(e) => {
+            warn!(port, error = %e, "Failed to bind metrics port - metrics disabled");
+            return;
+        }
+    };
+
+    loop {
+        let Ok((mut stream, _)) = listener.accept().await else { continue };
+
+        let mut body = String::from(
+            "# HELP agentguard_shadow_up Whether the shadow service is running.\n\
+             # TYPE agentguard_shadow_up gauge\n\
+             agentguard_shadow_up 1\n",
+        );
+
+        // v0.20 recovery-rate counters (the MOAT metric).
+        crate::metrics::render_metrics(&mut body);
+
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain; version=0.0.4\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -111,6 +172,20 @@ async fn main() -> Result<()> {
 
     // License check: every service validates independently.
     ag_common::license_guard::enforce_or_exit("ag-shadow");
+
+    // v0.20: spawn the metrics endpoint. Reads AG_SHADOW_METRICS_PORT
+    // (default 9092 — ag-gateway: 9090, ag-policy: 9091).
+    let metrics_port: u16 = std::env::var("AG_SHADOW_METRICS_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9092);
+    tokio::spawn(async move { serve_metrics(metrics_port).await });
+
+    // v0.20: spawn the recovery correlator pruner — walks the in-process
+    // PENDING map every 5s and emits retry_timed_out for entries that
+    // crossed the 60s recovery window without a follow-up allow.
+    let pruner_shutdown = Arc::new(AtomicBool::new(false));
+    crate::recovery::spawn_pruner(pruner_shutdown.clone());
 
     // Validate license JWT and extract plan guard for feature gating.
     let plan_guard = Arc::new(

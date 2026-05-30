@@ -315,3 +315,54 @@ def require_scope(
         )
 
     return claims
+
+
+def verify_call_binding(claims: ScopeTokenClaims, tool: str, params: object) -> None:
+    """Enforce that a scope token was bound to THIS exact call.
+
+    Recomputes the per-call binding from the ``(tool, params)`` the tool
+    actually received and checks it against the token's ``binding`` claim. This
+    stops a valid token from being replayed for a *different* call (a different
+    tool, or the same tool with escalated params) — the confused-deputy / replay
+    defense. Call this on the tool side with what you received.
+
+    Tokens minted before call-binding shipped carry an empty ``binding``; those
+    are skipped (the scope check still applies) for backward compatibility.
+
+    Raises:
+        ScopeVerificationError: if the binding does not match the call.
+    """
+    from clampd.contract_hash import call_binding
+
+    if not claims.binding:
+        return  # legacy token without a binding — skip
+    expected = call_binding(tool, params)
+    if claims.binding != expected:
+        raise ScopeVerificationError(
+            "Scope token is not bound to this call: token authorized a "
+            f"different (tool, params). Expected binding {expected}, token has "
+            f"{claims.binding}.",
+            claims=claims,
+        )
+
+
+def require_scope_for_call(
+    required_scope: str,
+    tool: str,
+    params: object,
+    token: str | None = None,
+    public_key: bytes | None = None,
+    gateway_url: str | None = None,
+) -> ScopeTokenClaims:
+    """Verify a scope token, require a scope, AND enforce call-binding.
+
+    The tool-side entry point: confirms the token is valid, grants the required
+    scope, and was issued for exactly this ``(tool, params)`` call.
+
+    Raises:
+        ScopeVerificationError: on invalid token, missing scope, or a binding
+            mismatch (a token replayed/forged for a different call).
+    """
+    claims = require_scope(required_scope, token=token, public_key=public_key, gateway_url=gateway_url)
+    verify_call_binding(claims, tool, params)
+    return claims

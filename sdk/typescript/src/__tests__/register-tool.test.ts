@@ -8,6 +8,11 @@ import {
   type ToolClassification,
 } from "../index.js";
 import { _registeredDescriptors } from "../_frameworkAdapters.js";
+import * as config from "../config.js";
+
+// The global setup enrolls a default client (sharedConfig=localhost); clear it
+// so these tests exercise registerTool's own gateway-URL resolution from env.
+beforeEach(() => config._reset());
 
 // Tests signing — matches the pattern in the other SDK tests.
 process.env.JWT_SECRET = "test-secret-for-sdk-tests-32chars!";

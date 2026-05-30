@@ -20,7 +20,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { ClampdBlockedError, type OpenAITool } from "./interceptor.js";
+import { ClampdBlockedError, ClampdLoopError, throwBlockedOrLoop, type OpenAITool } from "./interceptor.js";
 import { ClampdDescriptorMismatchError, ClampdUnregisteredToolError } from "./errors.js";
 import { withDelegation, getDelegation, delegationHeaders } from "./delegation.js";
 import { scanForSchemaInjection } from "./schema-injection.js";
@@ -33,17 +33,17 @@ import { registerTool as _registerTool } from "./register.js";
 import { raiseIfUnregistered, _registeredDescriptors } from "./_frameworkAdapters.js";
 
 // ── Public API ──────────────────────────────────────────────────────
-export { ClampdBlockedError, type OpenAITool } from "./interceptor.js";
+export { ClampdBlockedError, ClampdLoopError, throwBlockedOrLoop, type OpenAITool } from "./interceptor.js";
 export { delegationHeaders } from "./delegation.js";
 export { scanForSchemaInjection, type SchemaInjectionWarning } from "./schema-injection.js";
-export { verifyScopeToken, requireScope, getCurrentScopeToken, ScopeVerificationError } from "./tool-verify.js";
+export { verifyScopeToken, requireScope, requireScopeForCall, verifyCallBinding, getCurrentScopeToken, ScopeVerificationError } from "./tool-verify.js";
+export { callBinding } from "./contract-hash.js";
 export type { ScopeTokenClaims } from "./tool-verify.js";
 
 // ── Advanced / escape-hatch exports ─────────────────────────────────
 // Exposed for custom gateway setups or multi-service architectures.
 // Most users should use the default export (clampd.openai(), clampd.guard(), etc.).
 export { ClampdClient, type ClampdClientOptions } from "./client.js";
-export { makeAgentJwt } from "./auth.js";
 export type { ProxyResponse, ScanResponse, ScanOutputResponse } from "./client.js";
 
 // ── Explicit tool registration ──────────────────────────────────────
@@ -131,7 +131,7 @@ function guard<TArgs extends unknown[], TReturn>(
           if (failOpen && res._gatewayError) {
             // fall through — allow execution
           } else {
-            throw new ClampdBlockedError(res);
+            throwBlockedOrLoop(client, res);
           }
         }
       } catch (e) {
@@ -205,7 +205,7 @@ function tools(
             if (failOpen && res._gatewayError) {
               // fall through — allow execution
             } else {
-              throw new ClampdBlockedError(res);
+              throwBlockedOrLoop(client, res);
             }
           }
         } catch (e) {
@@ -497,7 +497,6 @@ interface AdkOptions {
   targetUrl?: string;
   failOpen?: boolean;
   checkResponse?: boolean;
-  secret?: string;
 }
 
 interface AdkCallbacks {
@@ -506,7 +505,7 @@ interface AdkCallbacks {
 }
 
 function adk(opts: AdkOptions): AdkCallbacks {
-  const client = getClient({ agentId: opts.agentId, secret: opts.secret });
+  const client = getClient({ agentId: opts.agentId });
   const { targetUrl = "", failOpen = false, checkResponse = false } = opts;
 
   // Track last scope token for passing to afterTool inspect call
@@ -632,7 +631,7 @@ function vercelAI<T extends Record<string, VercelAITool>>(
           scopeToken = res.scope_token ?? "";
           raiseIfUnregistered(toolName, res);
           if (!res.allowed) {
-            throw new ClampdBlockedError(res);
+            throwBlockedOrLoop(client, res);
           }
         } catch (e) {
           if (e instanceof ClampdBlockedError) throw e;

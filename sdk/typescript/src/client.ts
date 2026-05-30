@@ -2,8 +2,26 @@
  * ClampdClient — thin wrapper around the ag-gateway HTTP API.
  */
 
-import { makeAgentJwt, makeDelegationProof } from "./auth.js";
+import { type KeyObject } from "node:crypto";
+import { makeAgentJwtEd25519, makeDelegationProofEd25519 } from "./auth.js";
 import { getDelegation, delegationHeaders } from "./delegation.js";
+import {
+  parseStructuredDenial,
+  syntheticDenial,
+  type StructuredDenial,
+} from "./corrective.js";
+
+export {
+  type StructuredDenial,
+  type CorrectiveAction,
+  type CorrectiveActionVariant,
+  type Confidence,
+  type Source,
+  parseStructuredDenial,
+  parseCorrectiveAction,
+  renderCorrectiveForLLM,
+  syntheticDenial,
+} from "./corrective.js";
 
 // ── Response types ─────────────────────────────────────────────────
 
@@ -19,6 +37,19 @@ export interface ProxyResponse {
   readonly score?: number;
   scope_granted?: string | null;
   tool_response?: unknown | null;
+  /**
+   * v0.20 typed denial. Populated by the gateway on every Deny/Downscope;
+   * absent on Allow. Replaces the prior free-text `denial_reason`.
+   * Wire JSON is snake_case (`denial: { rule_id, violated_predicate, ... }`);
+   * `enrichProxyResponse()` parses it into camelCase via `parseStructuredDenial`.
+   */
+  denial?: StructuredDenial | null;
+  /**
+   * Derived short-string reason — `denial.violatedPredicate` when present,
+   * otherwise null. Set by `enrichProxyResponse`. Not a wire field; the
+   * gateway never sends this directly in v0.20+. Kept for log statements
+   * and internal prefix-match helpers (`raiseIfUnregistered`).
+   */
   denial_reason?: string | null;
   /** Human-readable explanation of the risk assessment. */
   reasoning?: string | null;
@@ -40,7 +71,9 @@ export interface ScanResponse {
   readonly score?: number;
   /** Computed action: "pass" or "block" based on allowed. Added by enrichScanResponse(). */
   readonly action?: string;
-  denial_reason?: string;
+  denial?: StructuredDenial | null;
+  /** Derived short-string reason — set by `enrichScanResponse`. */
+  denial_reason?: string | null;
   matched_rules: string[];
   latency_ms: number;
 }
@@ -51,9 +84,25 @@ export interface ScanOutputResponse extends ScanResponse {
 }
 
 /**
- * Enrich a raw gateway ProxyResponse with computed `action` and `score` getters.
+ * Enrich a raw gateway ProxyResponse with computed `action` and `score` getters,
+ * and convert the wire-format `denial` JSON into a typed StructuredDenial.
  */
 export function enrichProxyResponse(raw: Record<string, unknown>): ProxyResponse {
+  // Parse the typed denial from the wire JSON (snake_case → camelCase).
+  if (raw.denial !== undefined && raw.denial !== null && typeof raw.denial === "object") {
+    raw.denial = parseStructuredDenial(raw.denial);
+  } else if (raw.denial === undefined) {
+    raw.denial = null;
+  }
+  const denial = raw.denial as StructuredDenial | null;
+  // Sync denial_reason with the typed denial when present. When the
+  // response carries no typed denial but has a legacy `denial_reason` set
+  // (SDK-side synthetic errors), preserve it as-is.
+  if (denial) {
+    raw.denial_reason = denial.violatedPredicate;
+  } else if (raw.denial_reason === undefined) {
+    raw.denial_reason = null;
+  }
   const resp = raw as unknown as ProxyResponse;
   const rawAction = (raw.action as string) ?? "pass";
   // Set plain values (not getters) so they survive spread/clone
@@ -64,9 +113,21 @@ export function enrichProxyResponse(raw: Record<string, unknown>): ProxyResponse
 }
 
 /**
- * Enrich a raw gateway ScanResponse with computed `action` and `score` getters.
+ * Enrich a raw gateway ScanResponse with computed `action` and `score` getters,
+ * and parse the wire-format `denial` into a typed StructuredDenial.
  */
 export function enrichScanResponse<T extends ScanResponse>(raw: Record<string, unknown>): T {
+  if (raw.denial !== undefined && raw.denial !== null && typeof raw.denial === "object") {
+    raw.denial = parseStructuredDenial(raw.denial);
+  } else if (raw.denial === undefined) {
+    raw.denial = null;
+  }
+  const denial = raw.denial as StructuredDenial | null;
+  if (denial) {
+    raw.denial_reason = denial.violatedPredicate;
+  } else if (raw.denial_reason === undefined) {
+    raw.denial_reason = null;
+  }
   const resp = raw as T;
   raw.action = resp.allowed ? "pass" : "block";
   raw.score = resp.risk_score;
@@ -118,7 +179,7 @@ export interface ClampdClientOptions {
   gatewayUrl?: string;
   agentId: string;
   apiKey?: string;
-  secret?: string;
+  signingKey?: KeyObject;
   timeoutMs?: number;
   /** Retry options for transient gateway errors. */
   retry?: RetryOptions;
@@ -133,6 +194,10 @@ function blockedResponse(reason: string, gatewayError = false): ProxyResponse {
     request_id: "error",
     allowed: false,
     risk_score: 1.0,
+    denial: syntheticDenial(
+      gatewayError ? "SDK/gateway_error" : "SDK/blocked",
+      reason,
+    ),
     denial_reason: reason,
     matched_rules: [],
     latency_ms: 0,
@@ -153,7 +218,7 @@ export class ClampdClient {
   private readonly gatewayUrl: string;
   public readonly agentId: string;
   private readonly apiKey: string;
-  private readonly secret?: string;
+  private readonly signingKey?: KeyObject;
   private cachedJwt: string;
   private jwtExpiresAt: number;
   private readonly jwtTtlSeconds: number;
@@ -170,6 +235,32 @@ export class ClampdClient {
   private cbOpenedAt: number = 0;
   private cbState: "closed" | "open" | "half-open" = "closed";
 
+  /**
+   * Loop-detection ring: last N idempotency keys this client has seen on
+   * Deny/Downscope responses. Bounded so an agent that eventually moves
+   * on can't be flagged forever. See `recordAndCheckLoop`.
+   */
+  private readonly recentIdempotencyKeys: string[] = [];
+  private static readonly LOOP_DETECTION_WINDOW = 5;
+
+  /**
+   * Track the response's idempotency key; return true when the same key
+   * is already in the recent ring — the proxy method should raise
+   * `ClampdLoopError` instead of returning the response normally.
+   */
+  recordAndCheckLoop(resp: ProxyResponse): boolean {
+    const key = resp.denial?.idempotencyKey;
+    if (!key) return false;
+    if (this.recentIdempotencyKeys.includes(key)) {
+      return true;
+    }
+    this.recentIdempotencyKeys.push(key);
+    if (this.recentIdempotencyKeys.length > ClampdClient.LOOP_DETECTION_WINDOW) {
+      this.recentIdempotencyKeys.shift();
+    }
+    return false;
+  }
+
   constructor(opts: ClampdClientOptions) {
     this.gatewayUrl = (opts.gatewayUrl ?? "http://localhost:8080").replace(
       /\/$/,
@@ -177,9 +268,11 @@ export class ClampdClient {
     );
     this.agentId = opts.agentId;
     this.apiKey = opts.apiKey ?? process.env.CLAMPD_API_KEY ?? "";
-    this.secret = opts.secret;
+    this.signingKey = opts.signingKey;
     this.jwtTtlSeconds = 3600;
-    this.cachedJwt = makeAgentJwt(this.agentId, { secret: opts.secret });
+    this.cachedJwt = opts.signingKey
+      ? makeAgentJwtEd25519(this.agentId, opts.signingKey)
+      : "";
     this.jwtExpiresAt = Math.floor(Date.now() / 1000) + this.jwtTtlSeconds;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
 
@@ -221,11 +314,17 @@ export class ClampdClient {
     }
   }
 
-  /** Return a valid JWT, regenerating if within 60s of expiry. */
+  /** Return a valid EdDSA JWT, regenerating if within 60s of expiry. */
   private getJwt(): string {
+    if (!this.signingKey) {
+      throw new Error(
+        "[clampd] No signing key. The agent must be enrolled " +
+          "(clampd.init() with CLAMPD_DSN) before making requests.",
+      );
+    }
     const now = Math.floor(Date.now() / 1000);
-    if (now >= this.jwtExpiresAt - 60) {
-      this.cachedJwt = makeAgentJwt(this.agentId, { secret: this.secret });
+    if (now >= this.jwtExpiresAt - 60 || !this.cachedJwt) {
+      this.cachedJwt = makeAgentJwtEd25519(this.agentId, this.signingKey);
       this.jwtExpiresAt = now + this.jwtTtlSeconds;
     }
     return this.cachedJwt;
@@ -285,18 +384,15 @@ export class ClampdClient {
       if (chain.length > 1) {
         body.delegation_chain = chain;
         body.delegation_trace_id = delegation.traceId;
-        // Sign a short-lived proof binding (leaf, chain) under the
-        // leaf agent's credential hash. The gateway verifies this
-        // when CLAMPD_DELEGATION_SIGNATURES=on. Silently skip if no
-        // secret is configured for this client — the gateway enforces.
-        if (this.secret) {
-          try {
-            body.signed_proof = makeDelegationProof(this.agentId, chain, {
-              secret: this.secret,
-            });
-          } catch {
-            /* no secret available, fall through to unsigned */
-          }
+        // Sign the (leaf, chain) proof with the agent's Ed25519 key. The
+        // gateway upgrades confidence to "verified"; it only *requires* the
+        // proof when CLAMPD_DELEGATION_SIGNATURES=on.
+        if (this.signingKey) {
+          body.signed_proof = makeDelegationProofEd25519(
+            this.agentId,
+            chain,
+            this.signingKey,
+          );
         }
       }
     }

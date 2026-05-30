@@ -96,7 +96,7 @@ mod tests {
             scope_requested: "database:read".to_string(),
             scope_granted: Some("database:read".to_string()),
             blocked: false,
-            denial_reason: None,
+            denial: None,
             session_id: "sess-1".to_string(),
             session_flags: vec![],
             response_metadata: None,

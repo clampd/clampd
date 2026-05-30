@@ -137,6 +137,7 @@ async fn start_mock_gateway(
 
     let app = Router::new()
         .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
+        .route("/v1/enroll", post(|| async { Json(json!({"agent_id": "00000000-0000-0000-0000-000000000001"})) }))
         .route(
             "/v1/proxy",
             post(move |State(st): State<MockState>, headers: HeaderMap, Json(body): Json<Value>| {
@@ -151,12 +152,19 @@ async fn start_mock_gateway(
                         serde_json::to_string(&body).unwrap(),
                         headers,
                     ));
+                    // v0.20: gateway sends the typed `denial` shape, not
+                    // the legacy `denial_reason` string. Build a minimal
+                    // StructuredDenial when the mock was asked to deny.
+                    let denial_json = denial_reason.as_ref().map(|r| json!({
+                        "rule_id": rules.first().cloned().unwrap_or_default(),
+                        "violated_predicate": r,
+                    }));
                     Json(json!({
                         "request_id": "test-req-001",
                         "allowed": allow,
                         "action": if allow { "pass" } else { "block" },
                         "risk_score": risk_score,
-                        "denial_reason": denial_reason,
+                        "denial": denial_json,
                         "matched_rules": rules,
                         "reasoning": null,
                         "latency_ms": 5
@@ -179,7 +187,7 @@ async fn start_mock_gateway(
                         "allowed": true,
                         "action": "pass",
                         "risk_score": 0.0,
-                        "denial_reason": null,
+                        "denial": null,
                         "matched_rules": [],
                         "latency_ms": 2
                     }))
@@ -261,6 +269,127 @@ async fn guard_blocks_when_gateway_denies() {
     assert!(output["reason"].as_str().unwrap().contains("Destructive shell command"));
     assert!(output["reason"].as_str().unwrap().contains("R042"));
     assert!(output["reason"].as_str().unwrap().contains("0.92"));
+}
+
+// ── Corrective-action rendering (v0.20) ───────────────────────────────
+
+async fn start_mock_gateway_with_corrective(
+    corrective: Value,
+    risk_score: f64,
+) -> SocketAddr {
+    let app = Router::new()
+        .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
+        .route("/v1/enroll", post(|| async { Json(json!({"agent_id": "00000000-0000-0000-0000-000000000001"})) }))
+        .route(
+            "/v1/proxy",
+            post(move |Json(_body): Json<Value>| {
+                let corrective = corrective.clone();
+                async move {
+                    Json(json!({
+                        "request_id": "test-corrective-001",
+                        "allowed": false,
+                        "action": "block",
+                        "risk_score": risk_score,
+                        "denial": {
+                            "rule_id": "R001",
+                            "violated_predicate": "Destructive SQL detected",
+                            "corrective": corrective,
+                        },
+                        "matched_rules": ["R001"],
+                        "latency_ms": 5,
+                    }))
+                }
+            }),
+        );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    addr
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn guard_renders_switch_tool_corrective() {
+    let addr = start_mock_gateway_with_corrective(
+        json!({
+            "kind": "switch_tool",
+            "payload": { "tool": "archive_table" },
+            "human_explanation": "DROP is destructive.",
+            "confidence": "high",
+            "source": "rule",
+        }),
+        0.95,
+    ).await;
+    let tmp = TempDir::new().unwrap();
+    write_config(tmp.path().to_str().unwrap(), json!({
+        "gateway_url": format!("http://{}", addr)
+    }));
+    let result = run_guard(
+        tmp.path().to_str().unwrap(),
+        vec![("CLAUDE_TOOL_NAME", "Bash"), ("CLAUDE_TOOL_INPUT", r#"{"command":"DROP TABLE users"}"#)],
+    );
+    assert_eq!(result.code, 2, "stderr: {}", result.stderr);
+    let output: Value = serde_json::from_str(&result.stdout).expect("stdout should be JSON");
+    let reason = output["reason"].as_str().unwrap();
+    assert!(reason.contains("DROP is destructive"), "reason: {}", reason);
+    assert!(reason.contains("archive_table"), "reason: {}", reason);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn guard_renders_wait_and_retry_corrective() {
+    let addr = start_mock_gateway_with_corrective(
+        json!({
+            "kind": "wait_and_retry",
+            "payload": { "retry_after_seconds": 60, "window_label": "09:00-17:00 UTC" },
+            "human_explanation": "Off-hours.",
+            "confidence": "high",
+            "source": "boundary",
+        }),
+        0.5,
+    ).await;
+    let tmp = TempDir::new().unwrap();
+    write_config(tmp.path().to_str().unwrap(), json!({
+        "gateway_url": format!("http://{}", addr)
+    }));
+    let result = run_guard(
+        tmp.path().to_str().unwrap(),
+        vec![("CLAUDE_TOOL_NAME", "Bash"), ("CLAUDE_TOOL_INPUT", r#"{"command":"deploy"}"#)],
+    );
+    assert_eq!(result.code, 2, "stderr: {}", result.stderr);
+    let output: Value = serde_json::from_str(&result.stdout).expect("stdout should be JSON");
+    let reason = output["reason"].as_str().unwrap();
+    // 0.23.1 renders the server-side human_explanation (single source of truth).
+    assert!(reason.contains("Off-hours"), "reason: {}", reason);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn guard_suppresses_low_confidence_corrective() {
+    let addr = start_mock_gateway_with_corrective(
+        json!({
+            "kind": "switch_tool",
+            "payload": { "tool": "hidden_alt" },
+            "human_explanation": "Should not surface.",
+            "confidence": "low",
+            "source": "rule",
+        }),
+        0.5,
+    ).await;
+    let tmp = TempDir::new().unwrap();
+    write_config(tmp.path().to_str().unwrap(), json!({
+        "gateway_url": format!("http://{}", addr)
+    }));
+    let result = run_guard(
+        tmp.path().to_str().unwrap(),
+        vec![("CLAUDE_TOOL_NAME", "Bash"), ("CLAUDE_TOOL_INPUT", r#"{}"#)],
+    );
+    let output: Value = serde_json::from_str(&result.stdout).expect("stdout should be JSON");
+    let reason = output["reason"].as_str().unwrap();
+    // Low-confidence corrective text is suppressed; fall back to
+    // violated_predicate.
+    assert!(!reason.contains("hidden_alt"), "reason: {}", reason);
+    assert!(reason.contains("Destructive SQL"), "reason: {}", reason);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -554,7 +683,6 @@ async fn setup_creates_config_and_installs_hooks() {
         "--url", &format!("http://{}", addr),
         "--key", "ag_test_key",
         "--agent", "my-agent-id",
-        "--secret", "ags_my_secret",
     ]);
 
     assert_eq!(result.code, 0, "stderr: {}", result.stderr);
@@ -565,7 +693,6 @@ async fn setup_creates_config_and_installs_hooks() {
     let config: Value = serde_json::from_str(&std::fs::read_to_string(&config_path).unwrap()).unwrap();
     assert_eq!(config["api_key"], "ag_test_key");
     assert_eq!(config["agent_id"], "my-agent-id");
-    assert_eq!(config["secret"], "ags_my_secret");
 
     // Hooks installed
     let settings_path = tmp.path().join(".claude").join("settings.json");
@@ -582,7 +709,6 @@ async fn setup_fails_with_unreachable_gateway() {
         "--url", "http://127.0.0.1:1",
         "--key", "ag_test",
         "--agent", "test-id",
-        "--secret", "ags_test",
     ]);
 
     assert_ne!(result.code, 0);
@@ -619,6 +745,7 @@ async fn e2e_setup_then_guard() {
 
     let app = Router::new()
         .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
+        .route("/v1/enroll", post(|| async { Json(json!({"agent_id": "00000000-0000-0000-0000-000000000001"})) }))
         .route("/v1/proxy", post(move |State(st): State<MockState>, Json(body): Json<Value>| {
             let requests = st.requests.clone();
             async move {
@@ -629,12 +756,20 @@ async fn e2e_setup_then_guard() {
                     .map(|c| c.contains("rm -rf"))
                     .unwrap_or(false);
 
+                let denial_json = if is_destructive {
+                    Some(json!({
+                        "rule_id": "R042",
+                        "violated_predicate": "Destructive command blocked",
+                    }))
+                } else {
+                    None
+                };
                 Json(json!({
                     "request_id": "e2e",
                     "allowed": !is_destructive,
                     "action": if is_destructive { "block" } else { "pass" },
                     "risk_score": if is_destructive { 0.95 } else { 0.01 },
-                    "denial_reason": if is_destructive { Some("Destructive command blocked") } else { None::<&str> },
+                    "denial": denial_json,
                     "matched_rules": if is_destructive { vec!["R042"] } else { Vec::<&str>::new() },
                     "latency_ms": 3
                 }))
@@ -656,7 +791,6 @@ async fn e2e_setup_then_guard() {
         "-u", &format!("http://{}", addr),
         "-k", "ag_e2e_key",
         "-a", "e2e-agent",
-        "-s", "ags_e2e_secret",
     ]);
     assert_eq!(result.code, 0, "setup failed: {}", result.stderr);
 
@@ -932,6 +1066,7 @@ async fn e2e_stdin_credential_vs_safe_commands() {
 
     let app = Router::new()
         .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
+        .route("/v1/enroll", post(|| async { Json(json!({"agent_id": "00000000-0000-0000-0000-000000000001"})) }))
         .route("/v1/proxy", post(move |State(st): State<MockState>, Json(body): Json<Value>| {
             let requests = st.requests.clone();
             async move {
@@ -949,12 +1084,20 @@ async fn e2e_stdin_credential_vs_safe_commands() {
                         || path.contains(".ssh") || path.contains("shadow") || path.contains("passwd")
                 };
 
+                let denial_json = if is_credential {
+                    Some(json!({
+                        "rule_id": "R143",
+                        "violated_predicate": "Credential access denied",
+                    }))
+                } else {
+                    None
+                };
                 Json(json!({
                     "request_id": "e2e-stdin",
                     "allowed": !is_credential,
                     "action": if is_credential { "block" } else { "pass" },
                     "risk_score": if is_credential { 1.0 } else { 0.05 },
-                    "denial_reason": if is_credential { Some("Credential access denied") } else { None::<&str> },
+                    "denial": denial_json,
                     "matched_rules": if is_credential { vec!["R143"] } else { Vec::<&str>::new() },
                     "latency_ms": 3
                 }))

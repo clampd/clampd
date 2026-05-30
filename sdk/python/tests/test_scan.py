@@ -23,7 +23,7 @@ def reset_global():
 def _init_client():
     """Initialize a global clampd client with mocked HTTP."""
     with patch("clampd.client.httpx.Client"):
-        clampd.init(agent_id="test")
+        clampd.init()
     return clampd._default_client
 
 
@@ -82,7 +82,7 @@ class TestOpenAIScanInput:
         client.scan_input = MagicMock(return_value=blocked_resp)
 
         oai, _, original_create = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test", scan_input=True)
+        wrapped = clampd.openai(oai, scan_input=True)
 
         with pytest.raises(ClampdBlockedError, match="R013 prompt injection"):
             wrapped.chat.completions.create(
@@ -106,7 +106,7 @@ class TestOpenAIScanInput:
         ))
 
         oai, response, original_create = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test", scan_input=True)
+        wrapped = clampd.openai(oai, scan_input=True)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -123,7 +123,7 @@ class TestOpenAIScanInput:
         client.scan_input = MagicMock(side_effect=ConnectionError("network down"))
 
         oai, response, original_create = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test", scan_input=True, fail_open=True)
+        wrapped = clampd.openai(oai, scan_input=True, fail_open=True)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -139,7 +139,7 @@ class TestOpenAIScanInput:
         client.scan_input = MagicMock(side_effect=ConnectionError("network down"))
 
         oai, _, _ = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test", scan_input=True, fail_open=False)
+        wrapped = clampd.openai(oai, scan_input=True, fail_open=False)
 
         with pytest.raises(ConnectionError, match="network down"):
             wrapped.chat.completions.create(
@@ -157,7 +157,7 @@ class TestOpenAIScanInput:
         ))
 
         oai, _, _ = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test", scan_input=True)
+        wrapped = clampd.openai(oai, scan_input=True)
 
         wrapped.chat.completions.create(
             model="gpt-4o",
@@ -186,7 +186,7 @@ class TestOpenAIScanInput:
         ))
 
         oai, response, _ = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -204,7 +204,7 @@ class TestOpenAIScanInput:
         client.scan_output = MagicMock()
 
         oai, response, _ = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test", scan_input=False, scan_output=False)
+        wrapped = clampd.openai(oai, scan_input=False, scan_output=False)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -233,7 +233,7 @@ class TestOpenAIScanOutput:
         ))
 
         oai, _, _ = _make_openai_mock(content="SSN: 123-45-6789")
-        wrapped = clampd.openai(oai, agent_id="test", scan_output=True)
+        wrapped = clampd.openai(oai, scan_output=True)
 
         with pytest.raises(ClampdBlockedError, match="PII detected"):
             wrapped.chat.completions.create(
@@ -253,7 +253,7 @@ class TestOpenAIScanOutput:
         ))
 
         oai, response, _ = _make_openai_mock(content="The weather is sunny.")
-        wrapped = clampd.openai(oai, agent_id="test", scan_output=True)
+        wrapped = clampd.openai(oai, scan_output=True)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -275,7 +275,7 @@ class TestAnthropicScan:
         client.scan_input = MagicMock(return_value=blocked_resp)
 
         anth, _, original_create = _make_anthropic_mock()
-        wrapped = clampd.anthropic(anth, agent_id="test", scan_input=True)
+        wrapped = clampd.anthropic(anth, scan_input=True)
 
         with pytest.raises(ClampdBlockedError, match="R013 prompt injection"):
             wrapped.messages.create(
@@ -302,7 +302,7 @@ class TestAnthropicScan:
         ))
 
         anth, _, _ = _make_anthropic_mock(text_content="SSN: 123-45-6789")
-        wrapped = clampd.anthropic(anth, agent_id="test", scan_output=True)
+        wrapped = clampd.anthropic(anth, scan_output=True)
 
         with pytest.raises(ClampdBlockedError, match="PII detected"):
             wrapped.messages.create(
@@ -404,7 +404,7 @@ class TestScanDefaultBehaviorOpenAI:
         oai.chat.completions.create = original_create
 
         # Use defaults (scan_input=True, scan_output=True)
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -448,7 +448,7 @@ class TestScanDefaultBehaviorOpenAI:
         original_create = MagicMock(side_effect=mock_create)
         oai.chat.completions.create = original_create
 
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -469,7 +469,7 @@ class TestScanDefaultBehaviorOpenAI:
         ))
 
         oai, response, original_create = _make_openai_mock()
-        wrapped = clampd.openai(oai, agent_id="test", scan_input=False)
+        wrapped = clampd.openai(oai, scan_input=False)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -488,7 +488,7 @@ class TestScanDefaultBehaviorOpenAI:
         client.scan_output = MagicMock()
 
         oai, response, original_create = _make_openai_mock(content="SSN: 123-45-6789")
-        wrapped = clampd.openai(oai, agent_id="test", scan_output=False)
+        wrapped = clampd.openai(oai, scan_output=False)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -518,7 +518,7 @@ class TestScanDefaultBehaviorOpenAI:
         original_create = MagicMock(return_value=response)
         oai.chat.completions.create = original_create
 
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         with pytest.raises(ClampdBlockedError, match="R013 prompt injection") as exc_info:
             wrapped.chat.completions.create(
@@ -545,7 +545,7 @@ class TestScanDefaultBehaviorOpenAI:
 
         oai, _, original_create = _make_openai_mock()
 
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         with pytest.raises(ClampdBlockedError, match="R001 SQL injection"):
             wrapped.chat.completions.create(
@@ -580,7 +580,7 @@ class TestScanDefaultBehaviorOpenAI:
 
         oai, _, original_create = _make_openai_mock(content="SSN: 123-45-6789, 987-65-4321")
 
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         with pytest.raises(ClampdBlockedError, match="R039 PII in output"):
             wrapped.chat.completions.create(
@@ -602,7 +602,7 @@ class TestScanDefaultBehaviorOpenAI:
 
         oai, response, _ = _make_openai_mock(content=None)
 
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -623,7 +623,7 @@ class TestScanDefaultBehaviorOpenAI:
 
         oai, response, _ = _make_openai_mock()
 
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         result = wrapped.chat.completions.create(
             model="gpt-4o",
@@ -648,7 +648,7 @@ class TestScanDefaultBehaviorOpenAI:
 
         oai, _, _ = _make_openai_mock()
 
-        wrapped = clampd.openai(oai, agent_id="test")
+        wrapped = clampd.openai(oai)
 
         messages = [
             {"role": "system", "content": "Be helpful"},

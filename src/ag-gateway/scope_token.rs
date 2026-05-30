@@ -10,7 +10,6 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::{Signature, Signer, Verifier, SigningKey, VerifyingKey};
-use sha2::{Digest, Sha256};
 
 /// Claims embedded in a scope token.
 #[derive(Debug, Clone)]
@@ -34,43 +33,24 @@ pub struct MintInput<'a> {
     pub agent_id: &'a str,
     pub scope_granted: &'a str,
     pub tool_name: &'a str,
-    pub params_hash: &'a str,
+    /// Precomputed per-call binding hash (see `ag_common::contract_hash::call_binding`).
+    /// Binds the token to the exact (tool, params) it authorized; the tool side
+    /// recomputes it from the call it received and rejects on mismatch.
+    pub binding: &'a str,
     pub request_id: &'a str,
     pub ttl_secs: i64,
     pub now: i64,
-}
-
-/// Compute the binding hash for a `(tool_name, params_hash)` pair.
-///
-/// SECURITY (#13 item 1): uses length-prefixed framing
-/// `"<len(tool)>:<tool>:<len(params)>:<params>"` so the encoding is
-/// injective. The previous implementation joined with a `|` delimiter,
-/// which was ambiguous - `tool="a", params="b|c"` and `tool="a|b",
-/// params="c"` both hashed to `"a|b|c"`, allowing an adversary to mint a
-/// scope token valid for a different `(tool, params)` pair. Length
-/// prefixes make the encoding unambiguous regardless of delimiter
-/// characters appearing inside either field.
-fn compute_binding(tool_name: &str, params_hash: &str) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    // Framing: length-prefix each field so reshuffling delimiter characters
-    // cannot produce the same input sequence.
-    hasher.update(tool_name.len().to_le_bytes());
-    hasher.update(tool_name.as_bytes());
-    hasher.update(params_hash.len().to_le_bytes());
-    hasher.update(params_hash.as_bytes());
-    hasher.finalize().into()
 }
 
 /// Mint a scope token: sign a JSON payload with Ed25519.
 ///
 /// Returns the token string: `base64url(payload).base64url(signature)`.
 pub fn mint(signing_key: &SigningKey, input: &MintInput) -> String {
-    let binding = hex::encode(compute_binding(input.tool_name, input.params_hash));
     let payload = serde_json::json!({
         "sub": input.agent_id,
         "scope": input.scope_granted,
         "tool": input.tool_name,
-        "binding": binding,
+        "binding": input.binding,
         "exp": input.now + input.ttl_secs,
         "rid": input.request_id,
     });
@@ -145,7 +125,8 @@ mod tests {
             agent_id: "agent-123",
             scope_granted: "db:query:read",
             tool_name: "database.query",
-            params_hash: "abc123def456",
+            // Real per-call binding (64-char sha256 hex) via the shared fn.
+            binding: "5b6c1d4e8f2a3b7c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e",
             request_id: "req-001",
             ttl_secs: 300,
             now: 1_700_000_000,
@@ -247,7 +228,7 @@ mod tests {
         let (sk, vk) = test_keypair();
         let input1 = default_mint_input();
         let mut input2 = default_mint_input();
-        input2.params_hash = "different_hash";
+        input2.binding = "different_binding_hash";
 
         let token1 = mint(&sk, &input1);
         let token2 = mint(&sk, &input2);
@@ -256,7 +237,7 @@ mod tests {
         let claims2 = verify(&token2, &vk, input2.now).unwrap();
 
         assert_ne!(claims1.binding, claims2.binding,
-            "Different params_hash must produce different binding");
+            "Different binding must produce different token claim");
     }
 
     #[test]
@@ -273,58 +254,34 @@ mod tests {
     // ADVERSARIAL TESTS - Red team against scope tokens
     // ══════════════════════════════════════════════════════════════════
 
+    /// The per-call binding (now `ag_common::contract_hash::call_binding`,
+    /// canonical JSON over `{tool, params}`) must be injective in (tool,
+    /// params): distinct calls produce distinct bindings, and a token minted
+    /// for one binding only ever carries that binding. Canonical-JSON framing
+    /// is structurally unambiguous (no delimiter-reshuffle collisions).
     #[test]
-    fn adversarial_binding_hash_collision() {
-        // tool_name="adb" + params_hash="c" vs tool_name="a" + params_hash="dbc"
-        // Both produce SHA256("adbc") - identical binding hash
-        let (signing_key, verifying_key) = test_keypair();
-        let token1 = mint(&signing_key, &MintInput {
-            agent_id: "agent-1", scope_granted: "db:read",
-            tool_name: "adb", params_hash: "c",
-            request_id: "req-1", ttl_secs: 60, now: 1000,
-        });
-        let token2 = mint(&signing_key, &MintInput {
-            agent_id: "agent-1", scope_granted: "db:read",
-            tool_name: "a", params_hash: "dbc",
-            request_id: "req-1", ttl_secs: 60, now: 1000,
-        });
-        let claims1 = verify(&token1, &verifying_key, 1000).unwrap();
-        let claims2 = verify(&token2, &verifying_key, 1000).unwrap();
-        // Different (tool, params) MUST produce different bindings. With the
-        // old `format!("{}|{}", ...)` scheme, inputs that reshuffled the `|`
-        // character across the boundary would collide; length-prefix framing
-        // (see `compute_binding`) guarantees injective encoding.
-        assert_ne!(
-            claims1.binding, claims2.binding,
-            "Different tool+params must produce different bindings"
-        );
-    }
+    fn binding_is_injective_in_tool_and_params() {
+        use serde_json::json;
+        // Reshuffle the tool/param boundary — distinct under JSON structure.
+        let b1 = ag_common::contract_hash::call_binding("a", &json!("b|c"));
+        let b2 = ag_common::contract_hash::call_binding("a|b", &json!("c"));
+        assert_ne!(b1, b2, "tool/param-boundary reshuffle must not collide");
 
-    /// Regression test for #13 item 1: the exact collision case called out in
-    /// the issue. `(tool="a", params="b|c")` and `(tool="a|b", params="c")`
-    /// both serialized to `"a|b|c"` under the old delimiter-only scheme,
-    /// letting an attacker mint a scope token that appeared valid for a
-    /// different `(tool, params)` pair. Length-prefix framing must reject
-    /// this case.
-    #[test]
-    fn adversarial_binding_delimiter_reshuffle_collision() {
+        // Same tool, escalated params -> different binding (replay protection).
+        let safe = ag_common::contract_hash::call_binding("db.query", &json!({"sql": "SELECT 1"}));
+        let danger = ag_common::contract_hash::call_binding("db.query", &json!({"sql": "DROP TABLE users"}));
+        assert_ne!(safe, danger, "different params must produce different bindings");
+
+        // And the minted token carries exactly the binding it was given.
         let (signing_key, verifying_key) = test_keypair();
-        let token_a = mint(&signing_key, &MintInput {
+        let token = mint(&signing_key, &MintInput {
             agent_id: "agent-1", scope_granted: "db:read",
-            tool_name: "a", params_hash: "b|c",
+            tool_name: "db.query", binding: &safe,
             request_id: "req-1", ttl_secs: 60, now: 1000,
         });
-        let token_b = mint(&signing_key, &MintInput {
-            agent_id: "agent-1", scope_granted: "db:read",
-            tool_name: "a|b", params_hash: "c",
-            request_id: "req-1", ttl_secs: 60, now: 1000,
-        });
-        let claims_a = verify(&token_a, &verifying_key, 1000).unwrap();
-        let claims_b = verify(&token_b, &verifying_key, 1000).unwrap();
-        assert_ne!(
-            claims_a.binding, claims_b.binding,
-            "Delimiter-reshuffle inputs must not collide (regression for #13)"
-        );
+        let claims = verify(&token, &verifying_key, 1000).unwrap();
+        assert_eq!(claims.binding, safe);
+        assert_ne!(claims.binding, danger);
     }
 
     /// Regression test for #13 item 1: length-prefixing must also disambiguate
@@ -336,12 +293,12 @@ mod tests {
         let (signing_key, verifying_key) = test_keypair();
         let a = mint(&signing_key, &MintInput {
             agent_id: "a", scope_granted: "s",
-            tool_name: "", params_hash: "foo",
+            tool_name: "", binding: "foo",
             request_id: "r", ttl_secs: 60, now: 1000,
         });
         let b = mint(&signing_key, &MintInput {
             agent_id: "a", scope_granted: "s",
-            tool_name: "foo", params_hash: "",
+            tool_name: "foo", binding: "",
             request_id: "r", ttl_secs: 60, now: 1000,
         });
         let ca = verify(&a, &verifying_key, 1000).unwrap();
@@ -354,7 +311,7 @@ mod tests {
         let (signing_key, verifying_key) = test_keypair();
         let token = mint(&signing_key, &MintInput {
             agent_id: "agent-1", scope_granted: "db:read",
-            tool_name: "db.query", params_hash: "abc",
+            tool_name: "db.query", binding: "abc",
             request_id: "req-1", ttl_secs: 60, now: 1000,
         });
         // Token exp = 1060. Verify at exactly 1060.
@@ -368,7 +325,7 @@ mod tests {
         let (signing_key, verifying_key) = test_keypair();
         let token = mint(&signing_key, &MintInput {
             agent_id: "agent-1", scope_granted: "db:read",
-            tool_name: "db.query", params_hash: "abc",
+            tool_name: "db.query", binding: "abc",
             request_id: "req-1", ttl_secs: 0, now: 1000,
         });
         // exp = 1000 + 0 = 1000. now=1000. now > exp is false → valid
@@ -384,7 +341,7 @@ mod tests {
         let (signing_key, verifying_key) = test_keypair();
         let token = mint(&signing_key, &MintInput {
             agent_id: "agent-1", scope_granted: "db:read",
-            tool_name: "db.query", params_hash: "abc",
+            tool_name: "db.query", binding: "abc",
             request_id: "req-1", ttl_secs: 60, now: 1000,
         });
         // Tamper with the payload

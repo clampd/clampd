@@ -195,3 +195,45 @@ describe("ScopeVerificationError", () => {
     expect(err).toBeInstanceOf(Error);
   });
 });
+
+import { callBinding, verifyCallBinding } from "../index.js";
+import type { ScopeTokenClaims } from "../tool-verify.js";
+
+describe("call binding (#5)", () => {
+  const PARITY: [string, unknown, string][] = [
+    ["db.query", { sql: "SELECT 1" }, "d10381a5569472b326bcdbd0bf33156c833626610643373f01e52e8483fc15a4"],
+    ["a", "b|c", "485d108852299dcaecc1fabb6dbeab20e609b06bb8e2b6cf888208887e4744b5"],
+    ["a|b", "c", "56f25ddaedc1ba09b5c4073082ffc42572eace2dec242f0cab364ca34b129b89"],
+    ["x", {}, "a03d1a7678e05d355c973d943acc1dc7090157438df5f7713fd42e81bd91219d"],
+    ["net.get", { url: "http://h/", z: 1, a: [1, 2] }, "5acd373a260ac73be35509182e62bd96d44e6f96a048ac1ba2157ef70d90ee92"],
+  ];
+
+  it("matches the cross-language parity vectors", () => {
+    for (const [tool, params, expected] of PARITY) {
+      expect(callBinding(tool, params)).toBe(expected);
+    }
+  });
+
+  it("is injective in tool and params", () => {
+    expect(callBinding("db.query", { sql: "SELECT 1" })).not.toBe(callBinding("db.query", { sql: "DROP TABLE users" }));
+    expect(callBinding("a", "b|c")).not.toBe(callBinding("a|b", "c"));
+  });
+
+  const claimsWith = (binding: string): ScopeTokenClaims =>
+    ({ sub: "a", scope: "db:query:read", tool: "db.query", binding, exp: 0, rid: "r" });
+
+  it("passes when the binding matches the call", () => {
+    const c = claimsWith(callBinding("db.query", { sql: "SELECT 1" }));
+    expect(() => verifyCallBinding(c, "db.query", { sql: "SELECT 1" })).not.toThrow();
+  });
+
+  it("rejects a token replayed for a different call", () => {
+    const c = claimsWith(callBinding("db.query", { sql: "SELECT 1" }));
+    expect(() => verifyCallBinding(c, "db.query", { sql: "DROP TABLE users" })).toThrow();
+    expect(() => verifyCallBinding(c, "shell.exec", { sql: "SELECT 1" })).toThrow();
+  });
+
+  it("skips legacy tokens with empty binding", () => {
+    expect(() => verifyCallBinding(claimsWith(""), "anything", { x: 1 })).not.toThrow();
+  });
+});

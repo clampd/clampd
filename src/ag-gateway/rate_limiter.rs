@@ -59,12 +59,16 @@ impl RateLimiter {
         let mut conn = match pool.get().await {
             Ok(c) => c,
             Err(e) => {
-                warn!(key = %key, "Rate limit fail-open - Redis unavailable: {}", e);
-                crate::metrics::increment_rate_limit_fail_open();
+                // Fail CLOSED: Redis-down already rejects at the auth stage
+                // (credential lookup is fail-closed), so allowing unlimited
+                // traffic here is both inconsistent and a DoS-amplification
+                // surface. Deny with a short retry instead.
+                warn!(key = %key, "Rate limit fail-closed - Redis unavailable: {}", e);
+                crate::metrics::increment_rate_limit_fail_closed();
                 return RateLimitResult {
-                    allowed: true,
-                    remaining: max_requests,
-                    retry_after: None,
+                    allowed: false,
+                    remaining: 0,
+                    retry_after: Some(1),
                 };
             }
         };
@@ -91,12 +95,14 @@ impl RateLimiter {
                 val.max(0) as u32
             }
             Err(e) => {
-                warn!(key = %key, "Rate limit fail-open - Redis INCR failed: {}", e);
-                crate::metrics::increment_rate_limit_fail_open();
+                // Fail CLOSED (see note above): deny on Redis error rather than
+                // allowing unbounded traffic when the limiter can't account.
+                warn!(key = %key, "Rate limit fail-closed - Redis INCR failed: {}", e);
+                crate::metrics::increment_rate_limit_fail_closed();
                 return RateLimitResult {
-                    allowed: true,
-                    remaining: max_requests,
-                    retry_after: None,
+                    allowed: false,
+                    remaining: 0,
+                    retry_after: Some(1),
                 };
             }
         };
@@ -173,11 +179,13 @@ impl RateLimiter {
         let mut conn = match pool.get().await {
             Ok(c) => c,
             Err(e) => {
-                warn!(agent_id = %agent_id, "Byte rate limit fail-open - Redis unavailable: {}", e);
+                // Fail CLOSED (write-bomb mitigation must not open on Redis loss).
+                warn!(agent_id = %agent_id, "Byte rate limit fail-closed - Redis unavailable: {}", e);
+                crate::metrics::increment_rate_limit_fail_closed();
                 return RateLimitResult {
-                    allowed: true,
+                    allowed: false,
                     remaining: 0,
-                    retry_after: None,
+                    retry_after: Some(1),
                 };
             }
         };
@@ -204,11 +212,13 @@ impl RateLimiter {
                 val.max(0) as u64
             }
             Err(e) => {
-                warn!(agent_id = %agent_id, "Byte rate limit fail-open - Redis INCRBY failed: {}", e);
+                // Fail CLOSED (see note above).
+                warn!(agent_id = %agent_id, "Byte rate limit fail-closed - Redis INCRBY failed: {}", e);
+                crate::metrics::increment_rate_limit_fail_closed();
                 return RateLimitResult {
-                    allowed: true,
+                    allowed: false,
                     remaining: 0,
-                    retry_after: None,
+                    retry_after: Some(1),
                 };
             }
         };

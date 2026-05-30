@@ -52,3 +52,34 @@ def contract_hash(name: str, description: str, parameters: Any) -> str:
         ensure_ascii=False,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def call_binding(tool: str, params: Any) -> str:
+    """Compute the per-call binding hash for a scope token.
+
+    Wire-identical to ``ag_common::contract_hash::call_binding`` (Rust) and the
+    TS SDK's ``callBinding``. Binds a scope token to the EXACT call it
+    authorized — the tool name plus the call params — so a token granted for one
+    call cannot be replayed for a different one. The tool side recomputes this
+    from the call it received and rejects the token on mismatch.
+
+    Formula:
+        sha256(json.dumps({"params": params, "tool": tool},
+                          sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=False))
+
+    Args:
+        tool: Tool name exactly as sent in the proxy request (not
+            re-canonicalised), so both ends agree without shared rules.
+        params: The call parameters (JSON-serialisable). Use ``{}`` for none.
+
+    Returns:
+        64-character lowercase hex string (SHA-256).
+    """
+    canonical = json.dumps(
+        {"params": params if params is not None else {}, "tool": tool},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

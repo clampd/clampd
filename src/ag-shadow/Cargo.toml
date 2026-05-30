@@ -1,6 +1,6 @@
 [package]
 name = "ag-shadow"
-version = "0.23.5"
+version = "0.23.6"
 edition = "2021"
 
 [lib]
@@ -16,6 +16,7 @@ ag-common = { path = "../ag-common" }
 ag-license = { path = "../ag-license" }
 ag-proto = { path = "../ag-proto" }
 tokio = { workspace = true }
+dashmap = { workspace = true }
 async-nats = { workspace = true }
 clickhouse = { version = "0.12", features = ["uuid", "native-tls"] }
 serde = { workspace = true }

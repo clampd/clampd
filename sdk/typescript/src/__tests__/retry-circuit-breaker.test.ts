@@ -1,3 +1,5 @@
+import { generateKeyPairSync as _gkp } from "node:crypto";
+const _TEST_KEY = _gkp("ed25519").privateKey;
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ClampdClient } from "../client.js";
 
@@ -25,7 +27,7 @@ describe("retry", () => {
     }));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       retry: { maxRetries: 3, baseDelayMs: 10 },
     });
 
@@ -38,7 +40,7 @@ describe("retry", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       retry: { maxRetries: 2, baseDelayMs: 10 },
     });
 
@@ -59,7 +61,7 @@ describe("retry", () => {
     }));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       retry: { maxRetries: 3, baseDelayMs: 10 },
     });
 
@@ -89,7 +91,7 @@ describe("retry", () => {
     }));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       retry: { maxRetries: 2, baseDelayMs: 10 },
     });
 
@@ -119,7 +121,7 @@ describe("retry", () => {
     }));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       retry: { maxRetries: 3, baseDelayMs: 10 },
     });
 
@@ -136,7 +138,7 @@ describe("circuit breaker", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       circuitBreaker: { threshold: 3, resetTimeoutMs: 60_000 },
     });
 
@@ -159,7 +161,7 @@ describe("circuit breaker", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       circuitBreaker: { threshold: 2, resetTimeoutMs: 50 },
     });
 
@@ -191,7 +193,7 @@ describe("circuit breaker", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       circuitBreaker: { threshold: 2, resetTimeoutMs: 50 },
     });
 
@@ -244,7 +246,7 @@ describe("circuit breaker", () => {
     }));
 
     const client = new ClampdClient({
-      agentId: "test",
+      agentId: "test", signingKey: _TEST_KEY,
       circuitBreaker: { threshold: 3, resetTimeoutMs: 60_000 },
     });
 

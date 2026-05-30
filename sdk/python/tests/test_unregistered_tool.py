@@ -15,6 +15,7 @@ import pytest
 import clampd
 from clampd import ClampdUnregisteredToolError
 from clampd._guardrails import _raise_if_unregistered, guard_tool_callback
+from clampd._corrective import synthetic_denial
 from clampd.client import ClampdBlockedError, ClampdClient, ProxyResponse
 
 
@@ -24,11 +25,16 @@ def _proxy_response(
     denial_reason: str | None = None,
     risk_score: float = 1.0,
 ) -> ProxyResponse:
+    denial = (
+        synthetic_denial("TEST/unregistered", denial_reason)
+        if denial_reason
+        else None
+    )
     return ProxyResponse(
         request_id="req-unreg-1",
         allowed=allowed,
         risk_score=risk_score,
-        denial_reason=denial_reason,
+        denial=denial,
         latency_ms=1,
     )
 

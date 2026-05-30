@@ -26,6 +26,7 @@
 
 import { verify, createPublicKey, KeyObject } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { callBinding } from "./contract-hash.js";
 
 // ── Claims interface ──────────────────────────────────────────────────
 
@@ -320,5 +321,60 @@ export async function requireScope(
     );
   }
 
+  return claims;
+}
+
+/**
+ * Enforce that a scope token was bound to THIS exact call.
+ *
+ * Recomputes the per-call binding from the `(tool, params)` the tool actually
+ * received and checks it against the token's `binding` claim. This is what
+ * stops a valid token from being replayed for a *different* call (a different
+ * tool, or the same tool with escalated params) — the confused-deputy / replay
+ * defense. Call this on the tool side with what you received.
+ *
+ * Tokens minted before call-binding shipped carry an empty `binding`; those are
+ * skipped (the scope check still applies) for backward compatibility.
+ *
+ * @throws {ScopeVerificationError} if the binding does not match the call.
+ */
+export function verifyCallBinding(
+  claims: ScopeTokenClaims,
+  tool: string,
+  params: unknown,
+): void {
+  if (!claims.binding) return; // legacy token without a binding — skip
+  const expected = callBinding(tool, params);
+  if (claims.binding !== expected) {
+    throw new ScopeVerificationError(
+      `Scope token is not bound to this call: token authorized a different ` +
+        `(tool, params). Expected binding ${expected}, token has ${claims.binding}.`,
+      claims,
+    );
+  }
+}
+
+/**
+ * Verify a scope token, require a scope, AND enforce call-binding in one step.
+ *
+ * The tool-side entry point: confirms the token is valid, grants the required
+ * scope, and was issued for exactly this `(tool, params)` call.
+ *
+ * @throws {ScopeVerificationError} on invalid token, missing scope, or a
+ *   binding mismatch (replayed/forged-for-a-different-call token).
+ */
+export async function requireScopeForCall(
+  requiredScope: string,
+  tool: string,
+  params: unknown,
+  opts?: { token?: string; publicKey?: KeyObject; gatewayUrl?: string },
+): Promise<ScopeTokenClaims> {
+  const claims = await requireScope(
+    requiredScope,
+    opts?.token,
+    opts?.publicKey,
+    opts?.gatewayUrl,
+  );
+  verifyCallBinding(claims, tool, params);
   return claims;
 }

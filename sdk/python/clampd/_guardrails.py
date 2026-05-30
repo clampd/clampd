@@ -110,7 +110,7 @@ def scan_input_openai(
         result = client.scan_input(text, message_count=len(messages))
         if not result.allowed:
             raise ClampdBlockedError(
-                result.denial_reason or "Input blocked by guardrail",
+                result.denial or "Input blocked by guardrail",
                 risk_score=result.risk_score,
                 response=result,
             )
@@ -137,7 +137,7 @@ def scan_input_anthropic(
         result = client.scan_input(text, message_count=len(messages))
         if not result.allowed:
             raise ClampdBlockedError(
-                result.denial_reason or "Input blocked by guardrail",
+                result.denial or "Input blocked by guardrail",
                 risk_score=result.risk_score,
                 response=result,
             )
@@ -161,7 +161,7 @@ def scan_output_content(
         result = client.scan_output(content)
         if not result.allowed:
             raise ClampdBlockedError(
-                result.denial_reason or "Output blocked by guardrail",
+                result.denial or "Output blocked by guardrail",
                 risk_score=result.risk_score,
                 response=result,
             )
@@ -201,7 +201,7 @@ def inspect_response(
 
     if not resp.allowed:
         raise ClampdBlockedError(
-            resp.denial_reason or "Response blocked",
+            resp.denial or "Response blocked",
             risk_score=resp.risk_score,
             response=resp,
         )
@@ -221,7 +221,7 @@ def inspect_response(
 
     if not scan_resp.allowed:
         raise ClampdBlockedError(
-            scan_resp.denial_reason or "Response contains sensitive data",
+            scan_resp.denial or "Response contains sensitive data",
             risk_score=scan_resp.risk_score,
             response=scan_resp,
         )

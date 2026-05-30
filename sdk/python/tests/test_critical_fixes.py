@@ -52,9 +52,9 @@ class TestStreamingPassthrough:
         proxy_mock, _ = _mock_proxy(allowed=True)
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.openai(oai, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.openai(oai, scan_input=False, scan_output=False)
 
             result = wrapped.chat.completions.create(
                 model="gpt-4o", messages=[], stream=True
@@ -72,9 +72,9 @@ class TestStreamingPassthrough:
         proxy_mock, _ = _mock_proxy(allowed=True)
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.anthropic(anth, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.anthropic(anth, scan_input=False, scan_output=False)
 
             result = wrapped.messages.create(
                 model="claude-sonnet-4-6",
@@ -98,9 +98,9 @@ class TestStreamingPassthrough:
         )
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.scan_input = scan_mock
-            wrapped = clampd.openai(oai, agent_id="test", scan_input=True)
+            wrapped = clampd.openai(oai, scan_input=True)
 
             with pytest.raises(ClampdBlockedError, match="injection"):
                 wrapped.chat.completions.create(
@@ -118,7 +118,7 @@ class TestAsyncGuard:
         """B2: @guard on async def correctly awaits the function."""
         proxy_mock, _ = _mock_proxy(allowed=True)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
 
             @clampd.guard("database.query")
@@ -135,7 +135,7 @@ class TestAsyncGuard:
             allowed=False, denial_reason="SQL injection", risk_score=0.95
         )
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
 
             @clampd.guard("database.query")
@@ -154,7 +154,7 @@ class TestAsyncGuard:
             allowed=True, risk_score=0.0,
         ))
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             clampd._default_client.inspect = inspect_mock
             clampd._default_client.scan_output = scan_output_mock
@@ -173,7 +173,7 @@ class TestAsyncGuard:
         """B2: Sync functions still work after adding async support."""
         proxy_mock, _ = _mock_proxy(allowed=True)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
 
             @clampd.guard("database.query")
@@ -241,10 +241,10 @@ class TestScopeTokenRace:
         )
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             wrapped = clampd.openai(
-                oai, agent_id="test", check_response=True,
+                oai, check_response=True,
                 scan_input=False, scan_output=False,
             )
 
@@ -282,13 +282,14 @@ class TestAsyncClampdClient:
     async def test_async_client_jwt_before_http(self):
         """B4: JWT is created before httpx.AsyncClient (no leak on JWT failure)."""
         with patch(
-            "clampd.client.make_agent_jwt", side_effect=ValueError("no secret")
+            "clampd.client.make_agent_jwt_ed25519", side_effect=ValueError("no secret")
         ):
             with patch("clampd.client.httpx.AsyncClient") as MockAsync:
                 with pytest.raises(ValueError, match="no secret"):
                     AsyncClampdClient(
                         agent_id="test-agent",
                         gateway_url="http://test:8080",
+                        signing_key=object(),
                     )
                 # httpx.AsyncClient should NOT have been created
                 MockAsync.assert_not_called()
@@ -296,7 +297,7 @@ class TestAsyncClampdClient:
     def test_sync_client_jwt_before_http(self):
         """B4: ClampdClient also creates JWT before httpx.Client (no leak)."""
         with patch(
-            "clampd.client.make_agent_jwt", side_effect=ValueError("no secret")
+            "clampd.client.make_agent_jwt_ed25519", side_effect=ValueError("no secret")
         ):
             with patch("clampd.client.httpx.Client") as MockSync:
                 with pytest.raises(ValueError, match="no secret"):
@@ -305,5 +306,6 @@ class TestAsyncClampdClient:
                     ClampdClient(
                         agent_id="test-agent",
                         gateway_url="http://test:8080",
+                        signing_key=object(),
                     )
                 MockSync.assert_not_called()

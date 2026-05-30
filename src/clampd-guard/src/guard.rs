@@ -22,11 +22,58 @@ struct ProxyResponse {
     #[allow(dead_code)]
     action: String,
     risk_score: f64,
-    denial_reason: Option<String>,
+    /// v0.20: typed denial from the gateway. Populated on Deny/Downscope.
+    /// We render its `corrective` into the block message so the agent
+    /// (Claude Code, Cursor, …) sees the suggested next action, not just
+    /// "denied".
+    #[serde(default)]
+    denial: Option<ag_common::denial::StructuredDenialJson>,
     matched_rules: Vec<String>,
     reasoning: Option<String>,
     #[allow(dead_code)]
     latency_ms: u64,
+}
+
+/// Render the corrective hint for a Claude Code hook block message.
+///
+/// As of v0.23.1 the gateway pre-renders this string in
+/// `corrective.rendered.tool_result`, so clampd-guard is a thin reader.
+/// We keep a fall-back path (using `ag_common::denial::render::render`)
+/// for pre-0.23.1 gateways that don't yet emit the `rendered` block —
+/// that way an old gateway + new clampd-guard still shows the right
+/// hint while rollouts overlap.
+fn render_corrective(c: &ag_common::denial::CorrectiveActionJson) -> String {
+    use ag_common::corrective::Confidence;
+    if let Some(r) = c.rendered.as_ref() {
+        return r.tool_result.clone();
+    }
+    // Fallback for pre-0.23.1 gateways that don't carry the pre-rendered
+    // block. Uses the exact same templates the gateway would have used —
+    // we call into the shared `render` module to guarantee parity instead
+    // of inlining the templates here a fifth time.
+    let conf = if c.confidence == Confidence::Low {
+        Confidence::Low
+    } else {
+        c.confidence
+    };
+    ag_common::denial::render::render(&c.kind, &c.payload, &c.human_explanation, conf)
+        .tool_result
+}
+
+/// Pick the best human-readable reason from the gateway's denial. Prefers
+/// the rendered corrective over the raw violated_predicate so the agent
+/// sees an actionable hint when one is available.
+fn denial_reason(d: &ag_common::denial::StructuredDenialJson) -> String {
+    if let Some(ref c) = d.corrective {
+        let rendered = render_corrective(c);
+        if !rendered.is_empty() {
+            return rendered;
+        }
+    }
+    if !d.violated_predicate.is_empty() {
+        return d.violated_predicate.clone();
+    }
+    "Policy violation detected".to_string()
 }
 
 fn block(reason: &str) -> ! {
@@ -148,7 +195,10 @@ async fn handle_pre(config: &GuardConfig, tool_name: &str, tool_input: &str) {
             } else {
                 format!(" ({})", resp.matched_rules.join(", "))
             };
-            let reason = resp.denial_reason
+            let reason = resp
+                .denial
+                .as_ref()
+                .map(denial_reason)
                 .or(resp.reasoning)
                 .unwrap_or_else(|| "Policy violation detected".into());
             block(&format!("{}{}. Risk: {:.2}", reason, rules, resp.risk_score));
@@ -178,7 +228,10 @@ async fn handle_post(config: &GuardConfig, tool_name: &str, tool_output: &str) {
             if resp.allowed {
                 allow();
             }
-            let reason = resp.denial_reason
+            let reason = resp
+                .denial
+                .as_ref()
+                .map(denial_reason)
                 .unwrap_or_else(|| "Response inspection flagged violation".into());
             block(&reason);
         }
@@ -196,12 +249,14 @@ async fn call_gateway(
     url: &str,
     body: &serde_json::Value,
 ) -> anyhow::Result<ProxyResponse> {
-    // Prefer employee token, fall back to agent JWT
-    let bearer = auth::load_employee_token()
-        .unwrap_or_else(|| {
-            auth::get_cached_jwt(&config.agent_id, &config.secret)
-                .unwrap_or_default()
-        });
+    // Prefer employee token, fall back to the enrolled agent's EdDSA JWT.
+    let bearer = match auth::load_employee_token() {
+        Some(t) => t,
+        None => {
+            let id = crate::enroll::get_identity(&config.gateway_url, &config.api_key, &config.agent_id).await?;
+            auth::make_agent_jwt(&id.agent_id, &id.signing_key, 3600).unwrap_or_default()
+        }
+    };
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_millis(config.timeout_ms))

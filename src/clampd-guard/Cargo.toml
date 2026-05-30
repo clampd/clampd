@@ -1,6 +1,6 @@
 [package]
 name = "clampd-guard"
-version = "0.23.5"
+version = "0.23.6"
 edition = "2021"
 description = "Runtime security guard for AI coding tools - PreToolUse/PostToolUse hook for Claude Code"
 homepage = "https://clampd.dev"
@@ -40,8 +40,10 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+ed25519-dalek = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
 
-hmac = "0.12"
 dirs = "6"
 clap = { version = "4", features = ["derive"] }
 

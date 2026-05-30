@@ -27,16 +27,17 @@ def _mock_proxy(allowed=True, risk_score=0.1, denial_reason=None):
 class TestInit:
     def test_init_sets_global_client(self):
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test-agent")
+            clampd.init()
             assert clampd._default_client is not None
-            assert clampd._default_client.agent_id == "test-agent"
+            # agent_id is the UUID assigned by enrollment.
+            assert clampd._default_client.agent_id
 
 
 class TestGuardDecorator:
     def test_allowed_call_executes(self):
         proxy_mock, _ = _mock_proxy(allowed=True)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
 
             @clampd.guard("database.query")
@@ -50,7 +51,7 @@ class TestGuardDecorator:
     def test_denied_call_raises(self):
         proxy_mock, _ = _mock_proxy(allowed=False, denial_reason="SQL injection detected", risk_score=0.95)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
 
             @clampd.guard("database.query")
@@ -63,7 +64,7 @@ class TestGuardDecorator:
     def test_params_extracted_from_signature(self):
         proxy_mock, _ = _mock_proxy(allowed=True)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
 
             @clampd.guard("db.query")
@@ -79,7 +80,7 @@ class TestGuardDecorator:
 
     def test_fail_open_allows_on_error(self):
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = MagicMock(side_effect=Exception("network error"))
 
             @clampd.guard("db.query", fail_open=True)
@@ -107,7 +108,7 @@ class TestOpenAIWrapper:
     def test_no_tool_calls_passthrough(self):
         oai, response = self._make_openai_mock(tool_calls=None)
         with patch("clampd.client.httpx.Client"):
-            wrapped = clampd.openai(oai, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.openai(oai, scan_input=False, scan_output=False)
             result = wrapped.chat.completions.create(model="gpt-4o", messages=[])
             assert result is response
 
@@ -120,9 +121,9 @@ class TestOpenAIWrapper:
         proxy_mock, _ = _mock_proxy(allowed=True)
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.openai(oai, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.openai(oai, scan_input=False, scan_output=False)
             result = wrapped.chat.completions.create(model="gpt-4o", messages=[])
             assert result is response
             proxy_mock.assert_called_once()
@@ -136,9 +137,9 @@ class TestOpenAIWrapper:
         proxy_mock, _ = _mock_proxy(allowed=False, denial_reason="dangerous tool")
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.openai(oai, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.openai(oai, scan_input=False, scan_output=False)
 
             with pytest.raises(ClampdBlockedError, match="dangerous tool"):
                 wrapped.chat.completions.create(model="gpt-4o", messages=[])
@@ -153,7 +154,7 @@ class TestResponseChecking:
             allowed=True, risk_score=0.0,
         ))
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             clampd._default_client.inspect = inspect_mock
             clampd._default_client.scan_output = scan_output_mock
@@ -176,7 +177,7 @@ class TestResponseChecking:
             allowed=True, risk_score=0.0,
         ))
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             clampd._default_client.inspect = inspect_mock
             clampd._default_client.scan_output = scan_output_mock
@@ -192,7 +193,7 @@ class TestResponseChecking:
         proxy_mock, _ = _mock_proxy(allowed=True)
         inspect_mock = MagicMock()
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             clampd._default_client.inspect = inspect_mock
 
@@ -217,8 +218,8 @@ class TestAnthropicWrapper:
     def test_no_tool_use_passthrough(self):
         anth, response = self._make_anthropic_mock()
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
-            wrapped = clampd.anthropic(anth, agent_id="test", scan_input=False, scan_output=False)
+            clampd.init()
+            wrapped = clampd.anthropic(anth, scan_input=False, scan_output=False)
             result = wrapped.messages.create(model="claude-sonnet-4-6", messages=[], max_tokens=100)
             assert result is response
 
@@ -232,9 +233,9 @@ class TestAnthropicWrapper:
         proxy_mock, _ = _mock_proxy(allowed=True)
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.anthropic(anth, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.anthropic(anth, scan_input=False, scan_output=False)
             result = wrapped.messages.create(model="claude-sonnet-4-6", messages=[], max_tokens=100)
             assert result is response
             proxy_mock.assert_called_once()
@@ -249,9 +250,9 @@ class TestAnthropicWrapper:
         proxy_mock, _ = _mock_proxy(allowed=False, denial_reason="destructive operation")
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.anthropic(anth, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.anthropic(anth, scan_input=False, scan_output=False)
 
             with pytest.raises(ClampdBlockedError, match="destructive"):
                 wrapped.messages.create(model="claude-sonnet-4-6", messages=[], max_tokens=100)
@@ -262,7 +263,7 @@ class TestToolDescriptorHash:
         """guard() computes and sends a tool_descriptor_hash to proxy()."""
         proxy_mock, _ = _mock_proxy(allowed=True)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
 
             @clampd.guard("database.query")
@@ -283,7 +284,7 @@ class TestToolDescriptorHash:
         proxy_mock_1, _ = _mock_proxy(allowed=True)
         proxy_mock_2, _ = _mock_proxy(allowed=True)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
 
             clampd._default_client.proxy = proxy_mock_1
 
@@ -314,7 +315,7 @@ class TestToolDescriptorHash:
         proxy_mock_1, _ = _mock_proxy(allowed=True)
         proxy_mock_2, _ = _mock_proxy(allowed=True)
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
 
             clampd._default_client.proxy = proxy_mock_1
 
@@ -366,9 +367,9 @@ class TestJsonParseFallback:
         proxy_mock, _ = _mock_proxy(allowed=True)
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.openai(oai, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.openai(oai, scan_input=False, scan_output=False)
             result = wrapped.chat.completions.create(model="gpt-4o", messages=[])
             assert result is response
             # The proxy should have been called with a fallback dict
@@ -393,9 +394,9 @@ class TestJsonParseFallback:
         proxy_mock, _ = _mock_proxy(allowed=True)
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
-            wrapped = clampd.openai(oai, agent_id="test", scan_input=False, scan_output=False)
+            wrapped = clampd.openai(oai, scan_input=False, scan_output=False)
             result = wrapped.chat.completions.create(model="gpt-4o", messages=[])
             assert result is response
             # None is not a string, so it should be returned directly
@@ -411,11 +412,11 @@ class TestLangchainOnToolEnd:
         inspect_mock, _ = _mock_proxy(allowed=True)
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             clampd._default_client.inspect = inspect_mock
 
-            handler = clampd.langchain(agent_id="test", check_response=True)
+            handler = clampd.langchain(check_response=True)
 
             # Simulate on_tool_start
             handler.on_tool_start({"name": "db.query"}, '{"sql": "SELECT 1"}')
@@ -434,11 +435,11 @@ class TestLangchainOnToolEnd:
         inspect_mock = MagicMock()
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             clampd._default_client.inspect = inspect_mock
 
-            handler = clampd.langchain(agent_id="test")
+            handler = clampd.langchain()
 
             handler.on_tool_start({"name": "db.query"}, '{"sql": "SELECT 1"}')
             handler.on_tool_end("result: 42")
@@ -450,11 +451,11 @@ class TestLangchainOnToolEnd:
         inspect_mock, _ = _mock_proxy(allowed=False, denial_reason="PII in response")
 
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="test")
+            clampd.init()
             clampd._default_client.proxy = proxy_mock
             clampd._default_client.inspect = inspect_mock
 
-            handler = clampd.langchain(agent_id="test", check_response=True)
+            handler = clampd.langchain(check_response=True)
 
             handler.on_tool_start({"name": "db.query"}, '{"sql": "SELECT 1"}')
 

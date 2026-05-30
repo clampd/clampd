@@ -11,6 +11,26 @@ import { log } from "./logger.js";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
+/** Operator-authored, agent-safe guidance returned by ag-policy / ag-gateway
+ *  when a tool call is blocked. Surfaced to the calling agent so it can
+ *  self-correct; explicitly excludes internal mechanics (risk score, layer,
+ *  rule IDs) which remain only in the operator dashboard. */
+export interface AgentGuidance {
+  /** Curated human-readable text safe to return to the agent.
+   *  Sourced from gateway's StructuredDenial.corrective.rendered.tool_result. */
+  message?: string;
+  /** What the agent should do next: "switch_tool" | "request_approval"
+   *  | "wait_and_retry" | "no_correction" — agent uses this to decide
+   *  whether to retry, escalate, or give up. */
+  kind?: string;
+  /** Short label (≤24 chars) suitable for status badges. */
+  short_label?: string;
+  /** Stable per-denial hash — same (agent, tool, params, rule) → same key.
+   *  Agent uses this for loop detection: identical idempotency_key on
+   *  retry = same denial reason, don't bother. */
+  idempotency_key?: string;
+}
+
 export interface ClassifyResult {
   /** Whether the tool call is allowed */
   allowed: boolean;
@@ -36,6 +56,8 @@ export interface ClassifyResult {
   action?: string;
   /** Human-readable reasoning from the rules engine */
   reasoning?: string;
+  /** Operator-authored guidance for the agent (when blocked). */
+  guidance?: AgentGuidance;
 }
 
 export interface ScanResult {
@@ -46,6 +68,7 @@ export interface ScanResult {
   latency_ms: number;
   pii_found?: Array<{ pii_type: string; count: number }>;
   secrets_found?: Array<{ secret_type: string; count: number }>;
+  guidance?: AgentGuidance;
 }
 
 export interface InspectResult {
@@ -54,6 +77,24 @@ export interface InspectResult {
   matched_rules: string[];
   denial_reason?: string;
   latency_ms: number;
+  guidance?: AgentGuidance;
+}
+
+/** Extract agent-safe guidance from a gateway JSON response. The gateway
+ *  emits StructuredDenial.corrective.rendered as a pre-sanitized payload
+ *  designed for tool results — we just relay it. Returns undefined if the
+ *  response has no corrective (e.g. on Allow). */
+export function parseGuidance(json: Record<string, unknown>): AgentGuidance | undefined {
+  const denial = (json.structured_denial ?? json.denial) as Record<string, unknown> | undefined;
+  if (!denial) return undefined;
+  const corrective = denial.corrective as Record<string, unknown> | undefined;
+  const rendered = corrective?.rendered as Record<string, unknown> | undefined;
+  const out: AgentGuidance = {};
+  if (typeof rendered?.tool_result === "string") out.message = rendered.tool_result;
+  if (typeof rendered?.short_label === "string") out.short_label = rendered.short_label;
+  if (typeof corrective?.kind === "string") out.kind = corrective.kind;
+  if (typeof denial.idempotency_key === "string") out.idempotency_key = denial.idempotency_key;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** Tool definition from MCP listTools() */
@@ -61,6 +102,9 @@ export interface ToolDef {
   name: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
+  /** MCP behavioral hints (MCP spec 2025-03-26). Triage hints only — NOT a
+   *  scope. Forwarded to the gateway and surfaced as a dashboard badge. */
+  annotations?: Record<string, unknown>;
 }
 
 // ── Tool descriptor hashing ──────────────────────────────────────────
@@ -182,6 +226,7 @@ export async function classifyToolCall(
   authorizedTools?: string[],
   toolDescription?: string,
   toolParamsSchema?: string,
+  toolAnnotations?: string,
 ): Promise<ClassifyResult> {
   const endpoint = dryRun ? "/v1/verify" : "/v1/proxy";
   const url = `${baseUrl(gatewayUrl)}${endpoint}`;
@@ -207,6 +252,9 @@ export async function classifyToolCall(
   }
   if (toolParamsSchema) {
     body.tool_params_schema = toolParamsSchema;
+  }
+  if (toolAnnotations) {
+    body.tool_annotations = toolAnnotations;
   }
 
   log("debug", `POST ${url} — tool=${toolName}`);
@@ -238,6 +286,7 @@ export async function classifyToolCall(
     session_flags: (json.session_flags as string[]) ?? [],
     action: json.action as string | undefined,
     reasoning: json.reasoning as string | undefined,
+    guidance: parseGuidance(json),
   };
 }
 
@@ -273,6 +322,7 @@ export async function scanInput(
     matched_rules: (json.matched_rules as string[]) ?? [],
     denial_reason: json.denial_reason as string | undefined,
     latency_ms: (json.latency_ms as number) ?? 0,
+    guidance: parseGuidance(json),
   };
 }
 
@@ -314,6 +364,7 @@ export async function scanOutput(
     latency_ms: (json.latency_ms as number) ?? 0,
     pii_found: json.pii_found as ScanResult["pii_found"],
     secrets_found: json.secrets_found as ScanResult["secrets_found"],
+    guidance: parseGuidance(json),
   };
 }
 
@@ -359,6 +410,7 @@ export async function inspectResponse(
     matched_rules: (json.matched_rules as string[]) ?? [],
     denial_reason: json.denial_reason as string | undefined,
     latency_ms: (json.latency_ms as number) ?? 0,
+    guidance: parseGuidance(json),
   };
 }
 
@@ -416,6 +468,9 @@ export async function registerTools(
       }
       if (tool.inputSchema) {
         body.tool_params_schema = JSON.stringify(tool.inputSchema);
+      }
+      if (tool.annotations) {
+        body.tool_annotations = JSON.stringify(tool.annotations);
       }
 
       try {

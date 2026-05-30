@@ -304,6 +304,13 @@ async fn run_consumer_inner(
                             // 2. Apply PII masking (async for tokenization support)
                             let mask_summary = pii_masker.mask_event_tokenized(&mut event).await;
 
+                            // v0.20: feed the event through the recovery-rate
+                            // correlator. Pre-mask `denial.corrective` is still
+                            // intact (masker only touches free-text fields),
+                            // so suggested_tool/suggested_scope match cleanly.
+                            // observe() never blocks or errors.
+                            crate::recovery::observe(&event);
+
                             // 2b. Republish the masked event so downstream consumers
                             //     (ag-control dashboard relay) never see raw PII.
                             match serde_json::to_vec(&event) {
@@ -542,7 +549,70 @@ fn event_to_row(
         scope_requested: event.scope_requested.clone(),
         scope_granted: event.scope_granted.clone().unwrap_or_default(),
         blocked: if event.blocked { 1 } else { 0 },
-        denial_reason: event.denial_reason.clone().unwrap_or_default(),
+        denial_reason: event
+            .denial
+            .as_ref()
+            .map(|d| {
+                if !d.violated_predicate.is_empty() {
+                    d.violated_predicate.clone()
+                } else if let Some(c) = d.corrective.as_ref() {
+                    c.human_explanation.clone()
+                } else {
+                    String::new()
+                }
+            })
+            .unwrap_or_default(),
+        corrective_kind: event
+            .denial
+            .as_ref()
+            .and_then(|d| d.corrective.as_ref())
+            .map(|c| c.kind.clone())
+            .unwrap_or_default(),
+        corrective_data: event
+            .denial
+            .as_ref()
+            .and_then(|d| d.corrective.as_ref())
+            .map(|c| c.payload.to_string())
+            .unwrap_or_default(),
+        corrective_confidence: event
+            .denial
+            .as_ref()
+            .and_then(|d| d.corrective.as_ref())
+            .map(|c| match c.confidence {
+                ag_common::corrective::Confidence::High => "high".to_string(),
+                ag_common::corrective::Confidence::Medium => "medium".to_string(),
+                ag_common::corrective::Confidence::Low => "low".to_string(),
+            })
+            .unwrap_or_default(),
+        corrective_source: event
+            .denial
+            .as_ref()
+            .and_then(|d| d.corrective.as_ref())
+            .map(|c| c.source.clone())
+            .unwrap_or_default(),
+        // v0.23.1: persist the author hint + gateway-rendered text so
+        // historical queries / replays can show the same string the LLM
+        // saw at the time, even after templates change later.
+        corrective_human_explanation: event
+            .denial
+            .as_ref()
+            .and_then(|d| d.corrective.as_ref())
+            .map(|c| c.human_explanation.clone())
+            .unwrap_or_default(),
+        corrective_tool_result: event
+            .denial
+            .as_ref()
+            .and_then(|d| d.corrective.as_ref())
+            .and_then(|c| c.rendered.as_ref())
+            .map(|r| r.tool_result.clone())
+            .unwrap_or_default(),
+        corrective_short_label: event
+            .denial
+            .as_ref()
+            .and_then(|d| d.corrective.as_ref())
+            .and_then(|c| c.rendered.as_ref())
+            .map(|r| r.short_label.clone())
+            .unwrap_or_default(),
         latency_ms: event.latency_ms as u16,
         masked_fields,
         pii_tokens,

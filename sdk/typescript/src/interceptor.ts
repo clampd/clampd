@@ -15,6 +15,10 @@ import { ClampdClient, type ProxyResponse } from "./client.js";
 import { contractHash } from "./contract-hash.js";
 import { setScopeToken, withScopeToken } from "./tool-verify.js";
 import { raiseIfUnregistered } from "./_frameworkAdapters.js";
+import {
+  renderCorrectiveForLLM,
+  type StructuredDenial,
+} from "./corrective.js";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -58,16 +62,41 @@ export interface OpenAITool {
 /**
  * Thrown when the Clampd proxy denies a tool call and `blockOnDeny`
  * is enabled (the default).
+ *
+ * v0.20: carries the typed `StructuredDenial` from the gateway, including
+ * a structured `CorrectiveAction` the LLM tool loop can pattern-match on.
+ * Call `.toToolResult()` to get a rendered string suitable for
+ * `tool_result.content` in OpenAI / Anthropic tool-use turns.
  */
 export class ClampdBlockedError extends Error {
   public readonly response: ProxyResponse;
   public readonly matchedRules: string[];
   public readonly sessionFlags: string[];
+  /** The typed denial returned by the gateway. Always set; built from
+   * the response's `denial` field (or `unknown reason` fallback). */
+  public readonly denial: StructuredDenial;
 
   constructor(response: ProxyResponse) {
-    const parts = [
-      `Blocked: ${response.denial_reason ?? "unknown reason"} (risk=${response.risk_score.toFixed(2)})`,
-    ];
+    const denial: StructuredDenial = response.denial ?? {
+      // Defensive fallback when the response has no typed denial
+      // (synthetic SDK errors built with legacy `denial_reason: "..."` kwarg
+      // or hypothetical pre-v0.20 gateway). We synthesize a typed shape
+      // from whatever the response carries so callers can rely on
+      // `.denial` always being populated.
+      ruleId: "SDK/synthetic",
+      violatedPredicate: response.denial_reason ?? "unknown reason",
+      offendingValue: "",
+      corrective: null,
+      reasonCodes: [],
+      boundaryViolation: null,
+      boundaryMatchedRule: null,
+      idempotencyKey: null,
+    };
+    const reason =
+      denial.corrective?.humanExplanation ??
+      denial.violatedPredicate ??
+      "unknown reason";
+    const parts = [`Blocked: ${reason} (risk=${response.risk_score.toFixed(2)})`];
     if (response.matched_rules?.length) {
       parts.push(`rules: ${response.matched_rules.join(", ")}`);
     }
@@ -77,8 +106,73 @@ export class ClampdBlockedError extends Error {
     super(parts.join(" | "));
     this.name = "ClampdBlockedError";
     this.response = response;
+    this.denial = denial;
     this.matchedRules = response.matched_rules ?? [];
     this.sessionFlags = response.session_flags ?? [];
+  }
+
+  /**
+   * Render the corrective for an LLM `tool_result.content` turn.
+   * Returns the rendered hint when present and confidence is not "low";
+   * falls back to the violated predicate so the LLM still sees a reason.
+   */
+  /**
+   * Subtype check: was this denial flagged as an LLM loop by the SDK?
+   * Identical to `instanceof ClampdLoopError` but more readable in
+   * narrowing.
+   */
+  isLoop(): this is ClampdLoopError {
+    return this instanceof ClampdLoopError;
+  }
+
+  toToolResult(): string {
+    return (
+      renderCorrectiveForLLM(this.denial.corrective) ||
+      `Denied: ${this.denial.violatedPredicate || "policy violation"}`
+    );
+  }
+}
+
+/**
+ * Helper: throw the right denial class based on whether the client's
+ * loop-detection ring has already seen this response's idempotency key.
+ *
+ * Use this in wrappers in place of `throw new ClampdBlockedError(resp)`
+ * so loop escalation is consistent across all surfaces. Synthetic
+ * responses (no idempotency key) always fall through to the regular
+ * `ClampdBlockedError`.
+ */
+export function throwBlockedOrLoop(
+  client: ClampdClient,
+  response: ProxyResponse,
+): never {
+  if (client.recordAndCheckLoop(response)) {
+    throw new ClampdLoopError(response);
+  }
+  throw new ClampdBlockedError(response);
+}
+
+/**
+ * Raised when the LLM is detected to be looping on the same denial.
+ *
+ * The gateway emits a stable `idempotency_key` for each (agent, tool,
+ * params, rule, corrective) tuple. The SDK tracks the most recent keys
+ * per-client. If a denial arrives with a key already seen, the LLM has
+ * retried the exact same call after being told to stop.
+ *
+ * Subclasses `ClampdBlockedError` so existing `catch (ClampdBlockedError)`
+ * chains propagate it correctly. Callers wanting to treat loops as
+ * terminal should `catch (e) { if (e instanceof ClampdLoopError) ... }`
+ * BEFORE the generic block handler.
+ */
+export class ClampdLoopError extends ClampdBlockedError {
+  constructor(response: ProxyResponse) {
+    super(response);
+    this.name = "ClampdLoopError";
+    const id = this.denial.idempotencyKey ?? "<no-id>";
+    this.message =
+      `LLM loop detected on ${this.denial.ruleId || "unknown"}: same denial ` +
+      `received again (idempotency key ${id}). Stop retrying identical inputs.`;
   }
 }
 
@@ -205,7 +299,7 @@ export function wrapFunction<TArgs extends unknown[], TReturn>(
     raiseIfUnregistered(toolName, proxyRes);
 
     if (!proxyRes.allowed && blockOnDeny) {
-      throw new ClampdBlockedError(proxyRes);
+      throwBlockedOrLoop(client, proxyRes);
     }
 
     // Allowed (or blockOnDeny=false) — execute the original function.
@@ -280,7 +374,7 @@ export function wrapOpenAITools(
       raiseIfUnregistered(tool.function.name, proxyRes);
 
       if (!proxyRes.allowed && blockOnDeny) {
-        throw new ClampdBlockedError(proxyRes);
+        throwBlockedOrLoop(client, proxyRes);
       }
 
       if (proxyRes.allowed && proxyRes.scope_token) {
@@ -388,7 +482,7 @@ export class ClampdGuard {
     raiseIfUnregistered(tool, proxyResponse);
 
     if (!proxyResponse.allowed) {
-      throw new ClampdBlockedError(proxyResponse);
+      throwBlockedOrLoop(this.client, proxyResponse);
     }
 
     if (proxyResponse.scope_token) {

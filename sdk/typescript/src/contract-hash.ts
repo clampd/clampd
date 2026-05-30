@@ -46,3 +46,21 @@ export function contractHash(contract: ToolContract): string {
   });
   return createHash("sha256").update(canonical).digest("hex");
 }
+
+/**
+ * Compute the per-call binding hash for a scope token.
+ *
+ * Wire-identical to `ag_common::contract_hash::call_binding` (Rust) and the
+ * Python SDK's `call_binding`. Binds a scope token to the EXACT call it
+ * authorized — the tool name plus the call params — so a token granted for one
+ * call cannot be replayed for a different one. The tool side recomputes this
+ * from the call it received and rejects the token on mismatch.
+ *
+ * `binding = sha256( canonical_json({ params, tool }) )` — key-sorted JSON,
+ * no whitespace, raw UTF-8. `tool` is the name exactly as sent in the proxy
+ * request (not re-canonicalised), so both ends agree without shared rules.
+ */
+export function callBinding(tool: string, params: unknown): string {
+  const canonical = sortedStringify({ params: params ?? {}, tool });
+  return createHash("sha256").update(canonical).digest("hex");
+}

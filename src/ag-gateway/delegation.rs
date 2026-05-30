@@ -483,40 +483,74 @@ pub async fn verify_signed_delegation(
     expected_subject: &str,
     redis_pool: &Pool<RedisConnectionManager>,
 ) -> Result<(), String> {
-    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    use base64::Engine as _;
 
-    // Step 1: fetch the leaf agent's credential hash. The proof MUST be
-    // signed by the executor (the agent making the call), not by any
-    // ancestor — otherwise a compromised root could mint proofs for any
-    // descendant.
+    // Step 1: fetch the leaf agent's Ed25519 PUBLIC key. The proof MUST be
+    // signed by the executor (the agent making the call) with its private key,
+    // not by any ancestor — otherwise a compromised root could mint proofs for
+    // any descendant. The gateway only ever holds the public key.
     let cred_key = format!("ag:agent:cred:{}", expected_subject);
     let mut conn = redis_pool
         .get()
         .await
         .map_err(|e| format!("redis_unavailable: {}", e))?;
-    let secret: Option<String> = redis::cmd("GET")
+    let pubkey_b64: Option<String> = redis::cmd("GET")
         .arg(&cred_key)
         .query_async(&mut *conn)
         .await
         .map_err(|e| format!("redis_error: {}", e))?;
-    let secret = secret.ok_or_else(|| {
+    let pubkey_b64 = pubkey_b64.ok_or_else(|| {
         format!("agent_credential_missing: no ag:agent:cred:{}", expected_subject)
     })?;
 
-    // Step 2 + 5 + 6: decode + signature + exp + aud check.
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.set_audience(&["ag-gateway"]);
-    validation.set_issuer(&["clampd-sdk"]);
-    validation.leeway = 5;
+    // Step 2: verify the EdDSA signature against the agent's public key.
+    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(pubkey_b64.trim_end_matches('='))
+        .map_err(|e| format!("invalid_agent_pubkey: {e}"))?;
+    let key_arr: [u8; 32] = raw
+        .as_slice()
+        .try_into()
+        .map_err(|_| "invalid_agent_pubkey: expected 32 bytes".to_string())?;
+    let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&key_arr)
+        .map_err(|e| format!("invalid_agent_pubkey: {e}"))?;
 
-    let token_data = decode::<DelegationProofClaims>(
-        proof,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    )
-    .map_err(|e| format!("jwt_invalid: {}", e))?;
+    let parts: Vec<&str> = proof.splitn(3, '.').collect();
+    if parts.len() != 3 {
+        return Err("jwt_invalid: malformed".to_string());
+    }
+    let signing_input = format!("{}.{}", parts[0], parts[1]);
+    let sig_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[2])
+        .map_err(|e| format!("jwt_invalid: signature encoding {e}"))?;
+    let signature = ed25519_dalek::Signature::from_slice(&sig_bytes)
+        .map_err(|e| format!("jwt_invalid: signature {e}"))?;
+    {
+        use ed25519_dalek::Verifier;
+        verifying_key
+            .verify(signing_input.as_bytes(), &signature)
+            .map_err(|_| "jwt_invalid: signature verification failed".to_string())?;
+    }
 
-    let claims = token_data.claims;
+    // Decode claims and enforce exp / aud / iss.
+    let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .map_err(|e| format!("jwt_invalid: payload {e}"))?;
+    let claims: DelegationProofClaims = serde_json::from_slice(&payload_bytes)
+        .map_err(|e| format!("jwt_invalid: {e}"))?;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    if claims.exp != 0 && claims.exp < now - 5 {
+        return Err("jwt_invalid: expired".to_string());
+    }
+    if claims.aud != "ag-gateway" {
+        return Err("jwt_invalid: bad audience".to_string());
+    }
+    if claims.iss != "clampd-sdk" {
+        return Err("jwt_invalid: bad issuer".to_string());
+    }
 
     // Step 3: leaf must match.
     if claims.sub != expected_subject {
@@ -526,8 +560,8 @@ pub async fn verify_signed_delegation(
         ));
     }
 
-    // Step 4: chain binding — same agent's secret can sign many proofs,
-    // but each proof carries the chain it was minted for.
+    // Step 4: chain binding — the same key signs many proofs, but each proof
+    // carries the chain it was minted for.
     let expected_hash = chain_hash(expected_chain);
     if claims.chain_hash != expected_hash {
         return Err(format!(

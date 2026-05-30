@@ -30,6 +30,7 @@ import inspect
 import json
 import logging
 import os
+import sys
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -37,11 +38,11 @@ from typing import TYPE_CHECKING, Any, TypeVar
 if TYPE_CHECKING:
     from clampd.crewai_callback import ClampdCrewAIGuard
 
-from clampd.auth import make_agent_jwt
 from clampd.client import (
     AsyncClampdClient,
     ClampdBlockedError,
     ClampdClient,
+    ClampdLoopError,
     ProxyResponse,
     SchemaInjectionWarning,
     scan_for_schema_injection,
@@ -86,8 +87,11 @@ from clampd.tool_verify import (
     get_current_scope_token,
     invalidate_jwks_cache,
     require_scope,
+    require_scope_for_call,
+    verify_call_binding,
     verify_scope_token,
 )
+from clampd.contract_hash import call_binding
 
 __all__ = [
     # Core API
@@ -105,11 +109,15 @@ __all__ = [
     "ClampdBlockedError",
     "ClampdClassificationError",
     "ClampdDescriptorMismatchError",
+    "ClampdLoopError",
     "ClampdUnregisteredToolError",
     "ScopeVerificationError",
     # Scope verification (tool-side)
     "verify_scope_token",
     "require_scope",
+    "require_scope_for_call",
+    "verify_call_binding",
+    "call_binding",
     "get_current_scope_token",
     "ScopeTokenClaims",
     # Taxonomy (for register_tool)
@@ -122,7 +130,6 @@ __all__ = [
     # Advanced / escape-hatch (custom gateway setups)
     "ClampdClient",
     "AsyncClampdClient",
-    "make_agent_jwt",
 ]
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -137,10 +144,8 @@ _scope_token_var: contextvars.ContextVar[str] = contextvars.ContextVar(
 
 _default_client: ClampdClient | None = None
 _agent_clients: dict[str, ClampdClient] = {}
-_agent_secrets: dict[str, str] = {}
 _shared_config: dict[str, str] = {}
 
-# Process-local registry: tool_name → descriptor_hash. Last write wins.
 # Populated by ``register_tool`` so callbacks (LangChain / CrewAI / etc.)
 # can forward the canonical hash even when their own surface area can't
 # see the full param schema. This is BELIEF — what the SDK thinks it
@@ -154,70 +159,60 @@ def _reset() -> None:
     global _default_client
     _default_client = None
     _agent_clients.clear()
-    _agent_secrets.clear()
     _shared_config.clear()
     _registered_descriptors.clear()
 
 
+def _derive_name() -> str:
+    """Logical agent name when none is given: CLAMPD_AGENT_NAME -> host -> process."""
+    candidate = os.environ.get("CLAMPD_AGENT_NAME") or os.environ.get("HOSTNAME")
+    if not candidate:
+        try:
+            candidate = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+        except Exception:
+            candidate = ""
+    return candidate or "agent"
+
+
 def init(
+    dsn: str | None = None,
     *,
-    agent_id: str | None = None,
-    gateway_url: str | None = None,
-    api_key: str | None = None,
-    secret: str | None = None,
-    agents: dict[str, str | None] | None = None,
+    name: str | None = None,
 ) -> ClampdClient:
-    """Initialize the global Clampd client. Call once at startup.
+    """Initialize Clampd. Call once at startup.
 
-    All parameters fall back to environment variables:
-      - agent_id   → CLAMPD_AGENT_ID
-      - gateway_url → CLAMPD_GATEWAY_URL (default: http://localhost:8080)
-      - api_key    → CLAMPD_API_KEY
-      - secret     → CLAMPD_AGENT_SECRET
+        clampd.init()  # reads CLAMPD_DSN; the agent self-enrolls
 
-    For multi-agent setups, pass per-agent secrets via ``agents``.
-    Each agent gets its own JWT signed with its own ags_ secret.
-    Kill/rate-limit/EMA operate independently per agent.
-
-        clampd.init(
-            agent_id="orchestrator",
-            agents={
-                "orchestrator": os.environ["ORCHESTRATOR_SECRET"],
-                "research-agent": os.environ["RESEARCHER_SECRET"],
-            },
-        )
+    Connection comes from a single DSN (CLAMPD_DSN=clampd://<org_key>@<host>).
+    On first run the SDK generates a per-agent Ed25519 keypair, enrolls it with
+    the gateway (which assigns the agent UUID), and caches the identity locally;
+    later runs reuse it. ``name`` is the logical agent label (defaults to
+    CLAMPD_AGENT_NAME, the hostname, or the process name). No secret to manage.
     """
     global _default_client
 
-    agent_id = agent_id or os.environ.get("CLAMPD_AGENT_ID", "")
-    gateway_url = gateway_url or os.environ.get("CLAMPD_GATEWAY_URL", "http://localhost:8080")
-    api_key = api_key or os.environ.get("CLAMPD_API_KEY", "")
-    secret = secret or os.environ.get("CLAMPD_AGENT_SECRET")
-
-    if not agent_id:
+    dsn = dsn or os.environ.get("CLAMPD_DSN")
+    if not dsn:
         raise ValueError(
-            "No agent_id provided. Pass agent_id= to init() or set CLAMPD_AGENT_ID env var."
+            "No CLAMPD_DSN. Set CLAMPD_DSN=clampd://<org_key>@<host> or pass dsn=."
         )
-    if not api_key:
-        logger.warning("No api_key provided. Set CLAMPD_API_KEY env var or pass api_key= to init().")
-        api_key = ""
+    from clampd.dsn import parse_dsn
+    from clampd.enroll import enroll
 
-    _shared_config["gateway_url"] = gateway_url
-    _shared_config["api_key"] = api_key
+    parsed = parse_dsn(dsn)
+    name = name or _derive_name()
+    identity = enroll(parsed.gateway_url, parsed.api_key, name)
 
-    # Register per-agent secrets
-    if agents:
-        for aid, sec in agents.items():
-            if sec:
-                _agent_secrets[aid] = sec
+    _shared_config["gateway_url"] = parsed.gateway_url
+    _shared_config["api_key"] = parsed.api_key
 
     _default_client = ClampdClient(
-        gateway_url=gateway_url,
-        agent_id=agent_id,
-        api_key=api_key,
-        secret=_agent_secrets.get(agent_id) or secret,
+        gateway_url=parsed.gateway_url,
+        agent_id=identity.agent_id,
+        api_key=parsed.api_key,
+        signing_key=identity.private_key,
     )
-    _agent_clients[agent_id] = _default_client
+    _agent_clients[identity.agent_id] = _default_client
     return _default_client
 
 
@@ -225,56 +220,39 @@ def _get_client(
     agent_id: str | None = None,
     gateway_url: str | None = None,
     api_key: str | None = None,
-    secret: str | None = None,
 ) -> ClampdClient:
-    """Get or create a ClampdClient.
+    """Get or create a ClampdClient for a logical agent name.
 
-    Per-agent identity: if the agent_id has a registered secret (via
-    init(agents={...}) or env var CLAMPD_SECRET_{agent_id}), a dedicated
-    client is created with its own JWT. Kill/rate-limit/EMA then operate
-    on THIS agent independently.
+    Each distinct name self-enrolls its own Ed25519 identity (the gateway
+    assigns the UUID); kill/rate-limit/EMA then operate per agent. With no
+    name, returns the default client created by :func:`init`.
     """
-    # Check per-agent client pool
     if agent_id and agent_id in _agent_clients:
         return _agent_clients[agent_id]
-
-    # Check for per-agent secret → create dedicated client
-    if agent_id:
-        env_key = f"CLAMPD_SECRET_{agent_id.replace('-', '_').replace('.', '_')}"
-        agent_secret = _agent_secrets.get(agent_id) or os.environ.get(env_key)
-        if agent_secret:
-            client = ClampdClient(
-                gateway_url=gateway_url
-                or _shared_config.get("gateway_url")
-                or os.environ.get("CLAMPD_GATEWAY_URL", "http://localhost:8080"),
-                agent_id=agent_id,
-                api_key=api_key
-                or _shared_config.get("api_key")
-                or os.environ.get("CLAMPD_API_KEY", "clmpd_demo_key"),
-                secret=agent_secret,
-            )
-            _agent_clients[agent_id] = client
-            return client
-
-    # Fallback to default client
-    if _default_client is not None:
+    if not agent_id and _default_client is not None:
         return _default_client
 
-    if not agent_id:
-        agent_id = os.environ.get("CLAMPD_AGENT_ID", "")
-        if not agent_id:
-            raise ValueError(
-                "No agent_id provided. Either call clampd.init(agent_id=...) "
-                "first, or pass agent_id= to each function, or set CLAMPD_AGENT_ID env var."
-            )
+    host = gateway_url or _shared_config.get("gateway_url")
+    org_key = api_key if api_key is not None else _shared_config.get("api_key")
+    if not host or org_key is None:
+        raise ValueError(
+            "clampd.init() (with CLAMPD_DSN) must be called before creating clients."
+        )
 
-    return ClampdClient(
-        gateway_url=gateway_url
-        or os.environ.get("CLAMPD_GATEWAY_URL", "http://localhost:8080"),
-        agent_id=agent_id,
-        api_key=api_key or os.environ.get("CLAMPD_API_KEY", "clmpd_demo_key"),
-        secret=secret,
+    from clampd.enroll import enroll
+
+    name = agent_id or _derive_name()
+    identity = enroll(host, org_key, name)
+    client = ClampdClient(
+        gateway_url=host,
+        agent_id=identity.agent_id,
+        api_key=org_key,
+        signing_key=identity.private_key,
     )
+    _agent_clients[identity.agent_id] = client
+    if agent_id:
+        _agent_clients[agent_id] = client
+    return client
 
 
 # ── clampd.register_tool() — explicit classification at import time ───
@@ -503,9 +481,7 @@ def guard(
     agent_id: str | None = None,
     target_url: str = "",
     fail_open: bool = False,
-    check_response: bool = False,
-    secret: str | None = None,
-    description: str | None = None,
+    check_response: bool = False,    description: str | None = None,
     param_schema: dict[str, Any] | None = None,
     descriptor_hash: str | None = None,
 ) -> Callable[[F], F]:
@@ -530,7 +506,7 @@ def guard(
     "unknown, informational only". Pass ``descriptor_hash`` explicitly
     to bypass both fields when the caller already has the hash cached.
     """
-    client = _get_client(agent_id=agent_id, secret=secret)
+    client = _get_client(agent_id=agent_id)
 
     def decorator(fn: F) -> F:
         sig = inspect.signature(fn)
@@ -630,7 +606,7 @@ def guard(
 
                     if not resp.allowed:
                         raise ClampdBlockedError(
-                            resp.denial_reason or "denied",
+                            resp.denial,
                             risk_score=resp.risk_score,
                             response=resp,
                         )
@@ -707,7 +683,7 @@ def guard(
 
                     if not resp.allowed:
                         raise ClampdBlockedError(
-                            resp.denial_reason or "denied",
+                            resp.denial,
                             risk_score=resp.risk_score,
                             response=resp,
                         )
@@ -756,9 +732,7 @@ def openai(
     check_response: bool = False,
     scan_input: bool = True,
     scan_output: bool = True,
-    guard_stream: bool = True,
-    secret: str | None = None,
-) -> Any:
+    guard_stream: bool = True,) -> Any:
     """Wrap an OpenAI client so all tool calls go through Clampd.
 
         import openai, clampd
@@ -768,7 +742,7 @@ def openai(
     Set ``check_response=True`` to also inspect tool responses for PII or anomalies.
     Returns a drop-in replacement that intercepts tool execution.
     """
-    clampd_client = _get_client(agent_id=agent_id, secret=secret)
+    clampd_client = _get_client(agent_id=agent_id)
     original_create = client.chat.completions.create
 
     def guarded_create(*args: Any, **kwargs: Any) -> Any:
@@ -867,7 +841,7 @@ def openai(
 
                 if not result.allowed:
                     raise ClampdBlockedError(
-                        result.denial_reason or "denied",
+                        result.denial,
                         risk_score=result.risk_score,
                         response=result,
                     )
@@ -910,9 +884,7 @@ def anthropic(
     check_response: bool = False,
     scan_input: bool = True,
     scan_output: bool = True,
-    guard_stream: bool = True,
-    secret: str | None = None,
-) -> Any:
+    guard_stream: bool = True,) -> Any:
     """Wrap an Anthropic client so all tool calls go through Clampd.
 
         import anthropic, clampd
@@ -922,7 +894,7 @@ def anthropic(
     Set ``check_response=True`` to also inspect tool responses for PII or anomalies.
     Returns a drop-in replacement that intercepts tool_use blocks.
     """
-    clampd_client = _get_client(agent_id=agent_id, secret=secret)
+    clampd_client = _get_client(agent_id=agent_id)
     original_create = client.messages.create
 
     def guarded_create(*args: Any, **kwargs: Any) -> Any:
@@ -971,8 +943,7 @@ def anthropic(
                     out_result = clampd_client.scan_output(combined)
                     if not out_result.allowed:
                         raise ClampdBlockedError(
-                            out_result.denial_reason
-                            or "Output blocked by guardrail",
+                            out_result.denial,
                             risk_score=out_result.risk_score,
                             response=out_result,
                         )
@@ -1032,7 +1003,7 @@ def anthropic(
 
                 if not proxy_result.allowed:
                     raise ClampdBlockedError(
-                        proxy_result.denial_reason or "denied",
+                        proxy_result.denial,
                         risk_score=proxy_result.risk_score,
                         response=proxy_result,
                     )
@@ -1071,9 +1042,7 @@ def langchain(
     agent_id: str | None = None,
     target_url: str = "",
     fail_open: bool = False,
-    check_response: bool = False,
-    secret: str | None = None,
-) -> Any:
+    check_response: bool = False,) -> Any:
     """Create a LangChain callback handler that guards all tool calls.
 
         agent.invoke(input, config={"callbacks": [clampd.langchain(agent_id="my-agent")]})
@@ -1085,7 +1054,7 @@ def langchain(
     """
     from clampd.langchain_callback import ClampdCallbackHandler
 
-    client = _get_client(agent_id=agent_id, secret=secret)
+    client = _get_client(agent_id=agent_id)
     return ClampdCallbackHandler(
         client,
         target_url=target_url,
@@ -1102,9 +1071,7 @@ def adk(
     agent_id: str | None = None,
     target_url: str = "",
     fail_open: bool = False,
-    check_response: bool = False,
-    secret: str | None = None,
-) -> Callable[..., Any] | tuple[Callable[..., Any], Callable[..., Any]]:
+    check_response: bool = False,) -> Callable[..., Any] | tuple[Callable[..., Any], Callable[..., Any]]:
     """Create Google ADK before_tool_callback (and optionally after_tool_callback).
 
         agent = Agent(
@@ -1122,7 +1089,7 @@ def adk(
     """
     from clampd._guardrails import guard_tool_callback, inspect_response_callback
 
-    client = _get_client(agent_id=agent_id, secret=secret)
+    client = _get_client(agent_id=agent_id)
 
     # Closure-local telemetry handles. ADK's callback contract returns
     # plain dicts to the framework, so we don't surface ProxyResponse
@@ -1172,9 +1139,7 @@ def crewai(
     agent_id: str | None = None,
     target_url: str = "",
     fail_open: bool = False,
-    check_response: bool = False,
-    secret: str | None = None,
-) -> "ClampdCrewAIGuard":  # noqa: F821
+    check_response: bool = False,) -> "ClampdCrewAIGuard":  # noqa: F821
     """Create a Clampd guard for CrewAI agents.
 
     Returns a ClampdCrewAIGuard with step_callback and wrap_tool methods.
@@ -1188,7 +1153,7 @@ def crewai(
     """
     from clampd.crewai_callback import ClampdCrewAIGuard
 
-    client = _get_client(agent_id=agent_id, secret=secret)
+    client = _get_client(agent_id=agent_id)
     return ClampdCrewAIGuard(
         client,
         target_url=target_url,
@@ -1210,6 +1175,12 @@ def agent(agent_id: str) -> AbstractContextManager[DelegationContext]:
 
     All @clampd.guard() calls inside automatically inherit the delegation chain.
 
+    The argument is the agent's logical *name* (the same value you pass to
+    ``guard(agent_id=...)``). The SDK resolves it to the enrolled Ed25519
+    identity and uses that agent's UUID in the delegation chain, so the chain
+    the gateway sees is composed of real agent UUIDs — matching what each
+    ``guard()`` call contributes. Passing an already-enrolled UUID also works.
+
     Usage as decorator:
         @clampd.agent("orchestrator")
         def my_workflow():
@@ -1224,9 +1195,17 @@ def agent(agent_id: str) -> AbstractContextManager[DelegationContext]:
 
     from clampd.delegation import enter_delegation, exit_delegation
 
+    # Resolve the logical name to its enrolled UUID so the delegation chain is
+    # composed of real agent IDs (the gateway rejects non-UUID chain entries).
+    # If resolution fails (e.g. not initialized), fall back to the raw value.
+    try:
+        resolved_id = _get_client(agent_id=agent_id).agent_id
+    except Exception:  # noqa: BLE001 - never break the caller's scope setup
+        resolved_id = agent_id
+
     @contextmanager
     def _scope() -> Iterator[DelegationContext]:
-        ctx, token = enter_delegation(agent_id)
+        ctx, token = enter_delegation(resolved_id)
         try:
             yield ctx
         finally:

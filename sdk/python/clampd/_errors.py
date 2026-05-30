@@ -7,6 +7,10 @@ historical reasons) so new error types don't force a circular import.
 from __future__ import annotations
 
 
+class ClampdEnrollError(Exception):
+    """Raised when agent enrollment with the gateway fails."""
+
+
 class ClampdClassificationError(ValueError):
     """Raised when a tool classification triple is invalid.
 

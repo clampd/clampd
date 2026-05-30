@@ -16,7 +16,9 @@
  * Requires @modelcontextprotocol/sdk as a peer dependency.
  */
 
-import { makeAgentJwt } from "./auth.js";
+import { type KeyObject } from "node:crypto";
+import { makeAgentJwtEd25519 } from "./auth.js";
+import { enroll } from "./enroll.js";
 import { contractHash } from "./contract-hash.js";
 import { withDelegation, getDelegation, getCallerAgentId, MAX_DELEGATION_DEPTH } from "./delegation.js";
 
@@ -68,9 +70,6 @@ export interface ClampdMCPProxyOptions {
    * Delay between connection retries in milliseconds (default: 1000).
    */
   connectRetryDelayMs?: number;
-
-  /** Optional JWT signing secret. Falls back to JWT_SECRET env var. */
-  secret?: string;
 }
 
 /** Subset of the gateway response we rely on. */
@@ -80,10 +79,34 @@ interface GatewayResponse {
   risk_score: number;
   scope_granted?: string | null;
   tool_response?: unknown | null;
-  denial_reason?: string | null;
+  /**
+   * v0.20: typed denial details. The gateway emits this on every
+   * Deny/Downscope. Only the raw JSON shape is used here — full parsing
+   * lives in `corrective.ts::parseStructuredDenial` for the main SDK
+   * path. mcp-server reads `violated_predicate` + `corrective.human_explanation`
+   * to surface a useful message back through the MCP error channel.
+   */
+  denial?: {
+    rule_id?: string;
+    violated_predicate?: string;
+    corrective?: {
+      human_explanation?: string;
+      confidence?: string;
+    } | null;
+  } | null;
   latency_ms: number;
   degraded_stages: string[];
   session_flags: string[];
+}
+
+/** Pull a short human-readable reason from a typed gateway denial. */
+function denialReasonOf(r: GatewayResponse): string | null {
+  if (!r.denial) return null;
+  return (
+    r.denial.corrective?.human_explanation ??
+    r.denial.violated_predicate ??
+    null
+  );
 }
 
 // ── Lazy MCP SDK loader ────────────────────────────────────────────────
@@ -221,7 +244,7 @@ async function scanFileContent(
     const result = await client.scanInput(content);
     if (!result.allowed) {
       const risk = result.risk_score?.toFixed(2) ?? "N/A";
-      const reason = result.denial_reason ?? "dangerous content detected";
+      const reason = denialReasonOf(result) ?? "dangerous content detected";
       const rules = result.matched_rules?.join(", ") ?? "content policy violation";
       logFn("warn", `BLOCKED ${toolName} to ${filePath}: risk=${risk} reason=${reason}`);
       return (
@@ -243,9 +266,12 @@ async function scanFileContent(
 
 export class ClampdMCPProxy {
   private readonly gatewayUrl: string;
-  private readonly agentId: string;
+  private readonly name: string;
+  private agentId: string;
   private readonly apiKey: string;
-  private readonly jwt: string;
+  private signingKey: KeyObject | null = null;
+  private jwt = "";
+  private jwtExpiresAt = 0;
   private readonly downstreamCommand: string;
   private readonly downstreamArgs: string[];
   private readonly downstreamEnv: Record<string, string> | undefined;
@@ -262,9 +288,11 @@ export class ClampdMCPProxy {
 
   constructor(opts: ClampdMCPProxyOptions) {
     this.gatewayUrl = opts.gatewayUrl.replace(/\/$/, "");
+    // opts.agentId is the logical name; the gateway assigns the UUID at
+    // enrollment (set in start()).
+    this.name = opts.agentId;
     this.agentId = opts.agentId;
     this.apiKey = opts.apiKey ?? "clmpd_demo_key";
-    this.jwt = makeAgentJwt(this.agentId, { secret: opts.secret });
     this.downstreamCommand = opts.downstreamCommand;
     this.downstreamArgs = opts.downstreamArgs ?? [];
     this.downstreamEnv = opts.downstreamEnv;
@@ -282,7 +310,26 @@ export class ClampdMCPProxy {
    * tools, then serve them on stdio to the upstream LLM client with
    * Clampd interception on every call.
    */
+  /** Return a valid EdDSA JWT, re-signing within 60s of expiry. */
+  private getJwt(): string {
+    if (!this.signingKey) {
+      throw new Error("[clampd] MCP proxy not enrolled — call start() first");
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (now >= this.jwtExpiresAt - 60 || !this.jwt) {
+      this.jwt = makeAgentJwtEd25519(this.agentId, this.signingKey);
+      this.jwtExpiresAt = now + 3600;
+    }
+    return this.jwt;
+  }
+
   async start(): Promise<void> {
+    // Enroll: generate/load an Ed25519 keypair, register the public key with
+    // the gateway, and adopt the assigned agent UUID. No shared secret.
+    const identity = await enroll(this.gatewayUrl, this.apiKey, this.name);
+    this.agentId = identity.agentId!;
+    this.signingKey = identity.privateKey;
+
     const mcp = await loadMCPModules();
 
     // 1. Connect to downstream MCP server
@@ -396,7 +443,7 @@ export class ClampdMCPProxy {
 
           // Stage B: If blocked, return denial
           if (!gatewayResult.allowed) {
-            const reason = gatewayResult.denial_reason ?? "Policy violation";
+            const reason = denialReasonOf(gatewayResult) ?? "Policy violation";
             const risk = gatewayResult.risk_score.toFixed(2);
             log("warn", `BLOCKED ${toolName}: ${reason} (risk=${risk})`);
 
@@ -530,7 +577,7 @@ export class ClampdMCPProxy {
     const resp = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.jwt}`,
+        Authorization: `Bearer ${this.getJwt()}`,
         "X-AG-Key": this.apiKey,
         "Content-Type": "application/json",
       },

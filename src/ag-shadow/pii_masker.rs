@@ -366,13 +366,36 @@ impl PiiMasker {
             }
         }
 
-        if let Some(ref mut reason) = event.denial_reason {
-            let result = self.mask_string(reason);
-            if result.pii_count > 0 {
-                summary.total_pii_found += result.pii_count;
-                summary.ner_detections += result.ner_count;
-                summary.masked_fields.push("denial_reason".to_string());
-                *reason = result.text;
+        if let Some(ref mut denial) = event.denial {
+            // The textual fields inside StructuredDenialJson are the only
+            // ones that can carry user-derived content (predicate, offending
+            // value, corrective explanation). Hash/id-style fields aren't masked.
+            let mut any = false;
+            let r1 = self.mask_string(&denial.violated_predicate);
+            if r1.pii_count > 0 {
+                summary.total_pii_found += r1.pii_count;
+                summary.ner_detections += r1.ner_count;
+                denial.violated_predicate = r1.text;
+                any = true;
+            }
+            let r2 = self.mask_string(&denial.offending_value);
+            if r2.pii_count > 0 {
+                summary.total_pii_found += r2.pii_count;
+                summary.ner_detections += r2.ner_count;
+                denial.offending_value = r2.text;
+                any = true;
+            }
+            if let Some(ref mut corr) = denial.corrective {
+                let r3 = self.mask_string(&corr.human_explanation);
+                if r3.pii_count > 0 {
+                    summary.total_pii_found += r3.pii_count;
+                    summary.ner_detections += r3.ner_count;
+                    corr.human_explanation = r3.text;
+                    any = true;
+                }
+            }
+            if any {
+                summary.masked_fields.push("denial".to_string());
             }
         }
 
@@ -480,15 +503,39 @@ impl PiiMasker {
             }
         }
 
-        if let Some(ref mut reason) = event.denial_reason {
-            let result = self.mask_string_tokenized(reason).await;
-            if result.pii_count > 0 {
-                summary.total_pii_found += result.pii_count;
-                summary.ner_detections += result.ner_count;
-                summary.tokens_created += result.tokens.len();
-                summary.pii_tokens.extend(result.tokens);
-                summary.masked_fields.push("denial_reason".to_string());
-                *reason = result.text;
+        if let Some(ref mut denial) = event.denial {
+            let mut any = false;
+            let r1 = self.mask_string_tokenized(&denial.violated_predicate).await;
+            if r1.pii_count > 0 {
+                summary.total_pii_found += r1.pii_count;
+                summary.ner_detections += r1.ner_count;
+                summary.tokens_created += r1.tokens.len();
+                summary.pii_tokens.extend(r1.tokens);
+                denial.violated_predicate = r1.text;
+                any = true;
+            }
+            let r2 = self.mask_string_tokenized(&denial.offending_value).await;
+            if r2.pii_count > 0 {
+                summary.total_pii_found += r2.pii_count;
+                summary.ner_detections += r2.ner_count;
+                summary.tokens_created += r2.tokens.len();
+                summary.pii_tokens.extend(r2.tokens);
+                denial.offending_value = r2.text;
+                any = true;
+            }
+            if let Some(ref mut corr) = denial.corrective {
+                let r3 = self.mask_string_tokenized(&corr.human_explanation).await;
+                if r3.pii_count > 0 {
+                    summary.total_pii_found += r3.pii_count;
+                    summary.ner_detections += r3.ner_count;
+                    summary.tokens_created += r3.tokens.len();
+                    summary.pii_tokens.extend(r3.tokens);
+                    corr.human_explanation = r3.text;
+                    any = true;
+                }
+            }
+            if any {
+                summary.masked_fields.push("denial".to_string());
             }
         }
 
@@ -588,7 +635,7 @@ mod tests {
             scope_requested: "db:read".to_string(),
             scope_granted: Some("db:read".to_string()),
             blocked: false,
-            denial_reason: None,
+            denial: None,
             session_id: "sess-123".to_string(),
             session_flags: vec![],
             response_metadata: None,
@@ -746,16 +793,20 @@ mod tests {
     }
 
     #[test]
-    fn test_mask_event_pii_in_denial_reason() {
+    fn test_mask_event_pii_in_denial() {
         let masker = PiiMasker::new();
         let mut event = make_test_event();
-        event.denial_reason = Some("Agent accessed SSN 123-45-6789".to_string());
+        event.denial = Some(ag_common::denial::StructuredDenialJson {
+            rule_id: "R001".into(),
+            violated_predicate: "Agent accessed SSN 123-45-6789".into(),
+            ..Default::default()
+        });
         let summary = masker.mask_event(&mut event);
         assert_eq!(summary.total_pii_found, 1);
-        assert!(summary.masked_fields.contains(&"denial_reason".to_string()));
+        assert!(summary.masked_fields.contains(&"denial".to_string()));
         assert_eq!(
-            event.denial_reason.as_deref(),
-            Some("Agent accessed SSN ***-**-****")
+            event.denial.unwrap().violated_predicate,
+            "Agent accessed SSN ***-**-****"
         );
     }
 
@@ -821,7 +872,11 @@ mod tests {
         let mut event = make_test_event();
         event.policy_reason = "User admin@corp.com allowed".to_string();
         event.tool_action = "Query from 192.168.0.1".to_string();
-        event.denial_reason = Some("SSN 999-88-7777 detected".to_string());
+        event.denial = Some(ag_common::denial::StructuredDenialJson {
+            rule_id: "R001".into(),
+            violated_predicate: "SSN 999-88-7777 detected".into(),
+            ..Default::default()
+        });
         let summary = masker.mask_event(&mut event);
         assert_eq!(summary.total_pii_found, 3);
         assert_eq!(summary.masked_fields.len(), 3);

@@ -233,11 +233,15 @@ class ClampdMCPProxy:
             exit_delegation(token)
             if parent_token is not None:
                 exit_delegation(parent_token)
+            from clampd._corrective import synthetic_denial
             return ProxyResponse(
                 request_id="error",
                 allowed=False,
                 risk_score=1.0,
-                denial_reason=f"Delegation depth {ctx.depth} exceeds maximum {MAX_DELEGATION_DEPTH}",
+                denial=synthetic_denial(
+                    "SDK/delegation_depth",
+                    f"Delegation depth {ctx.depth} exceeds maximum {MAX_DELEGATION_DEPTH}",
+                ),
                 latency_ms=0,
             )
 
@@ -389,7 +393,7 @@ class ClampdMCPProxy:
                         result.allowed,
                         result.risk_score,
                         result.latency_ms,
-                        f" denied={result.denial_reason}" if not result.allowed else "",
+                        f" denied={_denial_reason_for_log(result)}" if not result.allowed else "",
                     )
 
                     # -- Blocked ----------------------------------------
@@ -541,15 +545,16 @@ async def _scan_file_content(
         clampd_client.close()
 
     if scan_result and not scan_result.allowed:
+        scan_reason = _denial_reason_for_log(scan_result)
         logger.warning(
             "BLOCKED %s to %s: risk=%.2f reason=%s rules=%s",
             tool_name, file_path, scan_result.risk_score,
-            scan_result.denial_reason, scan_result.matched_rules,
+            scan_reason, scan_result.matched_rules,
         )
         return (
             f"[clampd] BLOCKED: {tool_name} to '{file_path}' denied.\n"
             f"Risk score: {scan_result.risk_score:.2f}\n"
-            f"Reason: {scan_result.denial_reason or 'dangerous content detected'}\n"
+            f"Reason: {scan_reason or 'dangerous content detected'}\n"
             f"Matched rules: {', '.join(scan_result.matched_rules) or 'content policy violation'}\n"
             f"The file content contains dangerous patterns that violate security policy."
         )
@@ -576,14 +581,34 @@ def _truncate_json(obj: Any, limit: int = 200) -> str:
     return raw
 
 
+def _denial_reason_for_log(result: Any) -> str:
+    """Extract a short human reason from a response's typed denial for logs.
+    Prefers the corrective's human_explanation, then violated_predicate."""
+    d = getattr(result, "denial", None)
+    if d is None:
+        return ""
+    if d.corrective and d.corrective.human_explanation:
+        return d.corrective.human_explanation
+    return d.violated_predicate or ""
+
+
 def _format_denial(tool_name: str, result: ProxyResponse) -> str:
-    """Build a human-readable denial message."""
+    """Build a human-readable denial message with the typed corrective.
+    Adds the rendered corrective text when present so the LLM has a
+    pattern-matchable next-step suggestion."""
+    from clampd._corrective import render_corrective_for_llm
+
+    reason = _denial_reason_for_log(result) or "policy violation"
     parts = [
         f"[clampd] Tool call '{tool_name}' was BLOCKED.",
-        f"Reason: {result.denial_reason or 'policy violation'}",
+        f"Reason: {reason}",
         f"Risk score: {result.risk_score:.2f}",
         f"Request ID: {result.request_id}",
     ]
+    if result.denial and result.denial.corrective:
+        rendered = render_corrective_for_llm(result.denial.corrective)
+        if rendered:
+            parts.append(rendered)
     if result.session_flags:
         parts.append(f"Session flags: {', '.join(result.session_flags)}")
     if result.degraded_stages:

@@ -5,6 +5,10 @@
  */
 
 import { ClampdClient } from "./client.js";
+import { parseDsn } from "./dsn.js";
+import { enroll } from "./enroll.js";
+import { hostname } from "node:os";
+import { basename } from "node:path";
 
 // ── Internal helpers ─────────────────────────────────────────────
 
@@ -22,35 +26,17 @@ export function sortedStringify(obj: unknown): string {
 export let defaultClient: ClampdClient | null = null;
 /** Per-agent client pool -- each agent gets its own JWT signed with its own secret. */
 export const agentClients = new Map<string, ClampdClient>();
-/** Per-agent secrets registered via init({ agents: {...} }) or env vars. */
-export const agentSecrets = new Map<string, string>();
 /** Shared config from init() -- gateway URL, API key. */
 export let sharedConfig: { gatewayUrl?: string; apiKey?: string } = {};
 
 // ── Option interfaces ────────────────────────────────────────────
 
 export interface InitOptions {
-  /** Agent ID. Falls back to CLAMPD_AGENT_ID env var. */
-  agentId?: string;
-  /** Gateway URL. Falls back to CLAMPD_GATEWAY_URL (default: http://localhost:8080). */
-  gatewayUrl?: string;
-  /** API key. Falls back to CLAMPD_API_KEY env var. */
-  apiKey?: string;
-  /** Agent signing secret. Falls back to CLAMPD_AGENT_SECRET env var. */
-  secret?: string;
-  /** Per-agent secrets for multi-agent setups.
-   * Each agent gets its own JWT signed with its own ags_ secret.
-   * Kill/rate-limit/EMA operate independently per agent.
-   * @example
-   * clampd.init({
-   *   agentId: "orchestrator",
-   *   agents: {
-   *     "orchestrator": process.env.ORCHESTRATOR_SECRET,
-   *     "research-agent": process.env.RESEARCHER_SECRET,
-   *   }
-   * });
-   */
-  agents?: Record<string, string | undefined>;
+  /** Connection string clampd://<org_key>@<host>. Falls back to CLAMPD_DSN. */
+  dsn?: string;
+  /** Logical agent name (the gateway assigns the UUID at enrollment).
+   * Falls back to CLAMPD_AGENT_NAME, the hostname, or the process name. */
+  name?: string;
 }
 
 export interface GuardOptions {
@@ -107,79 +93,52 @@ export interface WrapOptions {
  *
  * Fallback: if no per-agent secret exists, uses the default client from init().
  */
-export function getClient(opts?: { agentId?: string; gatewayUrl?: string; apiKey?: string; secret?: string }): ClampdClient {
-  const agentId = opts?.agentId || process.env.CLAMPD_AGENT_ID || "";
-
-  // Check for per-agent client (already created)
+export function getClient(opts?: { agentId?: string }): ClampdClient {
+  const agentId = opts?.agentId || "";
   if (agentId && agentClients.has(agentId)) {
     return agentClients.get(agentId)!;
   }
-
-  // Check for per-agent secret (create dedicated client)
-  if (agentId) {
-    const envKey = `CLAMPD_SECRET_${agentId.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    const secret = agentSecrets.get(agentId) || process.env[envKey];
-
-    if (secret) {
-      const client = new ClampdClient({
-        agentId,
-        gatewayUrl: opts?.gatewayUrl || sharedConfig.gatewayUrl || process.env.CLAMPD_GATEWAY_URL,
-        apiKey: opts?.apiKey || sharedConfig.apiKey || process.env.CLAMPD_API_KEY,
-        secret,
-      });
-      agentClients.set(agentId, client);
-      return client;
-    }
-  }
-
-  // Fallback to default client
   if (defaultClient) return defaultClient;
+  throw new Error(
+    "clampd.init() must be awaited before making calls. For a named agent, " +
+      "enroll it first.",
+  );
+}
 
-  if (!agentId) {
-    throw new Error(
-      "No agentId provided. Call clampd.init({ agentId }) first, " +
-      "or pass agentId to each function, or set CLAMPD_AGENT_ID env var."
-    );
+/** Logical agent name: CLAMPD_AGENT_NAME -> hostname -> process name -> "agent". */
+function deriveName(): string {
+  const candidate = process.env.CLAMPD_AGENT_NAME || hostname();
+  if (candidate) return candidate;
+  try {
+    const base = basename(process.argv[1] || "").replace(/\.[^.]+$/, "");
+    if (base) return base;
+  } catch {
+    /* ignore */
   }
-
-  return new ClampdClient({
-    agentId,
-    gatewayUrl: opts?.gatewayUrl || process.env.CLAMPD_GATEWAY_URL,
-    apiKey: opts?.apiKey || process.env.CLAMPD_API_KEY,
-    secret: opts?.secret,
-  });
+  return "agent";
 }
 
 // ── clampd.init() ─────────────────────────────────────────────────
 
-export function init(opts: InitOptions = {}): ClampdClient {
-  const agentId = opts.agentId || process.env.CLAMPD_AGENT_ID || "";
-  const gatewayUrl = opts.gatewayUrl || process.env.CLAMPD_GATEWAY_URL || "http://localhost:8080";
-  const apiKey = opts.apiKey || process.env.CLAMPD_API_KEY || "";
-  const secret = opts.secret || process.env.CLAMPD_AGENT_SECRET;
-
-  if (!agentId) {
+export async function init(opts: InitOptions = {}): Promise<ClampdClient> {
+  const dsn = opts.dsn || process.env.CLAMPD_DSN;
+  if (!dsn) {
     throw new Error(
-      "No agentId provided. Pass agentId to init() or set CLAMPD_AGENT_ID env var."
+      "No CLAMPD_DSN. Set CLAMPD_DSN=clampd://<org_key>@<host> or pass { dsn }.",
     );
   }
+  const { gatewayUrl, apiKey } = parseDsn(dsn);
+  const name = opts.name || deriveName();
+  const identity = await enroll(gatewayUrl, apiKey, name);
 
   sharedConfig = { gatewayUrl, apiKey };
-
-  // Register per-agent secrets
-  if (opts.agents) {
-    for (const [id, sec] of Object.entries(opts.agents)) {
-      if (sec) agentSecrets.set(id, sec);
-    }
-  }
-
   defaultClient = new ClampdClient({
-    agentId,
+    agentId: identity.agentId!,
     gatewayUrl,
     apiKey,
-    secret: agentSecrets.get(agentId) || secret,
+    signingKey: identity.privateKey,
   });
-  agentClients.set(agentId, defaultClient);
+  agentClients.set(identity.agentId!, defaultClient);
   return defaultClient;
 }
 
@@ -192,6 +151,5 @@ export function init(opts: InitOptions = {}): ClampdClient {
 export function _reset(): void {
   defaultClient = null;
   agentClients.clear();
-  agentSecrets.clear();
   sharedConfig = {};
 }

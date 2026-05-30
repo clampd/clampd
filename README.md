@@ -92,8 +92,9 @@ npm install @clampd/sdk     # TypeScript
 import clampd
 from openai import OpenAI
 
-clampd.init(agent_id="my-agent", gateway_url="http://localhost:8080", api_key="your-key")
-client = clampd.openai(OpenAI(), agent_id="my-agent")
+# export CLAMPD_DSN=clampd://ag_live_...@gateway.clampd.dev
+clampd.init()  # reads CLAMPD_DSN
+client = clampd.openai(OpenAI())
 
 response = client.chat.completions.create(
     model="gpt-4",
@@ -200,8 +201,7 @@ curl -fsSL https://clampd.dev/install-guard.sh | sh
 clampd-guard setup \
   --url https://your-gateway:8080 \
   --key your-api-key \
-  --agent your-agent-id \
-  --secret your-agent-secret
+  --agent your-agent-name
 
 # Sync tools for dashboard visibility
 clampd-guard sync

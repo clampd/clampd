@@ -129,7 +129,7 @@ def guard_openai_stream(
 
                         if not result.allowed:
                             raise ClampdBlockedError(
-                                result.denial_reason or "denied",
+                                result.denial,
                                 risk_score=result.risk_score,
                                 response=result,
                             )
@@ -217,7 +217,7 @@ def guard_anthropic_stream(
 
                     if not result.allowed:
                         raise ClampdBlockedError(
-                            result.denial_reason or "denied",
+                            result.denial,
                             risk_score=result.risk_score,
                             response=result,
                         )

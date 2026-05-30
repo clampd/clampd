@@ -11,6 +11,7 @@
 mod auth;
 mod config;
 mod contract_hash;
+mod enroll;
 mod guard;
 mod hook;
 mod scope;
@@ -40,12 +41,9 @@ enum Commands {
         /// API key
         #[arg(long, short)]
         key: String,
-        /// Agent UUID
+        /// Agent name (the gateway assigns the UUID at enrollment)
         #[arg(long, short)]
         agent: String,
-        /// Agent signing secret
-        #[arg(long, short)]
-        secret: String,
         /// Target IDE: claude-code (default) or cursor
         #[arg(long, default_value = "claude-code")]
         target: String,
@@ -89,7 +87,7 @@ async fn main() {
             guard::run().await;
         }
 
-        Some(Commands::Setup { url, key, agent, secret, target }) => {
+        Some(Commands::Setup { url, key, agent, target }) => {
             // 1. Validate gateway
             eprint!("[clampd] Validating gateway at {}... ", url);
             let client = reqwest::Client::builder()
@@ -118,7 +116,6 @@ async fn main() {
                 gateway_url: url.clone(),
                 api_key: key,
                 agent_id: agent,
-                secret,
                 skip_low_risk: false,
                 fail_open: true,
                 timeout_ms: 2000,

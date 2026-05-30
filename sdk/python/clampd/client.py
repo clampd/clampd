@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import os
 import re as _re
 import time
@@ -11,8 +12,23 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
-from clampd.auth import make_agent_jwt
+from typing import TYPE_CHECKING
+
+from clampd.auth import make_agent_jwt_ed25519
 from clampd.delegation import get_delegation
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from clampd._corrective import (
+    StructuredDenial,
+    render_corrective_for_llm,
+    synthetic_denial,
+)
+
+# Size of the per-client idempotency-key ring. 5 is enough: an LLM that
+# bounces between a few alternatives after a deny needs each new key to
+# fit in the ring; 5 covers typical retry loops while staying tiny.
+_LOOP_DETECTION_WINDOW = 5
 
 # ── Schema injection detection patterns (compiled once at import time) ──
 
@@ -117,6 +133,37 @@ def scan_for_schema_injection(messages: list[dict[str, Any]]) -> list[SchemaInje
     return warnings
 
 
+def _denial_from_error_response(
+    data: Any, status_code: Any
+) -> StructuredDenial:
+    """Build a StructuredDenial from a gateway HTTP error response.
+
+    Preference order:
+    1. Full `denial` dict (the gateway emitted a proper StructuredDenial).
+    2. Synthetic with the `error` text (gateway error envelope).
+    3. Synthetic with `http_{status}` as the reason.
+
+    Defensive against non-dict `data` and non-str status (e.g. MagicMocks
+    that leak in from mocked HTTP transports in tests) — only treats string
+    fields as real and falls back to `http_unknown` otherwise.
+    """
+    status_label = (
+        str(status_code) if isinstance(status_code, int) else "unknown"
+    )
+    if isinstance(data, dict):
+        raw_denial = data.get("denial")
+        if isinstance(raw_denial, dict):
+            parsed = StructuredDenial.from_json(raw_denial)
+            if parsed is not None:
+                return parsed
+        error_msg = data.get("error")
+        if isinstance(error_msg, str) and error_msg:
+            return synthetic_denial(f"SDK/http_{status_label}", error_msg)
+    return synthetic_denial(
+        f"SDK/http_{status_label}", f"http_{status_label}"
+    )
+
+
 class ProxyResponse(BaseModel):
     request_id: str = ""
     allowed: bool
@@ -124,7 +171,9 @@ class ProxyResponse(BaseModel):
     risk_score: float
     scope_granted: str | None = None
     tool_response: Any | None = None
-    denial_reason: str | None = None
+    # v0.20: typed denial replaces the old free-text `denial_reason`.
+    # Populated by the gateway on every Deny/Downscope; absent on Allow.
+    denial: StructuredDenial | None = None
     reasoning: str | None = None
     matched_rules: list[str] = []
     latency_ms: int = 0
@@ -132,12 +181,26 @@ class ProxyResponse(BaseModel):
     session_flags: list[str] = []
     scope_token: str | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
     def __init__(self, **data: Any) -> None:
         # Accept "action" from gateway JSON and map to raw_action
         if "action" in data and "raw_action" not in data:
             data["raw_action"] = data.pop("action")
+        # Accept the gateway's JSON `denial` and parse it into the typed
+        # dataclass. Pre-built StructuredDenial objects pass through unchanged.
+        if "denial" in data and isinstance(data["denial"], dict):
+            data["denial"] = StructuredDenial.from_json(data["denial"])
+        # Ergonomic shortcut for callers (esp. tests) that build a response
+        # from a plain reason string: convert to a synthetic typed denial.
+        # MUST require an actual str — MagicMock / other truthy non-str
+        # inputs (common in tests with mocked HTTP that fall through error
+        # paths) must NOT be wrapped, or a Mock leaks into the typed denial
+        # and propagates as a spurious ClampdBlockedError downstream.
+        if "denial_reason" in data:
+            reason = data.pop("denial_reason")
+            if isinstance(reason, str) and reason and "denial" not in data:
+                data["denial"] = synthetic_denial("SDK/legacy", reason)
         super().__init__(**data)
 
     @property
@@ -151,17 +214,40 @@ class ProxyResponse(BaseModel):
     def score(self) -> float:
         return self.risk_score
 
+    @property
+    def denial_reason(self) -> str | None:
+        """Convenience accessor returning the violated_predicate from the
+        typed denial. The canonical field is `.denial`; this property is
+        kept as a short-string helper for log statements and prefix-match
+        callers (e.g. `_raise_if_unregistered`)."""
+        return self.denial.violated_predicate if self.denial else None
+
 
 class ScanResponse(BaseModel):
     allowed: bool
     risk_score: float
-    denial_reason: str | None = None
+    denial: StructuredDenial | None = None
     matched_rules: list[str] = []
     latency_ms: int = 0
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def __init__(self, **data: Any) -> None:
+        if "denial" in data and isinstance(data["denial"], dict):
+            data["denial"] = StructuredDenial.from_json(data["denial"])
+        if "denial_reason" in data:
+            reason = data.pop("denial_reason")
+            if reason and "denial" not in data:
+                data["denial"] = synthetic_denial("SDK/legacy", reason)
+        super().__init__(**data)
 
     @property
     def action(self) -> str:
         return "pass" if self.allowed else "block"
+
+    @property
+    def denial_reason(self) -> str | None:
+        return self.denial.violated_predicate if self.denial else None
 
 
 class ScanOutputResponse(ScanResponse):
@@ -170,15 +256,55 @@ class ScanOutputResponse(ScanResponse):
 
 
 class ClampdBlockedError(Exception):
-    """Raised when Clampd denies a tool call."""
+    """Raised when Clampd denies a tool call.
 
-    def __init__(self, reason: str, *, risk_score: float = 1.0, response: ProxyResponse | ScanResponse | ScanOutputResponse | None = None):
-        self.reason = reason
+    Carries the gateway's typed `StructuredDenial`, including a corrective
+    action the LLM tool loop can pattern-match on. Use `to_tool_result()`
+    when surfacing this back to an OpenAI/Anthropic tool-use turn — it
+    returns the rendered corrective text suitable for `tool_result.content`.
+    """
+
+    def __init__(
+        self,
+        denial: "StructuredDenial | str | None",
+        *,
+        risk_score: float = 1.0,
+        response: "ProxyResponse | ScanResponse | ScanOutputResponse | None" = None,
+    ):
+        # Accept either a typed denial (from the gateway), a plain reason
+        # string (SDK-side synthetic deny like "delegation too deep"),
+        # or None. Strings are wrapped into a synthetic StructuredDenial
+        # so `.denial` is always typed when set.
+        if isinstance(denial, str):
+            self.denial = synthetic_denial("SDK/synthetic", denial)
+        else:
+            self.denial = denial
         self.risk_score = risk_score
         self.response = response
         self.matched_rules: list[str] = response.matched_rules if response else []
-        self.session_flags: list[str] = getattr(response, "session_flags", []) if response else []
+        self.session_flags: list[str] = (
+            getattr(response, "session_flags", []) if response else []
+        )
         super().__init__(self._build_message())
+
+    @property
+    def reason(self) -> str:
+        """Short human-readable reason for logs/messages. Prefer
+        `to_tool_result()` for the LLM-facing rendering."""
+        if self.denial is None:
+            return "denied"
+        if self.denial.corrective and self.denial.corrective.human_explanation:
+            return self.denial.corrective.human_explanation
+        return self.denial.violated_predicate or "denied"
+
+    def to_tool_result(self) -> str:
+        """Return the rendered corrective text for LLM tool_result.content.
+        Empty string when no corrective or confidence is "low"."""
+        if self.denial is None:
+            return f"Denied (risk={self.risk_score:.2f})"
+        return render_corrective_for_llm(self.denial.corrective) or (
+            f"Denied: {self.reason}"
+        )
 
     def _build_message(self) -> str:
         msg = f"Blocked: {self.reason} (risk={self.risk_score:.2f})"
@@ -187,6 +313,44 @@ class ClampdBlockedError(Exception):
         if self.session_flags:
             msg += f" | session: {', '.join(self.session_flags)}"
         return msg
+
+
+# v0.20 alias — the rename "blocked" → "denied" matches the wire term used
+# in `StructuredDenial`. Both names refer to the same class for now.
+ClampdDeniedError = ClampdBlockedError
+
+
+class ClampdLoopError(ClampdBlockedError):
+    """Raised when the LLM is detected to be looping on the same denial.
+
+    The gateway emits a stable `idempotency_key` for each (agent, tool,
+    params, rule, corrective) tuple. The SDK tracks the most recent keys
+    per-client. If a denial arrives with a key already seen, the LLM has
+    retried the exact same call after being told to stop — surfacing a
+    plain ClampdBlockedError would invite another retry.
+
+    `ClampdLoopError` is a SUBCLASS of `ClampdBlockedError` so existing
+    `except ClampdBlockedError: raise` chains propagate it correctly.
+    Tool loops that want to handle loops specially should catch
+    `ClampdLoopError` *before* `ClampdBlockedError`.
+    """
+
+    def __init__(self, denial: StructuredDenial):
+        self.denial = denial
+        self.risk_score = 1.0
+        self.response = None
+        self.matched_rules = []
+        self.session_flags = []
+        # Skip ClampdBlockedError.__init__ — its message format is different.
+        Exception.__init__(self, self._loop_message())
+
+    def _loop_message(self) -> str:
+        kid = self.denial.rule_id or "unknown"
+        return (
+            f"LLM loop detected on {kid}: same (agent, tool, params, "
+            f"corrective) denial received again. Idempotency key: "
+            f"{self.denial.idempotency_key}. Stop retrying identical inputs."
+        )
 
 
 class ClampdClient:
@@ -198,7 +362,7 @@ class ClampdClient:
         gateway_url: str = "http://localhost:8080",
         agent_id: str,
         api_key: str | None = None,
-        secret: str | None = None,
+        signing_key: "Ed25519PrivateKey | None" = None,
         session_id: str | None = None,
         timeout: float = 30.0,
         max_retries: int = 0,
@@ -210,9 +374,9 @@ class ClampdClient:
         self.agent_id = agent_id
         self.api_key = api_key or os.environ.get("CLAMPD_API_KEY", "")
         self.session_id = session_id
-        self._secret = secret
+        self._signing_key = signing_key
         self._jwt_ttl = 3600
-        self._jwt = make_agent_jwt(agent_id, secret=secret)
+        self._jwt = make_agent_jwt_ed25519(agent_id, signing_key) if signing_key else ""
         self._jwt_expires_at = time.monotonic() + self._jwt_ttl
         self._http = httpx.Client(timeout=timeout)
         # Retry config
@@ -224,11 +388,34 @@ class ClampdClient:
         self._cb_failures = 0
         self._cb_opened_at: float = 0.0
         self._cb_state: str = "closed"  # closed, open, half-open
+        # Loop-detection window: last N idempotency keys this client has
+        # seen on Deny/Downscope responses. Bounded so an agent that
+        # eventually moves on can't be flagged forever.
+        self._recent_idempotency_keys: collections.deque[str] = (
+            collections.deque(maxlen=_LOOP_DETECTION_WINDOW)
+        )
+
+    def _record_and_check_loop(self, denial: "StructuredDenial | None") -> bool:
+        """Track the denial's idempotency key. Returns True when the same
+        key is already in the recent ring — caller should raise
+        ClampdLoopError instead of ClampdBlockedError."""
+        if denial is None or not denial.idempotency_key:
+            return False
+        key = denial.idempotency_key
+        if key in self._recent_idempotency_keys:
+            return True
+        self._recent_idempotency_keys.append(key)
+        return False
 
     def _get_jwt(self) -> str:
-        """Return a valid JWT, regenerating if within 60s of expiry."""
-        if time.monotonic() >= self._jwt_expires_at - 60:
-            self._jwt = make_agent_jwt(self.agent_id, secret=self._secret)
+        """Return a valid EdDSA JWT, regenerating if within 60s of expiry."""
+        if not self._signing_key:
+            raise ValueError(
+                "[clampd] No signing key. The agent must be enrolled "
+                "(clampd.init() with CLAMPD_DSN) before making requests."
+            )
+        if time.monotonic() >= self._jwt_expires_at - 60 or not self._jwt:
+            self._jwt = make_agent_jwt_ed25519(self.agent_id, self._signing_key)
             self._jwt_expires_at = time.monotonic() + self._jwt_ttl
         return self._jwt
 
@@ -272,18 +459,14 @@ class ClampdClient:
             if len(chain) > 1:
                 body["delegation_chain"] = chain
                 body["delegation_trace_id"] = ctx.trace_id
-                # Sign a short-lived proof binding (leaf, chain) under the
-                # leaf agent's credential hash. The gateway verifies this
-                # when CLAMPD_DELEGATION_SIGNATURES=on. Silently omit if no
-                # secret is configured for this agent — server enforces.
-                if self._secret:
-                    from .auth import make_delegation_proof
-                    try:
-                        body["signed_proof"] = make_delegation_proof(
-                            self.agent_id, chain, secret=self._secret,
-                        )
-                    except ValueError:
-                        pass
+                # Sign the (leaf, chain) proof with the agent's Ed25519 key.
+                # The gateway upgrades confidence to "verified"; it only
+                # *requires* the proof when CLAMPD_DELEGATION_SIGNATURES=on.
+                if self._signing_key:
+                    from .auth import make_delegation_proof_ed25519
+                    body["signed_proof"] = make_delegation_proof_ed25519(
+                        self.agent_id, chain, self._signing_key
+                    )
         return self._post("/v1/proxy", body, authorized_tools=authorized_tools)
 
     @staticmethod
@@ -359,17 +542,25 @@ class ClampdClient:
         try:
             resp = self._http.post(f"{self.gateway_url}/v1/scan-output", headers=self._headers(), json=body)
         except Exception:
-            return ScanOutputResponse(allowed=False, risk_score=1.0, denial_reason="gateway_error")
+            return ScanOutputResponse(allowed=False, risk_score=1.0, denial=synthetic_denial("SDK/gateway_error", "gateway_error"))
+
+        # If we didn't get a real HTTP response (e.g. transport failure
+        # masquerading as a mocked client), surface it as a transport
+        # error so the caller's fail-open path can handle it. Without
+        # this, a malformed response collapses into a synthetic "blocked"
+        # denial that bypasses fail-open semantics.
+        if not isinstance(getattr(resp, "status_code", None), int):
+            raise RuntimeError("gateway scan-output: malformed response (no integer status_code)")
 
         if resp.status_code == 200:
             return ScanOutputResponse.model_validate(resp.json())
 
         try:
             data = resp.json()
-            reason = data.get("denial_reason") or data.get("error") or f"http_{resp.status_code}"
         except Exception:
-            reason = f"http_{resp.status_code}"
-        return ScanOutputResponse(allowed=False, risk_score=1.0, denial_reason=reason)
+            data = {}
+        denial = _denial_from_error_response(data, resp.status_code)
+        return ScanOutputResponse(allowed=False, risk_score=1.0, denial=denial)
 
     # ── Circuit breaker ─────────────────────────────────────────────────
 
@@ -404,7 +595,7 @@ class ClampdClient:
         if not self._cb_allow_request():
             return ProxyResponse(
                 request_id="error", allowed=False, risk_score=1.0,
-                denial_reason="circuit_breaker_open", latency_ms=0,
+                denial=synthetic_denial("SDK/circuit_breaker", "circuit_breaker_open"), latency_ms=0,
             )
 
         last_result: ProxyResponse | None = None
@@ -420,7 +611,7 @@ class ClampdClient:
                 retryable = True
                 last_result = ProxyResponse(
                     request_id="error", allowed=False, risk_score=1.0,
-                    denial_reason="gateway_timeout", latency_ms=0,
+                    denial=synthetic_denial("SDK/timeout", "gateway_timeout"), latency_ms=0,
                 )
                 self._cb_record_failure()
                 if attempt < self.max_retries:
@@ -430,7 +621,7 @@ class ClampdClient:
                 retryable = True
                 last_result = ProxyResponse(
                     request_id="error", allowed=False, risk_score=1.0,
-                    denial_reason="gateway_unreachable", latency_ms=0,
+                    denial=synthetic_denial("SDK/unreachable", "gateway_unreachable"), latency_ms=0,
                 )
                 self._cb_record_failure()
                 if attempt < self.max_retries:
@@ -440,12 +631,20 @@ class ClampdClient:
                 self._cb_record_failure()
                 return ProxyResponse(
                     request_id="error", allowed=False, risk_score=1.0,
-                    denial_reason="gateway_error", latency_ms=0,
+                    denial=synthetic_denial("SDK/gateway_error", "gateway_error"), latency_ms=0,
                 )
 
             if resp.status_code == 200:
                 self._cb_record_success()
-                return ProxyResponse.model_validate(resp.json())
+                parsed = ProxyResponse.model_validate(resp.json())
+                # v0.20 loop detection: a denial with the same idempotency
+                # key as a recent one means the LLM is retrying the exact
+                # same denied call. Raise a typed loop error so tool loops
+                # break out instead of bouncing forever.
+                if not parsed.allowed and self._record_and_check_loop(parsed.denial):
+                    if parsed.denial is not None:
+                        raise ClampdLoopError(parsed.denial)
+                return parsed
 
             # Retry on 5xx and 429; don't retry on other 4xx
             if resp.status_code == 429 or resp.status_code >= 500:
@@ -455,11 +654,26 @@ class ClampdClient:
                 # Client errors (except 429) are not retryable
                 retryable = False
 
-            # Extract denial_reason from gateway JSON response if available
+            # Extract denial from gateway JSON response. If the gateway
+            # returned a full StructuredDenial, use it directly; otherwise
+            # synthesize one from the error envelope so the caller still
+            # gets a typed `.denial` to inspect.
             try:
                 data = resp.json()
-                error_code = data.get("error_code", "")
-                error_msg = data.get("denial_reason") or data.get("error") or f"http_{resp.status_code}"
+            except Exception:
+                data = {}
+            raw_denial = data.get("denial") if isinstance(data, dict) else None
+            if isinstance(raw_denial, dict):
+                parsed = StructuredDenial.from_json(raw_denial)
+                last_denial = parsed or synthetic_denial(
+                    f"SDK/http_{resp.status_code}", f"http_{resp.status_code}"
+                )
+            else:
+                error_code = data.get("error_code", "") if isinstance(data, dict) else ""
+                error_msg = (
+                    (data.get("error") if isinstance(data, dict) else None)
+                    or f"http_{resp.status_code}"
+                )
                 if "InvalidSignature" in error_msg or "JWT validation failed" in error_msg:
                     if resp.status_code == 401:
                         error_msg = (
@@ -469,12 +683,13 @@ class ClampdClient:
                         )
                         error_code = error_code or "agent_auth_failed"
                 reason = f"{error_code}: {error_msg}" if error_code else error_msg
-            except Exception:
-                reason = f"http_{resp.status_code}"
+                last_denial = synthetic_denial(
+                    f"SDK/http_{resp.status_code}", reason
+                )
 
             last_result = ProxyResponse(
                 request_id="error", allowed=False, risk_score=1.0,
-                denial_reason=reason, latency_ms=0,
+                denial=last_denial, latency_ms=0,
             )
 
             if not retryable or attempt >= self.max_retries:
@@ -485,7 +700,7 @@ class ClampdClient:
         # Should not reach here, but safety fallback
         return last_result or ProxyResponse(
             request_id="error", allowed=False, risk_score=1.0,
-            denial_reason="gateway_error", latency_ms=0,
+            denial=synthetic_denial("SDK/gateway_error", "gateway_error"), latency_ms=0,
         )
 
     def close(self) -> None:
@@ -507,7 +722,7 @@ class AsyncClampdClient:
         gateway_url: str = "http://localhost:8080",
         agent_id: str,
         api_key: str | None = None,
-        secret: str | None = None,
+        signing_key: "Ed25519PrivateKey | None" = None,
         timeout: float = 30.0,
         max_retries: int = 0,
         base_delay_ms: int = 500,
@@ -517,10 +732,9 @@ class AsyncClampdClient:
         self.gateway_url = gateway_url.rstrip("/")
         self.agent_id = agent_id
         self.api_key = api_key or os.environ.get("CLAMPD_API_KEY", "")
-        self._secret = secret
+        self._signing_key = signing_key
         self._jwt_ttl = 3600
-        # B4: Create JWT before httpx client — no resource leak if JWT fails
-        self._jwt = make_agent_jwt(agent_id, secret=secret)
+        self._jwt = make_agent_jwt_ed25519(agent_id, signing_key) if signing_key else ""
         self._jwt_expires_at = time.monotonic() + self._jwt_ttl
         self._http = httpx.AsyncClient(timeout=timeout)
         # Retry config
@@ -534,9 +748,14 @@ class AsyncClampdClient:
         self._cb_state: str = "closed"
 
     def _get_jwt(self) -> str:
-        """Return a valid JWT, regenerating if within 60s of expiry."""
-        if time.monotonic() >= self._jwt_expires_at - 60:
-            self._jwt = make_agent_jwt(self.agent_id, secret=self._secret)
+        """Return a valid EdDSA JWT, regenerating if within 60s of expiry."""
+        if not self._signing_key:
+            raise ValueError(
+                "[clampd] No signing key. The agent must be enrolled "
+                "(clampd.init() with CLAMPD_DSN) before making requests."
+            )
+        if time.monotonic() >= self._jwt_expires_at - 60 or not self._jwt:
+            self._jwt = make_agent_jwt_ed25519(self.agent_id, self._signing_key)
             self._jwt_expires_at = time.monotonic() + self._jwt_ttl
         return self._jwt
 
@@ -574,6 +793,11 @@ class AsyncClampdClient:
         if ctx is not None and len(ctx.chain) > 1:
             body["delegation_chain"] = ctx.chain
             body["delegation_trace_id"] = ctx.trace_id
+            if self._signing_key:
+                from .auth import make_delegation_proof_ed25519
+                body["signed_proof"] = make_delegation_proof_ed25519(
+                    self.agent_id, ctx.chain, self._signing_key
+                )
         return await self._post("/v1/proxy", body, authorized_tools=authorized_tools)
 
     async def verify(
@@ -644,21 +868,25 @@ class AsyncClampdClient:
                 json=body,
             )
         except Exception:
-            return ScanOutputResponse(allowed=False, risk_score=1.0, denial_reason="gateway_error")
+            return ScanOutputResponse(allowed=False, risk_score=1.0, denial=synthetic_denial("SDK/gateway_error", "gateway_error"))
+
+        # If we didn't get a real HTTP response (e.g. transport failure
+        # masquerading as a mocked client), surface it as a transport
+        # error so the caller's fail-open path can handle it. Without
+        # this, a malformed response collapses into a synthetic "blocked"
+        # denial that bypasses fail-open semantics.
+        if not isinstance(getattr(resp, "status_code", None), int):
+            raise RuntimeError("gateway scan-output: malformed response (no integer status_code)")
 
         if resp.status_code == 200:
             return ScanOutputResponse.model_validate(resp.json())
 
         try:
-            data: dict[str, Any] = resp.json()
-            reason = (
-                data.get("denial_reason")
-                or data.get("error")
-                or f"http_{resp.status_code}"
-            )
+            data = resp.json()
         except Exception:
-            reason = f"http_{resp.status_code}"
-        return ScanOutputResponse(allowed=False, risk_score=1.0, denial_reason=reason)
+            data = {}
+        denial = _denial_from_error_response(data, resp.status_code)
+        return ScanOutputResponse(allowed=False, risk_score=1.0, denial=denial)
 
     # ── Circuit breaker ─────────────────────────────────────────────────
 
@@ -693,7 +921,7 @@ class AsyncClampdClient:
         if not self._cb_allow_request():
             return ProxyResponse(
                 request_id="error", allowed=False, risk_score=1.0,
-                denial_reason="circuit_breaker_open", latency_ms=0,
+                denial=synthetic_denial("SDK/circuit_breaker", "circuit_breaker_open"), latency_ms=0,
             )
 
         last_result: ProxyResponse | None = None
@@ -709,7 +937,7 @@ class AsyncClampdClient:
                 retryable = True
                 last_result = ProxyResponse(
                     request_id="error", allowed=False, risk_score=1.0,
-                    denial_reason="gateway_timeout", latency_ms=0,
+                    denial=synthetic_denial("SDK/timeout", "gateway_timeout"), latency_ms=0,
                 )
                 self._cb_record_failure()
                 if attempt < self.max_retries:
@@ -719,7 +947,7 @@ class AsyncClampdClient:
                 retryable = True
                 last_result = ProxyResponse(
                     request_id="error", allowed=False, risk_score=1.0,
-                    denial_reason="gateway_unreachable", latency_ms=0,
+                    denial=synthetic_denial("SDK/unreachable", "gateway_unreachable"), latency_ms=0,
                 )
                 self._cb_record_failure()
                 if attempt < self.max_retries:
@@ -729,12 +957,20 @@ class AsyncClampdClient:
                 self._cb_record_failure()
                 return ProxyResponse(
                     request_id="error", allowed=False, risk_score=1.0,
-                    denial_reason="gateway_error", latency_ms=0,
+                    denial=synthetic_denial("SDK/gateway_error", "gateway_error"), latency_ms=0,
                 )
 
             if resp.status_code == 200:
                 self._cb_record_success()
-                return ProxyResponse.model_validate(resp.json())
+                parsed = ProxyResponse.model_validate(resp.json())
+                # v0.20 loop detection: a denial with the same idempotency
+                # key as a recent one means the LLM is retrying the exact
+                # same denied call. Raise a typed loop error so tool loops
+                # break out instead of bouncing forever.
+                if not parsed.allowed and self._record_and_check_loop(parsed.denial):
+                    if parsed.denial is not None:
+                        raise ClampdLoopError(parsed.denial)
+                return parsed
 
             # Retry on 5xx and 429; don't retry on other 4xx
             if resp.status_code == 429 or resp.status_code >= 500:
@@ -745,10 +981,18 @@ class AsyncClampdClient:
 
             try:
                 data = resp.json()
-                error_code = data.get("error_code", "")
+            except Exception:
+                data = {}
+            raw_denial = data.get("denial") if isinstance(data, dict) else None
+            if isinstance(raw_denial, dict):
+                parsed = StructuredDenial.from_json(raw_denial)
+                last_denial = parsed or synthetic_denial(
+                    f"SDK/http_{resp.status_code}", f"http_{resp.status_code}"
+                )
+            else:
+                error_code = data.get("error_code", "") if isinstance(data, dict) else ""
                 error_msg = (
-                    data.get("denial_reason")
-                    or data.get("error")
+                    (data.get("error") if isinstance(data, dict) else None)
                     or f"http_{resp.status_code}"
                 )
                 if "InvalidSignature" in error_msg or "JWT validation failed" in error_msg:
@@ -760,12 +1004,13 @@ class AsyncClampdClient:
                         )
                         error_code = error_code or "agent_auth_failed"
                 reason = f"{error_code}: {error_msg}" if error_code else error_msg
-            except Exception:
-                reason = f"http_{resp.status_code}"
+                last_denial = synthetic_denial(
+                    f"SDK/http_{resp.status_code}", reason
+                )
 
             last_result = ProxyResponse(
                 request_id="error", allowed=False, risk_score=1.0,
-                denial_reason=reason, latency_ms=0,
+                denial=last_denial, latency_ms=0,
             )
 
             if not retryable or attempt >= self.max_retries:
@@ -775,7 +1020,7 @@ class AsyncClampdClient:
 
         return last_result or ProxyResponse(
             request_id="error", allowed=False, risk_score=1.0,
-            denial_reason="gateway_error", latency_ms=0,
+            denial=synthetic_denial("SDK/gateway_error", "gateway_error"), latency_ms=0,
         )
 
     async def close(self) -> None:

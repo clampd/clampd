@@ -1,6 +1,6 @@
 {
   "name": "@clampd/sdk",
-  "version": "0.23.5",
+  "version": "0.23.6",
   "description": "Runtime security SDK for AI agents \u2014 guard tool calls in 1 line",
   "type": "module",
   "main": "./dist/index.js",
@@ -14,7 +14,14 @@
     "./langchain": {
       "types": "./dist/langchain.d.ts",
       "import": "./dist/langchain.js"
+    },
+    "./auto": {
+      "types": "./dist/auto.d.ts",
+      "import": "./dist/auto.js"
     }
+  },
+  "bin": {
+    "clampd": "./dist/cli.js"
   },
   "files": [
     "dist",

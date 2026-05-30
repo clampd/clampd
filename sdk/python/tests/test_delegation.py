@@ -31,7 +31,7 @@ def reset_state():
 def _setup_guard(agent_id="agent-A"):
     """Set up clampd with a mocked proxy that always allows."""
     with patch("clampd.client.httpx.Client"):
-        clampd.init(agent_id=agent_id)
+        clampd.init(name=agent_id)
     resp = make_response(allowed=True)
     clampd._default_client.proxy = MagicMock(return_value=resp)
 
@@ -112,7 +112,7 @@ class TestGuardDelegation:
     def test_single_agent_chain(self):
         """Single guarded call creates a chain of depth 1."""
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="agent-A")
+            clampd.init(name="agent-A")
         resp = make_response(allowed=True)
         clampd._default_client.proxy = MagicMock(return_value=resp)
 
@@ -126,7 +126,8 @@ class TestGuardDelegation:
         result = read_data("x")
         assert result == "data:x"
         assert len(captured_ctx) == 1
-        assert captured_ctx[0].chain == ["agent-A"]
+        # The chain carries the enrolled agent UUID.
+        assert captured_ctx[0].chain == [clampd._default_client.agent_id]
         # After guard returns, context should be restored
         assert get_delegation() is None
 
@@ -252,7 +253,7 @@ class TestGuardDelegation:
     def test_context_cleaned_after_exception(self):
         """Delegation context is properly cleaned up even if guarded fn raises."""
         with patch("clampd.client.httpx.Client"):
-            clampd.init(agent_id="agent-A")
+            clampd.init(name="agent-A")
         resp = make_response(allowed=True)
         clampd._default_client.proxy = MagicMock(return_value=resp)
 
@@ -387,3 +388,40 @@ class TestClientProxyDelegation:
             body = call_args.kwargs.get("json") or call_args[1].get("json")
             assert "delegation_chain" not in body
             assert "delegation_trace_id" not in body
+
+
+class TestAgentScopeResolvesNameToUuid:
+    """clampd.agent(name) must enter the delegation chain with the agent's
+    enrolled UUID, not the logical name — otherwise the chain mixes names and
+    UUIDs and the gateway rejects it as 'invalid_delegation_chain'."""
+
+    def test_agent_scope_uses_enrolled_uuid(self):
+        import uuid as _uuid
+
+        clampd._reset()
+        clampd.init()  # populate config so agent() can resolve name -> enrolled UUID
+        # conftest._offline_enrollment maps name -> uuid5(name) deterministically.
+        expected = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, "orchestrator"))
+
+        with clampd.agent("orchestrator"):
+            ctx = get_delegation()
+            assert ctx.chain == [expected], (
+                f"agent() must put the enrolled UUID in the chain, got {ctx.chain}"
+            )
+            # Every chain entry must be a UUID (36 chars, 4 dashes).
+            assert all(len(a) == 36 and a.count("-") == 4 for a in ctx.chain)
+
+    def test_two_hop_chain_is_all_uuids(self):
+        import uuid as _uuid
+
+        clampd._reset()
+        clampd.init()  # populate config so agent() can resolve name -> enrolled UUID
+        orch = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, "orch"))
+        worker = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, "worker"))
+
+        with clampd.agent("orch"):
+            with clampd.agent("worker"):
+                ctx = get_delegation()
+                assert ctx.chain == [orch, worker]
+                assert ctx.caller_agent_id == orch
+                assert ctx.depth == 2

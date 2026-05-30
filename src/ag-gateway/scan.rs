@@ -322,9 +322,12 @@ pub async fn handle_scan_input(
             return Ok(Json(ScanResponse {
                 allowed: false,
                 risk_score: alert.risk_score,
-                denial_reason: Some(format!(
-                    "Schema injection detected: {} (pattern: {})",
-                    alert.alert_type, alert.matched_pattern
+                denial: Some(crate::denial::gateway_denial(
+                    format!("SCHEMA_{}", alert.alert_type.to_uppercase()),
+                    format!(
+                        "Schema injection detected: {} (pattern: {})",
+                        alert.alert_type, alert.matched_pattern
+                    ),
                 )),
                 matched_rules: vec![format!("SCHEMA_{}", alert.alert_type.to_uppercase())],
                 latency_ms,
@@ -438,6 +441,15 @@ pub async fn handle_scan_input(
         "scan-input completed"
     );
 
+    let scan_input_denial = if blocked {
+        Some(crate::denial::gateway_denial(
+            "GATEWAY/scan_input_risk_threshold",
+            format!("Risk score {:.2} exceeds threshold", assessed_risk),
+        ))
+    } else {
+        None
+    };
+
     // Publish shadow event for audit trail
     crate::shadow::publish_event(&state, &ShadowEvent {
         org_id: api_key_info.org_id.clone(),
@@ -449,7 +461,7 @@ pub async fn handle_scan_input(
         matched_rules: matched_rules.clone(),
         policy_action: if blocked { "block".into() } else { "pass".into() },
         blocked,
-        denial_reason: if blocked { Some(format!("Risk {:.2} exceeds threshold", assessed_risk)) } else { None },
+        denial: scan_input_denial.clone(),
         latency_ms: latency_ms as u32,
         session_id: scan_session_id.clone(),
         rejection_type: if blocked {
@@ -463,14 +475,7 @@ pub async fn handle_scan_input(
     Ok(Json(ScanResponse {
         allowed: !blocked,
         risk_score: assessed_risk,
-        denial_reason: if blocked {
-            Some(format!(
-                "Risk score {:.2} exceeds threshold",
-                assessed_risk
-            ))
-        } else {
-            None
-        },
+        denial: scan_input_denial,
         matched_rules,
         latency_ms,
     }))
@@ -561,9 +566,12 @@ pub async fn handle_scan_output(
             return Ok(Json(ScanOutputResponse {
                 allowed: false,
                 risk_score: alert.risk_score,
-                denial_reason: Some(format!(
-                    "Schema injection detected: {} (pattern: {})",
-                    alert.alert_type, alert.matched_pattern
+                denial: Some(crate::denial::gateway_denial(
+                    format!("SCHEMA_{}", alert.alert_type.to_uppercase()),
+                    format!(
+                        "Schema injection detected: {} (pattern: {})",
+                        alert.alert_type, alert.matched_pattern
+                    ),
                 )),
                 matched_rules: vec![format!("SCHEMA_{}", alert.alert_type.to_uppercase())],
                 pii_found: vec![],
@@ -708,6 +716,28 @@ pub async fn handle_scan_output(
         "scan-output completed"
     );
 
+    let scan_output_denial = if blocked {
+        let mut reasons = Vec::new();
+        if rule_risk >= threshold {
+            reasons.push(format!("Rule risk {:.2}", rule_risk));
+        }
+        if !pii_found.is_empty() {
+            reasons.push("PII detected in output".to_string());
+        }
+        if !secrets_found.is_empty() {
+            reasons.push("Secrets detected in output".to_string());
+        }
+        if reasons.is_empty() {
+            reasons.push(format!("Risk score {:.2} exceeds threshold", assessed_risk));
+        }
+        Some(crate::denial::gateway_denial(
+            "GATEWAY/scan_output_blocked",
+            reasons.join("; "),
+        ))
+    } else {
+        None
+    };
+
     // Publish shadow event for audit trail
     crate::shadow::publish_event(&state, &ShadowEvent {
         org_id: api_key_info.org_id.clone(),
@@ -719,7 +749,7 @@ pub async fn handle_scan_output(
         matched_rules: matched_rules.clone(),
         policy_action: if blocked { "block".into() } else { "pass".into() },
         blocked,
-        denial_reason: if blocked { Some(format!("Risk {:.2} exceeds threshold", assessed_risk)) } else { None },
+        denial: scan_output_denial.clone(),
         latency_ms: latency_ms as u32,
         session_id: scan_session_id.clone(),
         rejection_type: if blocked {
@@ -733,24 +763,7 @@ pub async fn handle_scan_output(
     Ok(Json(ScanOutputResponse {
         allowed: !blocked,
         risk_score: assessed_risk,
-        denial_reason: if blocked {
-            let mut reasons = Vec::new();
-            if rule_risk >= threshold {
-                reasons.push(format!("Rule risk {:.2}", rule_risk));
-            }
-            if !pii_found.is_empty() {
-                reasons.push("PII detected in output".to_string());
-            }
-            if !secrets_found.is_empty() {
-                reasons.push("Secrets detected in output".to_string());
-            }
-            if reasons.is_empty() {
-                reasons.push(format!("Risk score {:.2} exceeds threshold", assessed_risk));
-            }
-            Some(reasons.join("; "))
-        } else {
-            None
-        },
+        denial: scan_output_denial,
         matched_rules,
         pii_found,
         secrets_found,

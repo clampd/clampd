@@ -51,6 +51,21 @@ pub struct ProxyRequest {
     /// JSON schema of the tool's parameters (from SDK tool definition).
     #[serde(default)]
     pub tool_params_schema: Option<String>,
+    /// MCP tool annotations (triage hints only — NOT a scope). Captured at MCP
+    /// enumeration and passed through to the dashboard for a badge + operation
+    /// pre-select. Never auto-classifies. JSON string, e.g.
+    /// `{"readOnlyHint":true,"destructiveHint":false}`.
+    #[serde(default)]
+    pub tool_annotations: Option<String>,
+    /// v0.20 Wave 3: per-tool corrective override authored via
+    /// `@clampd.guard(suggest=...)` (Python) / `wrapFunction({ suggest: ... })`
+    /// (TS). Forwarded as-is into the ag-policy EvaluateRequest so the
+    /// resolver picks SOURCE_SDK_OVERRIDE at the highest non-boundary
+    /// precedence. The shape is `ag_common::corrective::CorrectiveTemplate`
+    /// (serde tag=kind) — gateway doesn't validate it here, ag-policy
+    /// parses + falls through on malformed input.
+    #[serde(default)]
+    pub sdk_corrective_override: Option<serde_json::Value>,
 }
 
 /// Structured error response for non-pipeline failures (auth, rate limit, etc.).
@@ -98,7 +113,10 @@ pub struct ProxyResponse {
     pub risk_score: f64,
     pub scope_granted: Option<String>,
     pub tool_response: Option<serde_json::Value>,
-    pub denial_reason: Option<String>,
+    /// v0.20: typed denial detail (replaces denial_reason: Option<String>).
+    /// `None` on allow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denial: Option<ag_common::denial::StructuredDenialJson>,
     /// Human-readable explanation of the risk score (rule breakdown).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<String>,
@@ -226,7 +244,7 @@ pub struct ScanResponse {
     pub allowed: bool,
     pub risk_score: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub denial_reason: Option<String>,
+    pub denial: Option<ag_common::denial::StructuredDenialJson>,
     pub matched_rules: Vec<String>,
     pub latency_ms: u64,
 }
@@ -237,7 +255,7 @@ pub struct ScanOutputResponse {
     pub allowed: bool,
     pub risk_score: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub denial_reason: Option<String>,
+    pub denial: Option<ag_common::denial::StructuredDenialJson>,
     pub matched_rules: Vec<String>,
     pub pii_found: Vec<PiiMatch>,
     pub secrets_found: Vec<SecretMatch>,
@@ -410,7 +428,9 @@ mod tests {
             tool_descriptor_hash: None,
             tool_description: None,
             tool_params_schema: None,
+            tool_annotations: None,
             signed_proof: None,
+            sdk_corrective_override: None,
         };
         let (tool, action, params_json, params_hash, prompt_hash) = extract_tool_call(&req, None);
         assert_eq!(tool, "db.query");
@@ -434,7 +454,9 @@ mod tests {
             tool_descriptor_hash: None,
             tool_description: None,
             tool_params_schema: None,
+            tool_annotations: None,
             signed_proof: None,
+            sdk_corrective_override: None,
         };
         let (_, _, _, _, prompt_hash) = extract_tool_call(&req, None);
         assert!(prompt_hash.is_some());
@@ -514,12 +536,12 @@ mod tests {
         let resp = ScanResponse {
             allowed: true,
             risk_score: 0.1,
-            denial_reason: None,
+            denial: None,
             matched_rules: vec!["R001".to_string()],
             latency_ms: 5,
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["allowed"], true);
-        assert!(!json.to_string().contains("denial_reason")); // skipped when None
+        assert!(!json.to_string().contains("denial")); // skipped when None
     }
 }

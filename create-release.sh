@@ -101,7 +101,7 @@ curl -fsSL https://clampd.dev/install.sh | sh
 **Claude Code / Cursor guard:**
 ```bash
 curl -fsSL https://clampd.dev/install-guard.sh | sh
-clampd-guard setup --url https://your-gateway:8080 --key KEY --agent AGENT --secret SECRET
+clampd-guard setup --url https://your-gateway:8080 --key KEY --agent AGENT
 ```
 
 **SDKs:**
@@ -112,7 +112,7 @@ npm install @clampd/sdk     # TypeScript
 
 ## Docker Images
 
-All images at `ghcr.io/clampd/*:v0.9.0`
+All images at `ghcr.io/clampd/*:v0.24.0`
 
 | Image | Service |
 |---|---|

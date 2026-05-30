@@ -244,3 +244,62 @@ class TestScopeVerificationError:
         err = ScopeVerificationError("expired", claims=claims)
         assert err.claims is not None
         assert err.claims.sub == "a"
+
+
+class TestCallBinding:
+    """Per-call binding (#5): a scope token must match the exact call."""
+
+    PARITY = [
+        ("db.query", {"sql": "SELECT 1"},
+         "d10381a5569472b326bcdbd0bf33156c833626610643373f01e52e8483fc15a4"),
+        ("a", "b|c", "485d108852299dcaecc1fabb6dbeab20e609b06bb8e2b6cf888208887e4744b5"),
+        ("a|b", "c", "56f25ddaedc1ba09b5c4073082ffc42572eace2dec242f0cab364ca34b129b89"),
+        ("x", {}, "a03d1a7678e05d355c973d943acc1dc7090157438df5f7713fd42e81bd91219d"),
+        ("net.get", {"url": "http://h/", "z": 1, "a": [1, 2]},
+         "5acd373a260ac73be35509182e62bd96d44e6f96a048ac1ba2157ef70d90ee92"),
+    ]
+
+    def test_parity_vectors(self):
+        from clampd.contract_hash import call_binding
+        for tool, params, expected in self.PARITY:
+            assert call_binding(tool, params) == expected, f"drift for {tool!r}"
+
+    def test_binding_is_injective(self):
+        from clampd.contract_hash import call_binding
+        # same tool, escalated params -> different binding (replay protection)
+        safe = call_binding("db.query", {"sql": "SELECT 1"})
+        danger = call_binding("db.query", {"sql": "DROP TABLE users"})
+        assert safe != danger
+        # tool/param boundary reshuffle must not collide
+        assert call_binding("a", "b|c") != call_binding("a|b", "c")
+
+    def test_verify_call_binding_match_passes(self):
+        from clampd.tool_verify import verify_call_binding
+        from clampd.contract_hash import call_binding
+        claims = ScopeTokenClaims(
+            sub="a", scope="db:query:read", tool="db.query",
+            binding=call_binding("db.query", {"sql": "SELECT 1"}), exp=0, rid="r",
+        )
+        # matching call -> no raise
+        verify_call_binding(claims, "db.query", {"sql": "SELECT 1"})
+
+    def test_verify_call_binding_mismatch_rejected(self):
+        from clampd.tool_verify import verify_call_binding
+        from clampd.contract_hash import call_binding
+        claims = ScopeTokenClaims(
+            sub="a", scope="db:query:read", tool="db.query",
+            binding=call_binding("db.query", {"sql": "SELECT 1"}), exp=0, rid="r",
+        )
+        # token replayed for a DIFFERENT call -> rejected
+        with pytest.raises(ScopeVerificationError):
+            verify_call_binding(claims, "db.query", {"sql": "DROP TABLE users"})
+        with pytest.raises(ScopeVerificationError):
+            verify_call_binding(claims, "shell.exec", {"sql": "SELECT 1"})
+
+    def test_verify_call_binding_legacy_empty_skipped(self):
+        from clampd.tool_verify import verify_call_binding
+        claims = ScopeTokenClaims(
+            sub="a", scope="db:query:read", tool="db.query", binding="", exp=0, rid="r",
+        )
+        # legacy token (no binding) -> skip, no raise
+        verify_call_binding(claims, "anything", {"x": 1})

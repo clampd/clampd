@@ -43,6 +43,10 @@ export interface ProxyEvent {
   };
   descriptor_hash?: string;
   scope_token?: string;
+  /** Gateway request_id (when present) — surfaced as the agent-facing
+   *  Reference in opaque block responses; also used to correlate this
+   *  event with the dashboard's full denial detail. */
+  request_id?: string;
 }
 
 export interface SessionStats {
