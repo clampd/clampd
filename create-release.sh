@@ -112,7 +112,7 @@ npm install @clampd/sdk     # TypeScript
 
 ## Docker Images
 
-All images at `ghcr.io/clampd/*:v0.24.0`
+All images at `ghcr.io/clampd/*:v1.0.0`
 
 | Image | Service |
 |---|---|
