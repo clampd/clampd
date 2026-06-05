@@ -1,7 +1,7 @@
-# Clampd Proxy Runtime - Customer Infrastructure
+# Clampd Proxy Runtime — Customer Infrastructure
 #
 # Runs the full 9-service security pipeline + infrastructure.
-# NO Dashboard services - the control plane runs separately (docker-compose.control.yml).
+# NO Dashboard services — the control plane runs separately (docker-compose.control.yml).
 #
 # Usage:
 #   cp .env.example .env   # fill in secrets
@@ -11,7 +11,7 @@
 # Leave CLAMPD_SAAS_URL empty for standalone mode (no cloud connection).
 
 x-license: &license
-  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required - set it in .env}
+  CLAMPD_LICENSE_KEY: ${CLAMPD_LICENSE_KEY:?CLAMPD_LICENSE_KEY is required — set it in .env}
   AG_INTERNAL_SECRET: ${AG_INTERNAL_SECRET:-}
 
 x-rust-defaults: &rust-defaults
@@ -27,7 +27,7 @@ x-rust-defaults: &rust-defaults
 services:
   # ── Infrastructure ─────────────────────────────────────────────
 
-  # Local Postgres/Redis - skip when using Neon/Upstash (set DATABASE_URL + REDIS_URL in .env)
+  # Local Postgres/Redis — skip when using Neon/Upstash (set DATABASE_URL + REDIS_URL in .env)
   postgres:
     image: postgres:16-alpine
     profiles: ["local-infra"]
@@ -58,7 +58,7 @@ services:
   nats:
     image: nats:2-alpine
     command: >
-      --auth ${NATS_TOKEN:?NATS_TOKEN is required - set it in .env}
+      --auth ${NATS_TOKEN:?NATS_TOKEN is required — set it in .env}
       --jetstream --store_dir /data -m 8222
     volumes:
       - nats_data:/data
@@ -72,7 +72,7 @@ services:
       - default
       - clampd-shared
 
-  # OPA sidecar removed - policy engine + scope exemptions now in pure Rust.
+  # OPA sidecar removed — policy engine + scope exemptions now in pure Rust.
 
   clickhouse:
     profiles: ["local-infra"]
@@ -96,7 +96,7 @@ services:
   # ── Runtime Security Layer ─────────────────────────────────────
 
   ag-registry:
-    image: ghcr.io/clampd/ag-registry:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-registry:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -116,7 +116,7 @@ services:
         condition: service_healthy
 
   ag-intent:
-    image: ghcr.io/clampd/ag-intent:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-intent:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 3
@@ -130,16 +130,12 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-clampd}@redis:6379}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       RUST_LOG: "info,ag_intent=debug"
-      # Eval cache around the L1 rule evaluator (defaults shown).
-      # AG_INTENT_EVAL_CACHE_TTL_SECS: "5"
-      # AG_INTENT_EVAL_CACHE_MAX: "10000"
-      # AG_INTENT_EVAL_CACHE_DISABLED: ""   # any non-empty value disables
     depends_on:
       nats:
         condition: service_healthy
 
   ag-policy:
-    image: ghcr.io/clampd/ag-policy:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-policy:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -158,7 +154,7 @@ services:
         condition: service_healthy
 
   ag-token:
-    image: ghcr.io/clampd/ag-token:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-token:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -173,13 +169,14 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://clampd:${POSTGRES_PASSWORD:-clampd}@postgres:5432/clampd}
       NATS_URL: nats://${NATS_TOKEN}@nats:4222
       IDP_PROVIDER: "none"
+      AG_TOKEN_ENCRYPTION_KEY: ${AG_TOKEN_ENCRYPTION_KEY:?AG_TOKEN_ENCRYPTION_KEY is required — set it in .env}
       RUST_LOG: "info,ag_token=debug"
     depends_on:
       nats:
         condition: service_healthy
 
   ag-gateway:
-    image: ghcr.io/clampd/ag-gateway:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-gateway:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     ports:
       - "8080:8080"
@@ -204,7 +201,18 @@ services:
       POLICY_URL: http://ag-policy:50051
       TOKEN_URL: http://ag-token:50051
       KILL_URL: http://ag-kill:50055
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      CLAMPD_LLM_JUDGE_ENABLED: ${CLAMPD_LLM_JUDGE_ENABLED:-false}
+      CLAMPD_LLM_JUDGE_PROVIDER: ${CLAMPD_LLM_JUDGE_PROVIDER:-openai}
+      CLAMPD_LLM_JUDGE_MODEL: ${CLAMPD_LLM_JUDGE_MODEL:-gpt-4o-mini}
+      CLAMPD_LLM_JUDGE_API_KEY: ${CLAMPD_LLM_JUDGE_API_KEY:-}
+      CLAMPD_LLM_JUDGE_BASE_URL: ${CLAMPD_LLM_JUDGE_BASE_URL:-}
+      CLAMPD_LLM_JUDGE_TIMEOUT_MS: ${CLAMPD_LLM_JUDGE_TIMEOUT_MS:-3000}
+      CLAMPD_LLM_JUDGE_FAIL_OPEN: ${CLAMPD_LLM_JUDGE_FAIL_OPEN:-true}
+      CLAMPD_LLM_JUDGE_MAX_RPM: ${CLAMPD_LLM_JUDGE_MAX_RPM:-60}
+      CLAMPD_LLM_JUDGE_LOW: ${CLAMPD_LLM_JUDGE_LOW:-0.2}
+      CLAMPD_LLM_JUDGE_HIGH: ${CLAMPD_LLM_JUDGE_HIGH:-0.75}
+      CLAMPD_DELEGATION_SIGNATURES: ${CLAMPD_DELEGATION_SIGNATURES:-off}
       RUST_LOG: "info,ag_gateway=debug"
     depends_on:
       ag-registry:
@@ -223,7 +231,7 @@ services:
         condition: service_healthy
 
   ag-shadow:
-    image: ghcr.io/clampd/ag-shadow:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-shadow:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -239,13 +247,14 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
       PII_NER_ENABLED: "true"
       PII_TOKENIZATION_ENABLED: "false"
+      CLICKHOUSE_ENABLED: ${CLICKHOUSE_ENABLED:-true}
       RUST_LOG: "info,ag_shadow=debug"
     depends_on:
       nats:
         condition: service_healthy
 
   ag-kill:
-    image: ghcr.io/clampd/ag-kill:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-kill:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -271,7 +280,7 @@ services:
         condition: service_started
 
   ag-risk:
-    image: ghcr.io/clampd/ag-risk:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-risk:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -296,7 +305,7 @@ services:
         condition: service_started
 
   ag-control:
-    image: ghcr.io/clampd/ag-control:${CLAMPD_VERSION:-v0.16.10}
+    image: ghcr.io/clampd/clampd/ag-control:${CLAMPD_VERSION:-v0.22.1}
     <<: *rust-defaults
     deploy:
       replicas: 2
@@ -318,7 +327,7 @@ services:
       CLAMPD_SAAS_URL: ${CLAMPD_SAAS_URL:-}
       CLAMPD_LICENSE_TOKEN: ${CLAMPD_LICENSE_TOKEN:-}
       CLAMPD_SHARED_DB: ${CLAMPD_SHARED_DB:-true}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - set it in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
       CLAMPD_POLL_INTERVAL: "5"
       RUST_LOG: "info,ag_control=debug"
     depends_on:
